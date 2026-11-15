@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { generateBarcode } from '../utils/rollHelpers.js';
+import { assertLegacyReceiptAllowed } from './externalManufacturingLifecycle.js';
 
 const createReceiptSchema = z.object({
   returnedLengthM: z.coerce.number().nonnegative(),
@@ -52,6 +53,7 @@ export async function createExternalJobReceipt(
   );
   if (!jobRow.rows.length) throw Object.assign(new Error('المهمة غير موجودة'), { code: 'NOT_FOUND' });
   const job = jobRow.rows[0];
+  await assertLegacyReceiptAllowed(client, companyId, jobId);
   if (job.job_kind !== 'PROCESSING') {
     throw Object.assign(new Error('الاستلام الموحَّد متاح فقط لمهام المصنعية'), { code: 'VALIDATION' });
   }

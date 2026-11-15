@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Check, Droplet, Layers, Loader2, Scissors, Search, Settings, X } from 'lucide-react';
 import {
   createProcessingExternalJob,
@@ -18,8 +18,11 @@ import { PreparationTypesModal } from '../../components/purchases/PreparationTyp
 type SelectedRoll = FabricRollDto;
 
 export const ExternalJobProcessingNew = () => {
+  const { t: lifecycleT, i18n: lifecycleI18n } = useTranslation('externalJobs');
   const { t } = useTranslation('externalJobs');
   const navigate = useNavigate();
+  const [query] = useSearchParams();
+  const [previousJobId, setPreviousJobId] = useState(query.get('previousJobId') || '');
   const { showToast } = useToast();
 
   const [fabricStage, setFabricStage] = useState<FabricStage | null>(null);
@@ -83,13 +86,13 @@ export const ExternalJobProcessingNew = () => {
     let cancelled = false;
     setSearching(true);
     const timer = window.setTimeout(() => {
-      listFabricRolls({ search: q, warehouseId: sourceWarehouseId, status: 'AVAILABLE', pageSize: 25 })
-        .then((res) => { if (!cancelled) setRollResults(res.data); })
+      listFabricRolls({ search: q, warehouseId: sourceWarehouseId, status: previousJobId ? undefined : 'AVAILABLE', pageSize: 25 })
+        .then((res) => { if (!cancelled) setRollResults(res.data.filter(r => r.status === 'AVAILABLE' || (!!previousJobId && r.status === 'DAMAGED'))); })
         .catch(() => { if (!cancelled) setRollResults([]); })
         .finally(() => { if (!cancelled) setSearching(false); });
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [rollQuery, sourceWarehouseId]);
+  }, [rollQuery, sourceWarehouseId, previousJobId]);
 
   const addRoll = (roll: FabricRollDto) => {
     if (selectedRolls.some((r) => r.id === roll.id)) {
@@ -100,7 +103,7 @@ export const ExternalJobProcessingNew = () => {
       showToast({ type: 'error', message: t('processingNew.rollWrongWarehouse', { barcode: roll.barcode }) });
       return;
     }
-    if (roll.status !== 'AVAILABLE') {
+    if (roll.status !== 'AVAILABLE' && !(previousJobId && roll.status === 'DAMAGED')) {
       showToast({ type: 'error', message: t('processingNew.rollNotAvailable', { barcode: roll.barcode, status: roll.status }) });
       return;
     }
@@ -152,6 +155,7 @@ export const ExternalJobProcessingNew = () => {
     setSaving(true);
     try {
       const res = await createProcessingExternalJob({
+        previousJobId: previousJobId.trim() || null,
         supplierId,
         fabricStage,
         preparationTypeId,
@@ -174,7 +178,7 @@ export const ExternalJobProcessingNew = () => {
   const selectedWarehouse = warehouses.find((w) => w.id === sourceWarehouseId);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6" dir="rtl">
+    <div className="max-w-5xl mx-auto space-y-6" dir={lifecycleI18n.dir()}>
       <div className="flex items-center gap-4">
         <button onClick={() => navigate('/purchases/external-jobs')} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition">
           <ArrowRight className="w-5 h-5" />
@@ -186,6 +190,9 @@ export const ExternalJobProcessingNew = () => {
           <p className="text-slate-500 mt-1 text-sm">{t('processingNew.subtitle')}</p>
         </div>
       </div>
+
+      <label className="block border rounded p-3">{lifecycleT('lifecycle.linkPrevious')}<input className="block w-full border rounded p-2" value={previousJobId} onChange={e => setPreviousJobId(e.target.value)} placeholder={lifecycleT('lifecycle.previousId')} />
+      </label>
 
       {/* Step 1: stage */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">

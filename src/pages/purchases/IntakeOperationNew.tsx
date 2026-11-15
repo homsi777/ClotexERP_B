@@ -10,6 +10,7 @@ import { createIntakeOperation, type IntakeActionType } from '../../lib/api/inta
 import { ApiRequestError } from '../../lib/api/client';
 import { useToast } from '../../components/NonBlockingToast';
 import { PreparationTypesModal } from '../../components/purchases/PreparationTypesModal';
+import { ExternalManufacturingLookup } from '../../components/purchases/ExternalManufacturingLookup';
 
 const ACTION_TYPES: { value: IntakeActionType; labelKey: string }[] = [
   { value: 'PROCESSING', labelKey: 'actionProcessing' },
@@ -19,6 +20,7 @@ const ACTION_TYPES: { value: IntakeActionType; labelKey: string }[] = [
 ];
 
 export const IntakeOperationNew: React.FC = () => {
+  const { t: lifecycleT, i18n: lifecycleI18n } = useTranslation('externalJobs');
   const { t } = useTranslation('intakeOperations');
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -30,6 +32,7 @@ export const IntakeOperationNew: React.FC = () => {
   const [prepManageOpen, setPrepManageOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [receivingManufacturing, setReceivingManufacturing] = useState(false);
 
   const [supplierId, setSupplierId] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -121,6 +124,8 @@ export const IntakeOperationNew: React.FC = () => {
     }
   };
 
+  if (receivingManufacturing) return <div className="p-4 space-y-4"><button onClick={() => setReceivingManufacturing(false)}>{lifecycleT('lifecycle.backToAction')}</button><ExternalManufacturingLookup /></div>;
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center text-slate-500">
@@ -131,7 +136,7 @@ export const IntakeOperationNew: React.FC = () => {
   }
 
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-4" dir="rtl">
+    <div className="p-4 max-w-2xl mx-auto space-y-4" dir={lifecycleI18n.dir()}>
       <div>
         <h2 className="text-lg font-black text-slate-900">{t('title')}</h2>
         <p className="text-sm text-slate-500">{t('subtitle')}</p>
@@ -194,6 +199,7 @@ export const IntakeOperationNew: React.FC = () => {
         <label className="space-y-1 block">
           <span className="text-xs font-bold text-slate-600">{t('actionTypeLabel')}</span>
           <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setReceivingManufacturing(true)} className="rounded-lg border px-3 py-2 text-sm font-bold border-emerald-500 text-emerald-800">{lifecycleT('lifecycle.receive')}</button>
             {ACTION_TYPES.map((opt) => (
               <button
                 key={opt.value}

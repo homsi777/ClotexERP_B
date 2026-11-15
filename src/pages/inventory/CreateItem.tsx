@@ -20,6 +20,7 @@ import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { getCategoryTree, type ApiCategory } from '../../lib/api/fabricCategoriesApi';
 import { resolveFabricClassification } from '../../lib/api/fabricClassificationApi';
 import { buildRollQrPayload } from '../../lib/labels/buildRollQrPayload';
+import { ExternalManufacturingLifecycle } from '../../components/purchases/ExternalManufacturingLifecycle';
 import { getCategoryCode, getCategoryLabel } from '../../lib/fabricCategoryValues';
 
 const INVENTORY_SHOW_ITEM_IMAGE_KEY = 'inventory_show_item_image_upload';
@@ -155,6 +156,12 @@ function nextDraftRollId(): string {
 }
 
 export const CreateItem = () => {
+  const [query] = useSearchParams();
+  const jobId = query.get('externalJobId');
+  return jobId ? <ExternalManufacturingLifecycle key={jobId} jobId={jobId} receiving /> : <CreateItemForm />;
+};
+
+const CreateItemForm = () => {
   const { t } = useTranslation('createItem');
   const { addFabric, updateFabric, inventory, warehouses } = useStore();
   const navigate = useNavigate();

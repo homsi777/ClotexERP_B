@@ -413,9 +413,9 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
           return sendError(reply, 400, 'ثوب لا يطابق موقع المصدر المحدد', 'VALIDATION');
         }
 
-        if (cur.status === 'SOLD' || cur.status === 'INACTIVE') {
+        if (cur.status !== 'AVAILABLE') {
           await client.query('ROLLBACK');
-          return sendError(reply, 400, 'لا يمكن نقل ثوب مباع أو غير نشط', 'INVALID_STATUS');
+          return sendError(reply, 400, 'المناقلة متاحة للرولات المتاحة فقط؛ المحجوزة والمعيبة أو الموجودة بالمصنعية ممنوعة', 'INVALID_STATUS');
         }
 
         const sameWarehouse = cur.warehouse_id === t.to_warehouse_id;

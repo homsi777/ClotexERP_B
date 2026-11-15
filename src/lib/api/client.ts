@@ -1,6 +1,8 @@
 /** عميل HTTP للـ API — لا يحتوي على اعتمادات قاعدة البيانات */
 
 import { detectClientPlatform } from '../clientPlatform';
+import i18n from '../../i18n/config';
+import { translateManufacturingMessage } from '../externalManufacturingI18n';
 
 const TOKEN_KEY = 'fabric_erp_api_token';
 
@@ -208,7 +210,7 @@ export class ApiRequestError extends Error {
     public statusCode: number,
     public body?: ApiErrorBody,
   ) {
-    super(message);
+    super(translateManufacturingMessage(message, i18n.getFixedT(null, 'externalJobs')));
     this.name = 'ApiRequestError';
   }
 }

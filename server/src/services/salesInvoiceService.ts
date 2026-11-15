@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
+import { assertNoQualityHold } from './externalManufacturingLifecycle.js';
 
 /** Pool or client — list/detail helpers only need `.query`. */
 type DbQuery = Pick<PoolClient, 'query'>;
@@ -569,6 +570,7 @@ async function reserveDraftSalesRoll(
   );
   if (!rollRow.rows.length) return;
   const status = rollRow.rows[0].status;
+  await assertNoQualityHold(client, companyId, rollId);
   if (status === 'RESERVED') return;
   if (status !== 'AVAILABLE') {
     throw Object.assign(
@@ -1613,6 +1615,7 @@ export async function confirmSalesInvoice(
       throw Object.assign(new Error('الثوب غير موجود'), { code: 'NOT_FOUND' });
     }
     const roll = rollRow.rows[0];
+    await assertNoQualityHold(client, companyId, rollId);
     if (roll.status !== 'AVAILABLE' && roll.status !== 'RESERVED') {
       throw Object.assign(new Error(`الثوب ${rollId} غير متاح للبيع`), { code: 'INVALID_STOCK' });
     }

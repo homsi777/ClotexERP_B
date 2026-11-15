@@ -31,6 +31,12 @@ export interface ExternalJob {
   process_description: string | null;
   line_count?: number;
   received_count?: number;
+  sent_m?: string;
+  returned_m?: string;
+  shortage_m?: string;
+  excess_m?: string;
+  open_defects?: boolean;
+  lifecycle_closed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +51,8 @@ export interface PreparationType {
 }
 
 export interface CreateProcessingJobPayload {
+  previousJobId?: string | null;
+  services?: { name: string; quantity: number; basis: 'METER' | 'KG' | 'FIXED' }[];
   supplierId: string;
   fabricStage: FabricStage;
   preparationTypeId: string;

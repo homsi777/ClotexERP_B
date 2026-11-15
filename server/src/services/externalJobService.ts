@@ -5,6 +5,7 @@ import { getExchangeRateToUsdTx } from './exchangeRateService.js';
 import { generateSequentialDocumentNo, generateSupplierOrderNo } from '../utils/documentNumbers.js';
 import { postExternalJobFeeToGl, reverseExternalJobFeeGl } from './glPostingService.js';
 import { verifyCurrentUserPassword } from '../utils/reauthGuard.js';
+import { initializeManufacturing, assertNoLifecycleReturns, assertNoQualityHold, assertLegacyPricing, assertLegacyReceiptAllowed } from './externalManufacturingLifecycle.js';
 
 type DbQuery = Pick<PoolClient, 'query'>;
 
@@ -55,6 +56,9 @@ async function sendRollToExternalJob(
   jobId: string,
   jobNo: string,
 ): Promise<void> {
+  const before = await client.query('SELECT status FROM fabric_rolls WHERE id=$1 AND company_id=$2 FOR UPDATE', [rollId, companyId]);
+  const previousStatus = before.rows[0]?.status;
+  if (!previousStatus) throw Object.assign(new Error('الثوب غير موجود'), { code: 'NOT_FOUND' });
   await client.query(
     `UPDATE fabric_rolls SET status='AT_EXTERNAL_JOB', updated_at=now() WHERE id=$1 AND company_id=$2`,
     [rollId, companyId],
@@ -63,8 +67,8 @@ async function sendRollToExternalJob(
     `INSERT INTO inventory_movements (
        company_id, roll_id, movement_type, old_status, new_status,
        reference_type, reference_id, reference_no, notes, created_by_user_id
-     ) VALUES ($1,$2,'EXTERNAL_JOB_SENT','AVAILABLE','AT_EXTERNAL_JOB',$3,$4,$5,$6,$7)`,
-    [companyId, rollId, 'EXTERNAL_JOB', jobId, jobNo, `إرسال لمهمة خارجية ${jobNo}`, userId],
+     ) VALUES ($1,$2,'EXTERNAL_JOB_SENT',$8,'AT_EXTERNAL_JOB',$3,$4,$5,$6,$7)`,
+    [companyId, rollId, 'EXTERNAL_JOB', jobId, jobNo, `إرسال لمهمة خارجية ${jobNo}`, userId, previousStatus],
   );
 }
 
@@ -203,7 +207,17 @@ export async function listExternalJobs(
       `SELECT ej.*, s.name AS supplier_name,
               pt.name AS preparation_type_name, w.name AS source_warehouse_name,
               (SELECT COUNT(*)::int FROM external_job_lines l WHERE l.job_id = ej.id) AS line_count,
-              (SELECT COUNT(*)::int FROM external_job_lines l WHERE l.job_id = ej.id AND l.line_status = 'RECEIVED') AS received_count
+              (SELECT COUNT(*)::int FROM external_job_lines l WHERE l.job_id = ej.id AND l.line_status = 'RECEIVED') AS received_count,
+              COALESCE((SELECT SUM(l.sent_length_m) FROM external_job_lines l WHERE l.job_id=ej.id AND l.company_id=ej.company_id AND l.line_status<>'CANCELLED'),0) AS sent_m,
+              CASE WHEN EXISTS(SELECT 1 FROM external_job_return_batches b WHERE b.job_id=ej.id AND b.company_id=ej.company_id)
+                THEN COALESCE((SELECT SUM(r.length_m) FROM external_job_return_lines r WHERE r.job_id=ej.id AND r.company_id=ej.company_id),0)
+                WHEN EXISTS(SELECT 1 FROM external_job_receipts r WHERE r.job_id=ej.id AND r.company_id=ej.company_id)
+                THEN (SELECT returned_length_m FROM external_job_receipts r WHERE r.job_id=ej.id AND r.company_id=ej.company_id)
+                ELSE COALESCE((SELECT SUM(COALESCE(l.new_length_m,l.sent_length_m)) FROM external_job_lines l WHERE l.job_id=ej.id AND l.company_id=ej.company_id AND l.line_status='RECEIVED'),0) END AS returned_m,
+              COALESCE((SELECT SUM(s.amount_m) FROM external_job_settlements s WHERE s.job_id=ej.id AND s.company_id=ej.company_id AND s.kind='SHORTAGE'),0)
+                +COALESCE((SELECT shortage_approved_length_m FROM external_job_receipts r WHERE r.job_id=ej.id AND r.company_id=ej.company_id),0) AS shortage_m,
+              COALESCE((SELECT SUM(s.amount_m) FROM external_job_settlements s WHERE s.job_id=ej.id AND s.company_id=ej.company_id AND s.kind='EXCESS'),0) AS excess_m,
+              EXISTS(SELECT 1 FROM external_job_return_lines r WHERE r.job_id=ej.id AND r.company_id=ej.company_id AND r.defective AND r.resolution IS NULL) AS open_defects
        FROM external_jobs ej
        INNER JOIN suppliers s ON s.id = ej.supplier_id AND s.company_id = ej.company_id
        LEFT JOIN external_job_preparation_types pt ON pt.id = ej.preparation_type_id AND pt.company_id = ej.company_id
@@ -336,11 +350,12 @@ export async function receiveExternalJobLine(
     `SELECT l.*, ej.document_status AS job_status, ej.job_no
      FROM external_job_lines l
      INNER JOIN external_jobs ej ON ej.id = l.job_id AND ej.company_id = l.company_id
-     WHERE l.id=$1 AND l.company_id=$2 FOR UPDATE OF l`,
+     WHERE l.id=$1 AND l.company_id=$2 FOR UPDATE OF l, ej`,
     [lineId, companyId],
   );
   if (!lineRow.rows.length) throw Object.assign(new Error('سطر المهمة غير موجود'), { code: 'NOT_FOUND' });
   const line = lineRow.rows[0];
+  await assertLegacyReceiptAllowed(client, companyId, line.job_id);
   if (line.job_status !== 'CONFIRMED') {
     throw Object.assign(new Error('المهمة ليست مؤكدة بعد'), { code: 'INVALID_STATE' });
   }
@@ -423,6 +438,7 @@ export async function setExternalJobFee(
   jobId: string,
   raw: unknown,
 ): Promise<void> {
+  await assertLegacyPricing(client, companyId, jobId);
   const schema = z.object({
     feeAmount: z.coerce.number().nonnegative(),
     feeCurrencyCode: z.string().min(1),
@@ -464,6 +480,7 @@ export async function setExternalJobProcessingPricing(
   jobId: string,
   raw: unknown,
 ): Promise<void> {
+  await assertLegacyPricing(client, companyId, jobId);
   const schema = z.object({
     pricingMethod: z.enum(['BY_KG', 'BY_METER']),
     approvedQuantity: z.coerce.number().nonnegative(),
@@ -557,6 +574,8 @@ export async function voidExternalJob(
   if (job.document_status === 'VOIDED') {
     throw Object.assign(new Error('المهمة ملغاة مسبقاً'), { code: 'INVALID_STATE' });
   }
+
+  await assertNoLifecycleReturns(client, companyId, jobId);
 
   if (job.document_status === 'DRAFT') {
     await client.query(`DELETE FROM external_job_lines WHERE job_id=$1 AND company_id=$2`, [jobId, companyId]);
@@ -719,6 +738,7 @@ export async function createProcessingExternalJob(
   totalKg: number;
 }> {
   const input = processingCreateSchema.parse(raw);
+  const lifecycleInput = z.object({ previousJobId: z.string().uuid().nullable().optional() }).parse(raw);
   const rollIds = [...new Set(input.rollIds)];
 
   const supplierRow = await client.query<{ is_processing_party: boolean; is_active: boolean }>(
@@ -786,6 +806,13 @@ export async function createProcessingExternalJob(
     if (roll.warehouse_id !== input.sourceWarehouseId) {
       throw Object.assign(new Error(`الثوب ${roll.barcode} ليس بالمستودع المصدر المحدَّد`), { code: 'INVALID_STOCK' });
     }
+    await assertNoQualityHold(client, companyId, rollId);
+    // A rework decision never exposes the roll to sales. Only a linked next stage can claim it.
+    if (roll.status === 'DAMAGED' && lifecycleInput.previousJobId) {
+      const approved = await client.query(`SELECT 1 FROM external_job_return_lines
+        WHERE company_id=$1 AND result_roll_id=$2 AND job_id=$3 AND resolution='REWORK'`, [companyId, rollId, lifecycleInput.previousJobId]);
+      if (approved.rows.length) roll.status = 'AVAILABLE';
+    }
     if (roll.status !== 'AVAILABLE') {
       throw Object.assign(
         new Error(`الثوب ${roll.barcode} غير متاح حالياً (الحالة: ${roll.status})`),
@@ -847,6 +874,7 @@ export async function createProcessingExternalJob(
     await sendRollToExternalJob(client, companyId, userId, rollId, jobId, jobNo);
   }
 
+  await initializeManufacturing(client, companyId, jobId, raw);
   return {
     id: jobId,
     jobNo,
@@ -883,6 +911,7 @@ export async function editProcessingExternalJob(
   if (job.job_kind !== 'PROCESSING') {
     throw Object.assign(new Error('هذا الإجراء خاص بمهام المصنعية فقط'), { code: 'VALIDATION' });
   }
+  await assertNoLifecycleReturns(client, companyId, jobId);
   const anyNotSent = await client.query(
     `SELECT 1 FROM external_job_lines WHERE job_id=$1 AND company_id=$2 AND line_status<>'SENT' LIMIT 1`,
     [jobId, companyId],

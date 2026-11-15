@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
+import { externalManufacturingRoutes } from './externalManufacturingRoutes.js';
 import {
   createExternalJob,
   listExternalJobs,
@@ -44,6 +45,7 @@ function isPricingAllowed(user: { role: string } | undefined): boolean {
 }
 
 export const externalJobRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(externalManufacturingRoutes);
   // ===== Preparation types ("مصنعية") — مُسجَّلة قبل '/:id' كمسارات حرفية =====
   app.get('/preparation-types', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;

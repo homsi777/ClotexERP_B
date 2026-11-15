@@ -17,6 +17,7 @@ import { renderExternalJobDispatchA4Html } from '../../lib/printing/renderExtern
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
 import i18n from '../../i18n/config';
+import { ExternalManufacturingLifecycle } from '../../components/purchases/ExternalManufacturingLifecycle';
 
 export const ExternalJobReceipt = () => {
   const { t } = useTranslation('externalJobs');
@@ -420,7 +421,8 @@ export const ExternalJobReceipt = () => {
         </div>
       ) : null}
 
-      {job.job_kind === 'PROCESSING' && (
+      {job.job_kind === 'PROCESSING' && id && <ExternalManufacturingLifecycle key={id} jobId={id} />}
+      {job.job_kind === 'PROCESSING' && receipt !== null && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
           <h3 className="font-bold text-slate-800">{t('receiptSection.title')}</h3>
 
