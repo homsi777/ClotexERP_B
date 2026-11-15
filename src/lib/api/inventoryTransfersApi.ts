@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import type { FabricRollDto } from './fabricRollsApi';
 
 export type TransferStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 
@@ -22,6 +23,7 @@ export interface InventoryTransferRow {
 }
 
 export interface InventoryTransferLine {
+  roll: FabricRollDto;
   id: string;
   fabric_roll_id: string;
   line_barcode: string | null;
@@ -68,6 +70,7 @@ export async function getInventoryTransfer(id: string) {
 }
 
 export async function createInventoryTransfer(payload: {
+  clientRequestId: string;
   fromWarehouseId: string;
   fromLocationId?: string | null;
   toWarehouseId: string;
@@ -100,10 +103,10 @@ export async function updateInventoryTransfer(
   });
 }
 
-export async function confirmInventoryTransfer(id: string) {
+export async function confirmInventoryTransfer(id: string, expectedUpdatedAt?: string) {
   return apiFetch<{ ok: boolean; data: InventoryTransferRow }>(`/api/inventory/transfers/${id}/confirm`, {
     method: 'PATCH',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ expectedUpdatedAt }),
   });
 }
 

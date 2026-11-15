@@ -1,35 +1,28 @@
-import type { FastifyPluginAsync } from 'fastify';
+import { transferBodySchema } from '../services/inventoryTransferValidation.js';
+import type { FastifyError, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
-import { sendError } from '../middleware/errorHandler.js';
+import { globalErrorHandler, sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
-import { generateDocumentNo } from '../utils/documentNumbers.js';
-import type { RollStatus } from '../utils/rollHelpers.js';
+import { requirePermission } from '../middleware/requirePermission.js';
+import { cancelTransfer, confirmTransfer, saveTransfer, transferTransaction, TransferError } from '../services/inventoryTransferService.js';
 
-const lineSchema = z.object({
-  fabricRollId: z.string().uuid(),
-  quantity: z.coerce.number().positive().default(1),
-  barcode: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-});
-
-const createBody = z.object({
-  fromWarehouseId: z.string().uuid(),
-  fromLocationId: z.string().uuid().optional().nullable(),
-  toWarehouseId: z.string().uuid(),
-  toLocationId: z.string().uuid().optional().nullable(),
-  transferDate: z.string().optional(),
-  notes: z.string().optional().nullable(),
-  lines: z.array(lineSchema).min(1, 'يجب إضافة ثوب واحد على الأقل'),
-});
-
-const updateBody = createBody;
 
 export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
+  app.setErrorHandler<FastifyError>((error, request, reply) => {
+    if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') return sendError(reply, 413, 'حجم طلب المناقلة أكبر من الحد المسموح؛ قلّل عدد الرولات في المستند', 'TRANSFER_TOO_LARGE');
+    return globalErrorHandler(error, request, reply);
+  });
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const q = req.query as Record<string, string>;
+    for (const field of ['fromWarehouseId', 'toWarehouseId']) {
+      if (q[field] && !z.string().uuid().safeParse(q[field]).success) return sendError(reply, 400, 'معرّف المستودع غير صالح', 'VALIDATION');
+    }
+    for (const field of ['dateFrom', 'dateTo']) {
+      if (q[field] && !z.string().date().safeParse(q[field]).success) return sendError(reply, 400, 'تاريخ البحث غير صالح', 'VALIDATION');
+    }
     const search = q.search?.trim() || '';
     const status = q.status?.trim();
     const fromWarehouseId = q.fromWarehouseId?.trim();
@@ -101,6 +94,7 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
   app.get('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return sendError(reply, 400, 'معرّف المناقلة غير صالح', 'VALIDATION');
     const pool = getPool();
 
     const head = await pool.query(
@@ -118,10 +112,18 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
     const lines = await pool.query(
       `SELECT l.id, l.company_id, l.transfer_id, l.fabric_roll_id, l.barcode AS line_barcode, l.quantity, l.notes,
               fr.roll_no, fr.barcode AS roll_barcode, fr.length_m, fr.status AS roll_status,
-              fi.name AS item_name
+              fi.name AS item_name,
+              to_jsonb(fr) || jsonb_build_object(
+                'item_name', fi.name, 'internal_code', fi.internal_code,
+                'color_name_ar', fc.name_ar, 'color_name_tr', fc.name_tr, 'color_code', fc.color_code,
+                'warehouse_name', wh.name, 'location_name', wl.name
+              ) AS roll
        FROM inventory_transfer_lines l
        JOIN fabric_rolls fr ON fr.id = l.fabric_roll_id AND fr.company_id = l.company_id
        JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id
+       LEFT JOIN fabric_colors fc ON fc.id = fr.color_id AND fc.company_id = fr.company_id
+       JOIN warehouses wh ON wh.id = fr.warehouse_id AND wh.company_id = fr.company_id
+       LEFT JOIN warehouse_locations wl ON wl.id = fr.location_id AND wl.company_id = fr.company_id
        WHERE l.transfer_id = $1 AND l.company_id = $2
        ORDER BY l.id ASC`,
       [id, companyId],
@@ -130,390 +132,42 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: { ...head.rows[0], lines: lines.rows } });
   });
 
-  app.post('/', { preHandler: authenticateRequest }, async (req, reply) => {
-    const { companyId, sub: userId } = req.user!;
-    const parsed = createBody.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
-    const d = parsed.data;
-
-    if (d.fromWarehouseId === d.toWarehouseId && (d.fromLocationId ?? null) === (d.toLocationId ?? null)) {
-      return sendError(reply, 400, 'يجب اختيار مستودع أو موقع وجهة مختلف عن المصدر', 'VALIDATION');
-    }
-
-    const pool = getPool();
-
-    const wh = await pool.query(
-      `SELECT id FROM warehouses WHERE company_id=$1 AND id IN ($2,$3)`,
-      [companyId, d.fromWarehouseId, d.toWarehouseId],
-    );
-    if (wh.rows.length !== 2) return sendError(reply, 400, 'مستودع المصدر أو الوجهة غير صالح', 'VALIDATION');
-
-    if (d.fromLocationId) {
-      const loc = await pool.query(
-        'SELECT id FROM warehouse_locations WHERE id=$1 AND warehouse_id=$2 AND company_id=$3',
-        [d.fromLocationId, d.fromWarehouseId, companyId],
-      );
-      if (!loc.rows.length) return sendError(reply, 400, 'موقع المصدر غير صالح', 'VALIDATION');
-    }
-    if (d.toLocationId) {
-      const loc = await pool.query(
-        'SELECT id FROM warehouse_locations WHERE id=$1 AND warehouse_id=$2 AND company_id=$3',
-        [d.toLocationId, d.toWarehouseId, companyId],
-      );
-      if (!loc.rows.length) return sendError(reply, 400, 'موقع الوجهة غير صالح', 'VALIDATION');
-    }
-
-    const transferNo = generateDocumentNo('TRF');
-    const transferDate = d.transferDate ? d.transferDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const ins = await client.query(
-        `INSERT INTO inventory_transfers
-           (company_id, transfer_no, transfer_date, from_warehouse_id, from_location_id,
-            to_warehouse_id, to_location_id, status, notes, created_by_user_id)
-         VALUES ($1,$2,$3::date,$4,$5,$6,$7,'DRAFT',$8,$9)
-         RETURNING *`,
-        [
-          companyId,
-          transferNo,
-          transferDate,
-          d.fromWarehouseId,
-          d.fromLocationId ?? null,
-          d.toWarehouseId,
-          d.toLocationId ?? null,
-          d.notes ?? null,
-          userId,
-        ],
-      );
-
-      const transfer = ins.rows[0];
-
-      for (const line of d.lines) {
-        if (line.quantity !== 1) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 400, 'في هذا الإصدار يُسمح بنقل الثوب كاملاً فقط (الكمية = 1)', 'VALIDATION');
-        }
-        const roll = await client.query<{ id: string }>(
-          'SELECT id FROM fabric_rolls WHERE id=$1 AND company_id=$2',
-          [line.fabricRollId, companyId],
-        );
-        if (!roll.rows.length) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 404, 'ثوب غير موجود في السطر', 'NOT_FOUND');
-        }
-
-        await client.query(
-          `INSERT INTO inventory_transfer_lines
-             (company_id, transfer_id, fabric_roll_id, barcode, quantity, notes)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [
-            companyId,
-            transfer.id,
-            line.fabricRollId,
-            line.barcode ?? null,
-            line.quantity,
-            line.notes ?? null,
-          ],
-        );
+  const write = (action: 'create' | 'update' | 'confirm' | 'cancel') =>
+    async (req: import('fastify').FastifyRequest, reply: import('fastify').FastifyReply) => {
+      const { companyId, sub: userId } = req.user!;
+      const id = (req.params as { id?: string } | undefined)?.id;
+      if (action !== 'create' && !z.string().uuid().safeParse(id).success) {
+        return sendError(reply, 400, 'معرّف المناقلة غير صالح', 'VALIDATION');
       }
-
-      await client.query('COMMIT');
-      return reply.status(201).send({ ok: true, data: transfer });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      if ((e as { code?: string }).code === '23505')
-        return sendError(reply, 409, 'تعارض في أرقام المناقلة أو تكرار ثوب في الطلب', 'DUPLICATE');
-      throw e;
-    } finally {
-      client.release();
-    }
-  });
-
-  app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
-    const { companyId } = req.user!;
-    const { id } = req.params as { id: string };
-    const parsed = updateBody.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
-    const d = parsed.data;
-
-    if (d.fromWarehouseId === d.toWarehouseId && (d.fromLocationId ?? null) === (d.toLocationId ?? null)) {
-      return sendError(reply, 400, 'يجب اختيار مستودع أو موقع وجهة مختلف عن المصدر', 'VALIDATION');
-    }
-
-    const pool = getPool();
-    const cur = await pool.query<{ status: string }>(
-      'SELECT status FROM inventory_transfers WHERE id=$1 AND company_id=$2',
-      [id, companyId],
-    );
-    if (!cur.rows.length) return sendError(reply, 404, 'المناقلة غير موجودة', 'NOT_FOUND');
-    if (cur.rows[0].status !== 'DRAFT') return sendError(reply, 400, 'لا يمكن التعديل إلا في حالة مسودة', 'INVALID_STATE');
-
-    const wh = await pool.query(
-      `SELECT id FROM warehouses WHERE company_id=$1 AND id IN ($2,$3)`,
-      [companyId, d.fromWarehouseId, d.toWarehouseId],
-    );
-    if (wh.rows.length !== 2) return sendError(reply, 400, 'مستودع المصدر أو الوجهة غير صالح', 'VALIDATION');
-
-    if (d.fromLocationId) {
-      const loc = await pool.query(
-        'SELECT id FROM warehouse_locations WHERE id=$1 AND warehouse_id=$2 AND company_id=$3',
-        [d.fromLocationId, d.fromWarehouseId, companyId],
-      );
-      if (!loc.rows.length) return sendError(reply, 400, 'موقع المصدر غير صالح', 'VALIDATION');
-    }
-    if (d.toLocationId) {
-      const loc = await pool.query(
-        'SELECT id FROM warehouse_locations WHERE id=$1 AND warehouse_id=$2 AND company_id=$3',
-        [d.toLocationId, d.toWarehouseId, companyId],
-      );
-      if (!loc.rows.length) return sendError(reply, 400, 'موقع الوجهة غير صالح', 'VALIDATION');
-    }
-
-    const transferDate = d.transferDate ? d.transferDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      await client.query(
-        `UPDATE inventory_transfers SET
-           transfer_date = $3::date,
-           from_warehouse_id = $4,
-           from_location_id = $5,
-           to_warehouse_id = $6,
-           to_location_id = $7,
-           notes = $8,
-           updated_at = now()
-         WHERE id = $1 AND company_id = $2`,
-        [
-          id,
-          companyId,
-          transferDate,
-          d.fromWarehouseId,
-          d.fromLocationId ?? null,
-          d.toWarehouseId,
-          d.toLocationId ?? null,
-          d.notes ?? null,
-        ],
-      );
-
-      await client.query('DELETE FROM inventory_transfer_lines WHERE transfer_id=$1 AND company_id=$2', [
-        id,
-        companyId,
-      ]);
-
-      for (const line of d.lines) {
-        if (line.quantity !== 1) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 400, 'في هذا الإصدار يُسمح بنقل الثوب كاملاً فقط (الكمية = 1)', 'VALIDATION');
-        }
-        const roll = await client.query(
-          'SELECT id FROM fabric_rolls WHERE id=$1 AND company_id=$2',
-          [line.fabricRollId, companyId],
-        );
-        if (!roll.rows.length) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 404, 'ثوب غير موجود في السطر', 'NOT_FOUND');
-        }
-
-        await client.query(
-          `INSERT INTO inventory_transfer_lines
-             (company_id, transfer_id, fabric_roll_id, barcode, quantity, notes)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [companyId, id, line.fabricRollId, line.barcode ?? null, line.quantity, line.notes ?? null],
-        );
+      const parsed = action === 'create' || action === 'update' ? transferBodySchema.safeParse(req.body) : null;
+      if (parsed && !parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message ?? ArabicErrors.validation, 'VALIDATION');
+      const input = parsed?.success ? parsed.data : undefined;
+      const confirmation = action === 'confirm' ? z.object({ expectedUpdatedAt: z.string().datetime().optional() }).safeParse(req.body ?? {}) : null;
+      if (confirmation && !confirmation.success) return sendError(reply, 400, 'بيانات مراجعة المناقلة غير صالحة', 'VALIDATION');
+      const expectedUpdatedAt = confirmation?.success ? confirmation.data.expectedUpdatedAt : undefined;
+      try {
+        const data = await transferTransaction(getPool(), async (client) => {
+          if (action === 'create' || action === 'update') return saveTransfer(client, companyId, userId, input!, id);
+          if (action === 'confirm') return confirmTransfer(client, companyId, userId, id!, expectedUpdatedAt);
+          return cancelTransfer(client, companyId, id!);
+        });
+        return reply.status(action === 'create' ? 201 : 200).send({ ok: true, data });
+      } catch (error) {
+        if (error instanceof TransferError) return sendError(reply, error.statusCode, error.message, error.code);
+        const e = error as { code?: string };
+        // Whitelist metadata only; never log bodies, connection strings, SQL values, or tokens.
+        req.log.error({ requestId: req.id, action, code: e.code ?? 'UNKNOWN' }, 'inventory transfer failed');
+        if (e.code === '23505') return sendError(reply, 409, 'تعارض أو تكرار في المناقلة؛ حدّث السجل قبل المحاولة', 'DUPLICATE');
+        if (e.code === '40P01' || e.code === '40001' || e.code === '55P03') return sendError(reply, 409, 'تغيّر المخزون أثناء العملية؛ حدّث البيانات وأعد المحاولة', 'CONCURRENT_TRANSFER');
+        if (e.code === '23503') return sendError(reply, 409, 'إحدى بيانات المستودع أو الرولات تغيرت؛ حدّث الاختيار', 'REFERENCE_CHANGED');
+        if (e.code === '42703') return sendError(reply, 503, 'إعداد قاعدة البيانات غير مكتمل؛ يلزم تحديث مخطط المناقلات', 'SCHEMA_NOT_READY');
+        return sendError(reply, 500, `تعذّر إتمام المناقلة. راجع المسؤول برقم المتابعة ${req.id}`, 'TRANSFER_FAILED');
       }
+    };
 
-      await client.query('COMMIT');
-      const row = await pool.query(
-        `SELECT t.*,
-                fw.name AS from_warehouse_name,
-                tw.name AS to_warehouse_name
-         FROM inventory_transfers t
-         JOIN warehouses fw ON fw.id = t.from_warehouse_id AND fw.company_id = t.company_id
-         JOIN warehouses tw ON tw.id = t.to_warehouse_id AND tw.company_id = t.company_id
-         WHERE t.id=$1 AND t.company_id=$2`,
-        [id, companyId],
-      );
-      return reply.send({ ok: true, data: row.rows[0] });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      if ((e as { code?: string }).code === '23505')
-        return sendError(reply, 409, 'تعارض أو تكرار ثوب في الطلب', 'DUPLICATE');
-      throw e;
-    } finally {
-      client.release();
-    }
-  });
-
-  app.patch('/:id/confirm', { preHandler: authenticateRequest }, async (req, reply) => {
-    const { companyId, sub: userId } = req.user!;
-    const { id } = req.params as { id: string };
-    const pool = getPool();
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const head = await client.query(
-        `SELECT * FROM inventory_transfers WHERE id=$1 AND company_id=$2 FOR UPDATE`,
-        [id, companyId],
-      );
-      if (!head.rows.length) {
-        await client.query('ROLLBACK');
-        return sendError(reply, 404, 'المناقلة غير موجودة', 'NOT_FOUND');
-      }
-      const t = head.rows[0] as {
-        status: string;
-        from_warehouse_id: string;
-        from_location_id: string | null;
-        to_warehouse_id: string;
-        to_location_id: string | null;
-        transfer_no: string;
-      };
-
-      if (t.status !== 'DRAFT') {
-        await client.query('ROLLBACK');
-        return sendError(reply, 400, 'المناقلة ليست في حالة مسودة', 'INVALID_STATE');
-      }
-
-      const lines = await client.query<{ fabric_roll_id: string }>(
-        'SELECT fabric_roll_id FROM inventory_transfer_lines WHERE transfer_id=$1 AND company_id=$2',
-        [id, companyId],
-      );
-      if (!lines.rows.length) {
-        await client.query('ROLLBACK');
-        return sendError(reply, 400, 'لا توجد أثواب في المناقلة', 'VALIDATION');
-      }
-
-      for (const ln of lines.rows) {
-        const rollRow = await client.query<{
-          warehouse_id: string;
-          location_id: string | null;
-          status: RollStatus;
-        }>(
-          `SELECT warehouse_id, location_id, status FROM fabric_rolls WHERE id=$1 AND company_id=$2 FOR UPDATE`,
-          [ln.fabric_roll_id, companyId],
-        );
-        if (!rollRow.rows.length) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 404, 'ثوب غير موجود', 'NOT_FOUND');
-        }
-        const cur = rollRow.rows[0];
-
-        if (cur.warehouse_id !== t.from_warehouse_id) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 400, 'ثوب لا يوجد في مستودع المصدر الحالي', 'VALIDATION');
-        }
-        if (t.from_location_id && cur.location_id !== t.from_location_id) {
-          await client.query('ROLLBACK');
-          return sendError(reply, 400, 'ثوب لا يطابق موقع المصدر المحدد', 'VALIDATION');
-        }
-
-        if (cur.status === 'SOLD' || cur.status === 'INACTIVE') {
-          await client.query('ROLLBACK');
-          return sendError(reply, 400, 'لا يمكن نقل ثوب مباع أو غير نشط', 'INVALID_STATUS');
-        }
-
-        const sameWarehouse = cur.warehouse_id === t.to_warehouse_id;
-        const movType = sameWarehouse ? 'TRANSFER_IN' : 'TRANSFER_OUT';
-        const newStatus: RollStatus =
-          !sameWarehouse && cur.status === 'AVAILABLE' ? 'TRANSFERRED' : cur.status;
-
-        await client.query(
-          `UPDATE fabric_rolls SET warehouse_id=$3, location_id=$4, status=$5, updated_at=now()
-           WHERE id=$1 AND company_id=$2`,
-          [ln.fabric_roll_id, companyId, t.to_warehouse_id, t.to_location_id ?? null, newStatus],
-        );
-
-        await client.query(
-          `INSERT INTO inventory_movements
-             (company_id, roll_id, movement_type,
-              from_warehouse_id, to_warehouse_id,
-              from_location_id, to_location_id,
-              old_status, new_status,
-              reference_type, reference_id, reference_no,
-              notes, created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            companyId,
-            ln.fabric_roll_id,
-            movType,
-            cur.warehouse_id,
-            t.to_warehouse_id,
-            cur.location_id,
-            t.to_location_id ?? null,
-            cur.status,
-            newStatus,
-            'INVENTORY_TRANSFER',
-            id,
-            t.transfer_no,
-            'مناقلة بين المستودعات',
-            userId,
-          ],
-        );
-      }
-
-      await client.query(
-        `UPDATE inventory_transfers SET status='CONFIRMED', confirmed_at=now(), updated_at=now()
-         WHERE id=$1 AND company_id=$2`,
-        [id, companyId],
-      );
-
-      await client.query('COMMIT');
-
-      const row = await pool.query(
-        `SELECT t.*,
-                fw.name AS from_warehouse_name,
-                tw.name AS to_warehouse_name
-         FROM inventory_transfers t
-         JOIN warehouses fw ON fw.id = t.from_warehouse_id AND fw.company_id = t.company_id
-         JOIN warehouses tw ON tw.id = t.to_warehouse_id AND tw.company_id = t.company_id
-         WHERE t.id=$1`,
-        [id],
-      );
-      return reply.send({ ok: true, data: row.rows[0] });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-  });
-
-  app.patch('/:id/cancel', { preHandler: authenticateRequest }, async (req, reply) => {
-    const { companyId } = req.user!;
-    const { id } = req.params as { id: string };
-    const pool = getPool();
-
-    const cur = await pool.query<{ status: string }>(
-      'SELECT status FROM inventory_transfers WHERE id=$1 AND company_id=$2',
-      [id, companyId],
-    );
-    if (!cur.rows.length) return sendError(reply, 404, 'المناقلة غير موجودة', 'NOT_FOUND');
-    if (cur.rows[0].status !== 'DRAFT') {
-      return sendError(reply, 400, 'لا يمكن إلغاء مناقلة مؤكدة في هذا الإصدار', 'INVALID_STATE');
-    }
-
-    await pool.query(
-      `UPDATE inventory_transfers SET status='CANCELLED', cancelled_at=now(), updated_at=now()
-       WHERE id=$1 AND company_id=$2`,
-      [id, companyId],
-    );
-
-    const row = await pool.query(
-      `SELECT t.*,
-              fw.name AS from_warehouse_name,
-              tw.name AS to_warehouse_name
-       FROM inventory_transfers t
-       JOIN warehouses fw ON fw.id = t.from_warehouse_id AND fw.company_id = t.company_id
-       JOIN warehouses tw ON tw.id = t.to_warehouse_id AND tw.company_id = t.company_id
-       WHERE t.id=$1`,
-      [id],
-    );
-    return reply.send({ ok: true, data: row.rows[0] });
-  });
+  const guards = [authenticateRequest, requirePermission('inventory.manage')];
+  app.post('/', { preHandler: guards, bodyLimit: 16 * 1024 * 1024 }, write('create'));
+  app.put('/:id', { preHandler: guards, bodyLimit: 16 * 1024 * 1024 }, write('update'));
+  app.patch('/:id/confirm', { preHandler: guards }, write('confirm'));
+  app.patch('/:id/cancel', { preHandler: guards }, write('cancel'));
 };

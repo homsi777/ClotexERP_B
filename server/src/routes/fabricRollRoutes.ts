@@ -1,3 +1,5 @@
+import { requirePermission } from '../middleware/requirePermission.js';
+import { transferTransaction, validateTransferWarehouses, lockTransferRolls, TransferError } from '../services/inventoryTransferService.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
@@ -1321,81 +1323,45 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── F. Move roll ─────────────────────────────────────────────────────────
-  app.post('/:id/move', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.post('/:id/move', { preHandler: [authenticateRequest, requirePermission('inventory.manage')] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = moveSchema.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
-    const { toWarehouseId, toLocationId, notes } = parsed.data;
-    const pool = getPool();
-
-    const existing = await pool.query<{
-      warehouse_id: string; location_id: string | null; status: string;
-    }>(
-      'SELECT warehouse_id, location_id, status FROM fabric_rolls WHERE id=$1 AND company_id=$2',
-      [id, companyId],
-    );
-    if (!existing.rows.length) return sendError(reply, 404, 'الثوب غير موجود', 'NOT_FOUND');
-    const cur = existing.rows[0];
-
-    if (cur.status === 'SOLD' || cur.status === 'INACTIVE') {
-      return sendError(reply, 400, 'لا يمكن نقل ثوب مباع أو غير نشط', 'INVALID_STATUS');
-    }
-
-    // Validate target warehouse
-    const whCheck = await pool.query(
-      'SELECT id FROM warehouses WHERE id=$1 AND company_id=$2',
-      [toWarehouseId, companyId],
-    );
-    if (!whCheck.rows.length) return sendError(reply, 404, 'المستودع الهدف غير موجود', 'NOT_FOUND');
-
-    // Validate target location
-    if (toLocationId) {
-      const locCheck = await pool.query(
-        'SELECT id FROM warehouse_locations WHERE id=$1 AND warehouse_id=$2 AND company_id=$3',
-        [toLocationId, toWarehouseId, companyId],
-      );
-      if (!locCheck.rows.length)
-        return sendError(reply, 400, 'الموقع المحدد لا يتبع المستودع الهدف', 'VALIDATION');
-    }
-
-    const sameWarehouse = cur.warehouse_id === toWarehouseId;
-    const movType = sameWarehouse ? 'TRANSFER_IN' : 'TRANSFER_OUT';
-    const newStatus = !sameWarehouse && cur.status === 'AVAILABLE' ? 'TRANSFERRED' : cur.status;
-
-    const client = await pool.connect();
+    if (!z.string().uuid().safeParse(id).success || !parsed.success) return sendError(reply, 400, 'بيانات نقل الرولة غير صالحة', 'VALIDATION');
     try {
-      await client.query('BEGIN');
-      const row = await client.query(
-        `UPDATE fabric_rolls SET warehouse_id=$3, location_id=$4, status=$5, updated_at=now()
-         WHERE id=$1 AND company_id=$2 RETURNING *`,
-        [id, companyId, toWarehouseId, toLocationId ?? null, newStatus],
-      );
-      await client.query(
-        `INSERT INTO inventory_movements
-           (company_id, roll_id, movement_type,
-            from_warehouse_id, to_warehouse_id,
-            from_location_id, to_location_id,
-            old_status, new_status, notes, created_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [
-          companyId, id, movType,
-          cur.warehouse_id, toWarehouseId,
-          cur.location_id, toLocationId ?? null,
-          cur.status, newStatus,
-          notes ?? null, userId,
-        ],
-      );
-      await client.query('COMMIT');
-      return reply.send({ ok: true, data: row.rows[0] });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
+      const row = await transferTransaction(getPool(), async (client) => {
+        // Read source to establish a consistent warehouse-before-roll lock order.
+        // It is checked again by lockTransferRolls after acquiring the row lock.
+        const source = await client.query('SELECT warehouse_id FROM fabric_rolls WHERE id=$1 AND company_id=$2', [id, companyId]);
+        if (!source.rows.length) throw new TransferError('الرولة غير موجودة', 'NOT_FOUND', 404);
+        const d = { fromWarehouseId: source.rows[0].warehouse_id as string, toWarehouseId: parsed.data.toWarehouseId.toLowerCase(),
+          toLocationId: parsed.data.toLocationId, lines: [{ fabricRollId: id, quantity: 1 }] };
+        await validateTransferWarehouses(client, companyId, d, true);
+        const [roll] = await lockTransferRolls(client, companyId, d);
+        if (roll.warehouse_id === d.toWarehouseId && roll.location_id === (d.toLocationId ?? null)) {
+          const current = await client.query('SELECT * FROM fabric_rolls WHERE id=$1 AND company_id=$2', [id, companyId]);
+          return current.rows[0];
+        }
+        const updated = await client.query('UPDATE fabric_rolls SET warehouse_id=$3,location_id=$4,updated_at=now() WHERE id=$1 AND company_id=$2 RETURNING *', [id, companyId, d.toWarehouseId, d.toLocationId ?? null]);
+        await client.query(
+          `INSERT INTO inventory_movements (company_id,roll_id,movement_type,from_warehouse_id,to_warehouse_id,
+           from_location_id,to_location_id,old_status,new_status,notes,created_by_user_id)
+           SELECT $1,$2,m,$3,$4,$5,$6,'AVAILABLE','AVAILABLE',$7,$8
+           FROM unnest($9::text[]) AS movement(m)`,
+          [companyId, id, roll.warehouse_id, d.toWarehouseId, roll.location_id, d.toLocationId ?? null,
+            parsed.data.notes ?? null, userId, roll.warehouse_id === d.toWarehouseId ? ['TRANSFER_IN'] : ['TRANSFER_OUT', 'TRANSFER_IN']],
+        );
+        return updated.rows[0];
+      });
+      return reply.send({ ok: true, data: row });
+    } catch (error) {
+      if (error instanceof TransferError) return sendError(reply, error.statusCode, error.message, error.code);
+      const code = (error as { code?: string }).code;
+      req.log.error({ requestId: req.id, action: 'move-roll', code: code ?? 'UNKNOWN' }, 'roll move failed');
+      if (code === '40P01' || code === '40001') return sendError(reply, 409, 'تغيّر المخزون أثناء النقل؛ حدّث الرولة وأعد المحاولة', 'STOCK_CHANGED');
+      return sendError(reply, 500, `تعذر نقل الرولة. رقم المتابعة ${req.id}`, 'TRANSFER_FAILED');
     }
   });
-
   // ── G. Get movement history ────────────────────────────────────────────────
   app.get('/:id/movements', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
