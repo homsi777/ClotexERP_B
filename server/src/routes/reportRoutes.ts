@@ -143,13 +143,15 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
   app.get('/vouchers-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
+    // TASK 008: جمع amount_usd لا amount الأصلي — السندات قد تكون بعملات
+    // مختلفة فعلياً، فجمع القيم الأصلية كأرقام متساوية مضلِّل محاسبياً.
     const r = await pool.query(
       `SELECT
          COUNT(*) FILTER (WHERE status = 'DRAFT')::int AS draft,
          COUNT(*) FILTER (WHERE status = 'CONFIRMED')::int AS confirmed,
          COUNT(*) FILTER (WHERE status = 'CANCELLED')::int AS cancelled,
-         COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric AS confirmed_receipts,
-         COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'PAYMENT'), 0)::numeric AS confirmed_payments
+         COALESCE(SUM(amount_usd) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric AS confirmed_receipts_usd,
+         COALESCE(SUM(amount_usd) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'PAYMENT'), 0)::numeric AS confirmed_payments_usd
        FROM vouchers WHERE company_id = $1`,
       [companyId],
     );

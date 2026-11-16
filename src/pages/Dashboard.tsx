@@ -107,8 +107,8 @@ export const Dashboard = () => {
       { key: 'cards.activeRolls', value: fmtNumber(d?.active_fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-emerald-50', color: 'text-emerald-700' },
       { key: 'cards.totalMeters', value: fmtNumber(d?.total_roll_length_m, numberLocale, 2), icon: Layers, bg: 'bg-blue-50', color: 'text-blue-700' },
       { key: 'cards.totalWeightKg', value: fmtNumber(d?.total_roll_weight_kg, numberLocale, 2), icon: Layers, bg: 'bg-slate-50', color: 'text-slate-700' },
-      { key: 'cards.receiptVouchers', value: fmtMoney(d?.receipt_total, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
-      { key: 'cards.paymentVouchers', value: fmtMoney(d?.payment_total, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
+      { key: 'cards.receiptVouchers', value: fmtMoney(d?.receipt_total_usd, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
+      { key: 'cards.paymentVouchers', value: fmtMoney(d?.payment_total_usd, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
     ];
   }, [summary, numberLocale]);
 

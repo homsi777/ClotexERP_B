@@ -22,8 +22,9 @@ export interface DashboardSummary {
   total_roll_length_m?: string;
   total_roll_weight_kg?: string;
   total_cash_by_currency?: { currency_code: string; total: string }[];
-  receipt_total?: string;
-  payment_total?: string;
+  /** TASK 008: مجموع بعملة أساس موحّدة (USD) — السندات قد تكون بعملات مختلفة. */
+  receipt_total_usd?: string;
+  payment_total_usd?: string;
 }
 
 export async function getDashboardSummary() {
@@ -54,8 +55,8 @@ export async function getVouchersSummary() {
       draft: number;
       confirmed: number;
       cancelled: number;
-      confirmed_receipts: string;
-      confirmed_payments: string;
+      confirmed_receipts_usd: string;
+      confirmed_payments_usd: string;
     };
   }>('/api/reports/vouchers-summary');
 }

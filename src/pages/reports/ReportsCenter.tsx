@@ -760,7 +760,7 @@ function ExecutiveDashboardPanel() {
           },
           {
             label: t('dashboard.kpis.receiptPayment'),
-            value: `${Number(dash.receipt_total ?? 0).toLocaleString()} / ${Number(dash.payment_total ?? 0).toLocaleString()}`,
+            value: `${Number(dash.receipt_total_usd ?? 0).toLocaleString()} / ${Number(dash.payment_total_usd ?? 0).toLocaleString()} USD`,
             icon: Wallet,
             bg: 'bg-violet-50',
             color: 'text-violet-700',
@@ -849,12 +849,12 @@ function ExecutiveDashboardPanel() {
                   <span className="font-bold text-emerald-700">{vch?.confirmed ?? 0}</span>
                 </div>
                 <div className="py-3 flex justify-between">
-                  <span className="text-slate-600">{t('dashboard.vouchers.totalConfirmedReceipts')}</span>
-                  <span className="font-mono">{Number(vch?.confirmed_receipts ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-600">{t('dashboard.vouchers.totalConfirmedReceipts')} (USD)</span>
+                  <span className="font-mono">{Number(vch?.confirmed_receipts_usd ?? 0).toLocaleString()}</span>
                 </div>
                 <div className="py-3 flex justify-between">
-                  <span className="text-slate-600">{t('dashboard.vouchers.totalConfirmedPayments')}</span>
-                  <span className="font-mono">{Number(vch?.confirmed_payments ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-600">{t('dashboard.vouchers.totalConfirmedPayments')} (USD)</span>
+                  <span className="font-mono">{Number(vch?.confirmed_payments_usd ?? 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>

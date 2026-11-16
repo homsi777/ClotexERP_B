@@ -40,10 +40,11 @@ export async function fetchExtendedDashboardSummary(companyId: string): Promise<
          (SELECT COALESCE(SUM(length_m), 0)::numeric FROM fabric_rolls WHERE company_id = $1) AS total_roll_length_m,
          (SELECT COALESCE(SUM(COALESCE(actual_weight_kg, calculated_weight_kg, 0)), 0)::numeric
             FROM fabric_rolls WHERE company_id = $1) AS total_roll_weight_kg,
-         (SELECT COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric
-            FROM vouchers WHERE company_id = $1) AS receipt_total,
-         (SELECT COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'PAYMENT'), 0)::numeric
-            FROM vouchers WHERE company_id = $1) AS payment_total`,
+         -- TASK 008: amount_usd لا amount — السندات قد تكون بعملات مختلفة فعلياً.
+         (SELECT COALESCE(SUM(amount_usd) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric
+            FROM vouchers WHERE company_id = $1) AS receipt_total_usd,
+         (SELECT COALESCE(SUM(amount_usd) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'PAYMENT'), 0)::numeric
+            FROM vouchers WHERE company_id = $1) AS payment_total_usd`,
       [companyId],
     ),
     pool.query<{ currency_code: string; total: string }>(
@@ -1016,10 +1017,13 @@ export async function reportVouchers(
   }
   const where = conditions.join(' AND ');
 
+  // TASK 008: الإجمالي يجب أن يُجمَع بعملة أساس موحّدة (USD) لا amount الأصلي
+  // — السندات هنا قد تكون بعملات مختلفة فعلياً (currency_code يظهر لكل سند
+  // بجدول البيانات نفسه)، فجمعها كأرقام متساوية مضلِّل محاسبياً.
   const sumQ = await pool.query(
     `SELECT
-       COALESCE(SUM(v.amount) FILTER (WHERE v.status = 'CONFIRMED' AND v.voucher_type = 'RECEIPT'), 0)::numeric AS tr,
-       COALESCE(SUM(v.amount) FILTER (WHERE v.status = 'CONFIRMED' AND v.voucher_type = 'PAYMENT'), 0)::numeric AS tp
+       COALESCE(SUM(v.amount_usd) FILTER (WHERE v.status = 'CONFIRMED' AND v.voucher_type = 'RECEIPT'), 0)::numeric AS tr,
+       COALESCE(SUM(v.amount_usd) FILTER (WHERE v.status = 'CONFIRMED' AND v.voucher_type = 'PAYMENT'), 0)::numeric AS tp
      FROM vouchers v WHERE ${where}`,
     params,
   );
@@ -1071,9 +1075,9 @@ export async function reportVouchers(
     ],
     rows: dataQ.rows as Record<string, unknown>[],
     totals: {
-      total_receipts_confirmed: tr.toFixed(2),
-      total_payments_confirmed: tp.toFixed(2),
-      net_confirmed: (tr - tp).toFixed(2),
+      total_receipts_confirmed_usd: tr.toFixed(2),
+      total_payments_confirmed_usd: tp.toFixed(2),
+      net_confirmed_usd: (tr - tp).toFixed(2),
     },
     meta: { page, pageSize, total: parseInt(countQ.rows[0].c, 10) },
   };

@@ -63,25 +63,29 @@ const SQL_LINE_COST_USD = `
 
 export async function reportSalesSummary(companyId: string): Promise<UnifiedReportPayload> {
   const pool = getPool();
+  // TASK 008 (دقة التقارير المالية): هذه الاستعلامات تجمع إجمالياً واحداً عبر
+  // فواتير/سندات قد تكون بعملات مختلفة فعلياً — الجمع يجب أن يتم دائماً عبر
+  // الأعمدة المُحوَّلة لعملة أساس موحّدة (USD، موجودة فعلاً على كل الجداول
+  // أدناه منذ migration 018) لا الأعمدة الأصلية، وإلا يكون الإجمالي عدداً
+  // بلا معنى محاسبي (جمع دولار + جنيه مصري + ليرة تركية كأرقام متساوية).
   const si = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE document_status = 'CONFIRMED')::int AS confirmed_count,
-       COALESCE(SUM(total_amount) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS confirmed_total,
        COALESCE(SUM(total_amount_usd) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS confirmed_total_usd,
-       COALESCE(SUM(paid_amount) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS paid_total,
-       COALESCE(SUM(remaining_amount) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS remaining_total
+       COALESCE(SUM(paid_amount_usd) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS paid_total_usd,
+       COALESCE(SUM(remaining_amount_usd) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS remaining_total_usd
      FROM sales_invoices WHERE company_id = $1`,
     [companyId],
   );
   const v = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER')::int AS customer_receipts,
-       COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS receipt_sum
+       COALESCE(SUM(amount_usd) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS receipt_sum_usd
      FROM vouchers WHERE company_id = $1`,
     [companyId],
   );
   const p = await pool.query(
-    `SELECT COUNT(*)::int AS n, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED'),0)::numeric AS t
+    `SELECT COUNT(*)::int AS n, COALESCE(SUM(total_amount_usd) FILTER (WHERE status='CONFIRMED'),0)::numeric AS t_usd
      FROM return_invoices WHERE company_id = $1 AND return_type='SALES_RETURN'`,
     [companyId],
   );
@@ -98,14 +102,13 @@ export async function reportSalesSummary(companyId: string): Promise<UnifiedRepo
     columns: [textCol('k', 'المؤشر'), textCol('v', 'القيمة')],
     rows: [
       { k: 'فواتير بيع مؤكدة (عدد)', v: si.rows[0].confirmed_count },
-      { k: 'إجمالي فواتير بيع مؤكدة', v: String(si.rows[0].confirmed_total) },
-      { k: 'إجمالي فواتير بيع (USD)', v: String(si.rows[0].confirmed_total_usd) },
-      { k: 'محصل على فواتير البيع', v: String(si.rows[0].paid_total) },
-      { k: 'متبقي ذمم فواتير البيع', v: String(si.rows[0].remaining_total) },
+      { k: 'إجمالي فواتير بيع مؤكدة (USD)', v: String(si.rows[0].confirmed_total_usd) },
+      { k: 'محصل على فواتير البيع (USD)', v: String(si.rows[0].paid_total_usd) },
+      { k: 'متبقي ذمم فواتير البيع (USD)', v: String(si.rows[0].remaining_total_usd) },
       { k: '— سندات قبض عملاء (عدد مؤكد)', v: v.rows[0].customer_receipts },
-      { k: '— إجمالي قبض عملاء (سندات)', v: String(v.rows[0].receipt_sum) },
+      { k: '— إجمالي قبض عملاء (سندات) (USD)', v: String(v.rows[0].receipt_sum_usd) },
       { k: 'مرتجع مبيعات (عدد مؤكد)', v: p.rows[0].n },
-      { k: 'إجمالي مرتجع مبيعات', v: String(p.rows[0].t) },
+      { k: 'إجمالي مرتجع مبيعات (USD)', v: String(p.rows[0].t_usd) },
       { k: 'سجلات نشاط عملاء', v: l.rows[0].n },
     ],
     meta: { dataCompleteness: 'FULL' },
@@ -2320,8 +2323,9 @@ export async function reportSuppliersSummary(companyId: string): Promise<Unified
     `SELECT COUNT(*)::int AS n FROM suppliers WHERE company_id = $1`,
     [companyId],
   );
+  // TASK 008: amount_usd لا amount — سندات الموردين قد تكون بعملات مختلفة.
   const v = await pool.query(
-    `SELECT COALESCE(SUM(amount),0)::numeric AS t FROM vouchers WHERE company_id = $1 AND party_type='SUPPLIER' AND status='CONFIRMED'`,
+    `SELECT COALESCE(SUM(amount_usd),0)::numeric AS t FROM vouchers WHERE company_id = $1 AND party_type='SUPPLIER' AND status='CONFIRMED'`,
     [companyId],
   );
   return buildReportPayload({
@@ -2332,7 +2336,7 @@ export async function reportSuppliersSummary(companyId: string): Promise<Unified
     columns: [textCol('k', 'المؤشر'), textCol('v', 'القيمة')],
     rows: [
       { k: 'عدد الموردين', v: c.rows[0].n },
-      { k: 'مجموع سندات مؤكدة (موردين)', v: String(v.rows[0].t) },
+      { k: 'مجموع سندات مؤكدة (موردين) (USD)', v: String(v.rows[0].t) },
     ],
     meta: {},
   });
