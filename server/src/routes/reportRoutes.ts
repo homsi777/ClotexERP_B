@@ -1,7 +1,26 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
+import { ArabicErrors } from '../utils/arabicErrors.js';
+
+/**
+ * TASK 008 — المرحلة الأولى: لم يكن أي مسار تقارير محمياً بصلاحية فعلية
+ * بالخادم (authenticateRequest فقط يتحقق من تسجيل الدخول، لا من صلاحية
+ * الوصول للتقارير تحديداً) — فُحِص الملف كاملاً وكل مساراته (69 مساراً)
+ * كانت بهذه الحالة. 'reports.view' هو الحد الأدنى لكل تقرير؛
+ * 'reports.financial.view' إضافية للتقارير الحساسة فعلاً (أرباح/تكاليف/
+ * رواتب/بيانات خزينة وسندات) — role==='admin' يتجاوز كما بكل حراس
+ * الصلاحيات الأخرى بالمشروع.
+ */
+function requireReportPermission(code: string) {
+  return async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = req.user;
+    if (!user || (user.role !== 'admin' && !user.permissions.includes(code))) {
+      return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    }
+  };
+}
 import {
   fetchExtendedDashboardSummary,
   reportCashboxMovements,
@@ -75,13 +94,13 @@ import {
 } from '../services/reportServiceMore.js';
 
 export const reportRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/dashboard-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/dashboard-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const data = await fetchExtendedDashboardSummary(companyId);
     return reply.send({ ok: true, data });
   });
 
-  app.get('/inventory-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
     const rolls = await pool.query<{ total_m: string; n: string }>(
@@ -103,7 +122,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.get('/cashbox-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/cashbox-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
     const boxes = await pool.query(
@@ -121,7 +140,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.get('/vouchers-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/vouchers-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
     const r = await pool.query(
@@ -137,7 +156,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: r.rows[0] });
   });
 
-  app.get('/payroll-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
     const r = await pool.query(
@@ -152,61 +171,61 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
 
   const q = (req: { query: unknown }) => req.query as Record<string, string | undefined>;
 
-  app.get('/executive/summary-report', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/executive/summary-report', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportExecutiveSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/financial/operational-ledger', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/operational-ledger', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportOperationalLedger(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/operational-balance-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/operational-balance-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportOperationalBalanceSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/operational-income-expense', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/operational-income-expense', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportOperationalIncomeExpense(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/operational-position', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/operational-position', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportOperationalPosition(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/cash-flow', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/cash-flow', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportCashFlow(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/receipts-payments', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/receipts-payments', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportReceiptsPayments(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/account-activity', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/account-activity', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportAccountActivity(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/currency-differences', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/currency-differences', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportCurrencyDifferences(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/financial/profit-details', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/profit-details', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportProfitDetails(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/sales/summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/summary', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/details', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/details', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesDetails(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/by-item', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/by-item', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesByItem(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/by-item-color', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/by-item-color', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const query = q(req);
     const customerId = query.customerId?.trim();
     if (!customerId) return sendError(reply, 400, 'معرّف العميل مطلوب', 'VALIDATION');
@@ -215,222 +234,222 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     const rows = await reportSalesByItemColorForCustomer(req.user!.companyId, customerId, dateFrom, dateTo);
     return reply.send({ ok: true, data: rows });
   });
-  app.get('/sales/by-customer', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/by-customer', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesByCustomer(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/by-agent', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/by-agent', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesByAgent();
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/by-color', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/by-color', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesByColor();
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/margins', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/sales/margins', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSalesMargins();
     return reply.send({ ok: true, report });
   });
 
-  app.get('/purchases/summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/summary', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPurchasesSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/purchases/details', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/details', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPurchasesDetails(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/purchases/by-supplier', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/by-supplier', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPurchasesBySupplier(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/purchases/by-item', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/by-item', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPurchasesByItem(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/purchases/by-batch', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/by-batch', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPurchasesByBatch(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/purchases/cost-trend', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/cost-trend', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportPurchasesCostTrend(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/inventory/balances', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/balances', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryBalances(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/valuation', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/valuation', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryValuation(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/by-color', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/by-color', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryByColor(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/aging', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/aging', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryAging(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/slow-moving', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/slow-moving', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventorySlowMoving(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/negative-stock', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/negative-stock', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryNegativeStock(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/roll-level', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/roll-level', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryRollLevel(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/batch-tracking', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/batch-tracking', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryBatchTracking(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/fabric-types', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/fabric-types', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryFabricTypes(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/waste-analysis', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/waste-analysis', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryWasteAnalysis(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/damaged-stock', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/damaged-stock', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryDamagedStock(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/cutting-efficiency', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/cutting-efficiency', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryCuttingEfficiency();
     return reply.send({ ok: true, report });
   });
-  app.get('/inventory/remaining-lengths', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/remaining-lengths', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryRemainingLengths(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/customers/activity', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/customers/activity', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportCustomersActivity(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/customers/statement', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/customers/statement', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportCustomersStatement(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/customers/aging', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/customers/aging', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportCustomersAging();
     return reply.send({ ok: true, report });
   });
-  app.get('/customers/by-status', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/customers/by-status', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportCustomersByStatus(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/customers/summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/customers/summary', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportCustomersSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/suppliers/activity', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/suppliers/activity', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSuppliersActivity(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/suppliers/statement', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/suppliers/statement', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSuppliersStatement(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/suppliers/aging', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/suppliers/aging', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSuppliersAging();
     return reply.send({ ok: true, report });
   });
-  app.get('/suppliers/by-status', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/suppliers/by-status', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSuppliersByStatus(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/suppliers/summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/suppliers/summary', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportSuppliersSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/payroll/employees', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/employees', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportPayrollEmployees(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/payroll/runs-list', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/runs-list', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportPayrollRunsList(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/payroll/monthly-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/monthly-summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportPayrollMonthlySummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/printing/printed-labels', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/printing/printed-labels', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPrintingPrintedLabels(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
-  app.get('/printing/unprinted-rolls', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/printing/unprinted-rolls', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPrintingUnprintedRolls(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/inventory/rolls', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/rolls', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryRolls(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/inventory/movements', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/movements', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportInventoryMovements(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/inventory/by-warehouse', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/by-warehouse', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportRollsByWarehouse(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/inventory/by-item-color', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/inventory/by-item-color', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportRollsByItemColor(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/purchases/import-batches', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/import-batches', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportImportBatches(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/purchases/import-rows', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/purchases/import-rows', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportImportRows(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/financial/cashboxes', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/cashboxes', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportCashboxes(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
-  app.get('/financial/cashbox-movements', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/cashbox-movements', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportCashboxMovements(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/financial/vouchers', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/financial/vouchers', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportVouchers(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
   /** @deprecated prefer GET /customers/activity — kept for older clients */
-  app.get('/parties/activity', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/parties/activity', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPartyActivity(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/printing/jobs', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/printing/jobs', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
     const report = await reportPrintJobs(req.user!.companyId, q(req));
     return reply.send({ ok: true, report });
   });
 
-  app.get('/payroll/summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/summary', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
     const report = await reportPayrollSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });

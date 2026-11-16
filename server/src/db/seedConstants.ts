@@ -11,6 +11,7 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'purchases.view', name: 'عرض المشتريات', category: 'purchases' },
   { code: 'purchases.manage', name: 'إدارة المشتريات', category: 'purchases' },
   { code: 'reports.view', name: 'عرض التقارير', category: 'reports' },
+  { code: 'reports.financial.view', name: 'عرض التقارير المالية الحساسة (أرباح، تكاليف، رواتب، خزينة)', category: 'reports' },
   { code: 'settings.view', name: 'عرض الإعدادات', category: 'settings' },
   { code: 'settings.manage', name: 'إدارة الإعدادات', category: 'settings' },
   { code: 'users.manage', name: 'إدارة المستخدمين', category: 'users' },
