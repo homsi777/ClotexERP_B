@@ -217,24 +217,31 @@ export async function reportOperationalBalanceSummary(companyId: string): Promis
 
 export async function reportOperationalIncomeExpense(companyId: string): Promise<UnifiedReportPayload> {
   const pool = getPool();
+  // TASK 008: الجمع عبر amount_usd/total_amount_usd (موجودة ومُعبّأة فعلاً
+  // لكل الجداول أدناه) لا الأعمدة الأصلية — السندات والمرتجعات قد تكون بعملات
+  // مختلفة فعلياً، فجمعها كأرقام متساوية مضلِّل محاسبياً. الرواتب (payroll_runs)
+  // لا تملك عموداً مُحوَّلاً لعملة أساس (لا exchange_rate_to_usd مُخزَّن وقت
+  // الصرف) — تحويلها بسعر صرف اليوم لمعاملة تاريخية تحديداً ما يمنعه التاسك،
+  // فتُقصَر على رواتب بعملة USD فقط (الافتراضي)، مع توضيح ذلك بوضوح بالعرض.
   const r = await pool.query(
     `WITH x AS (
        SELECT 'قبض عملاء (سندات)'::text AS category,
-              COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS income,
+              COALESCE(SUM(amount_usd) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS income,
               0::numeric AS expense
        FROM vouchers WHERE company_id = $1
        UNION ALL
        SELECT 'صرف موردين (سندات)', 0,
-              COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='PAYMENT' AND party_type='SUPPLIER'),0)
+              COALESCE(SUM(amount_usd) FILTER (WHERE status='CONFIRMED' AND voucher_type='PAYMENT' AND party_type='SUPPLIER'),0)
        FROM vouchers WHERE company_id = $1
        UNION ALL
-       SELECT 'مرتجع مبيعات', 0, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED' AND return_type='SALES_RETURN'),0)
+       SELECT 'مرتجع مبيعات', 0, COALESCE(SUM(total_amount_usd) FILTER (WHERE status='CONFIRMED' AND return_type='SALES_RETURN'),0)
        FROM return_invoices WHERE company_id = $1
        UNION ALL
-       SELECT 'مرتجع مشتريات', COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED' AND return_type='PURCHASE_RETURN'),0), 0
+       SELECT 'مرتجع مشتريات', COALESCE(SUM(total_amount_usd) FILTER (WHERE status='CONFIRMED' AND return_type='PURCHASE_RETURN'),0), 0
        FROM return_invoices WHERE company_id = $1
        UNION ALL
-       SELECT 'رواتب مدفوعة/مؤكدة', 0, COALESCE(SUM(total_net) FILTER (WHERE status IN ('PAID','CONFIRMED')),0)
+       SELECT 'رواتب مدفوعة/مؤكدة (USD فقط)', 0,
+              COALESCE(SUM(total_net) FILTER (WHERE status IN ('PAID','CONFIRMED') AND currency_code = 'USD'),0)
        FROM payroll_runs WHERE company_id = $1
      )
      SELECT category, SUM(income) AS income, SUM(expense) AS expense, SUM(income)-SUM(expense) AS net
@@ -244,17 +251,17 @@ export async function reportOperationalIncomeExpense(companyId: string): Promise
   return buildReportPayload({
     key: 'pl',
     title: 'قائمة دخل / مصروف تشغيلية',
-    subtitle: 'من السندات والمرتجعات والرواتب — تقريبية تشغيلية',
+    subtitle: 'من السندات والمرتجعات والرواتب — تقريبية تشغيلية، كل المبالغ بالدولار (USD). رواتب بعملات أخرى غير USD غير مشمولة (لا سعر صرف وقت الصرف مُخزَّن لها).',
     generatedAt: nowIso(),
     filtersApplied: {},
     columns: [
       textCol('category', 'البند'),
-      moneyCol('income', 'إيرادات'),
-      moneyCol('expense', 'مصروفات'),
-      moneyCol('net', 'الصافي'),
+      moneyCol('income', 'إيرادات (USD)'),
+      moneyCol('expense', 'مصروفات (USD)'),
+      moneyCol('net', 'الصافي (USD)'),
     ],
     rows: r.rows as Record<string, unknown>[],
-    meta: { total: r.rows.length },
+    meta: { total: r.rows.length, dataCompleteness: 'PARTIAL' },
   });
 }
 
