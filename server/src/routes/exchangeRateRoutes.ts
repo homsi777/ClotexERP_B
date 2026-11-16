@@ -5,6 +5,11 @@ import { sendError } from '../middleware/errorHandler.js';
 import { listExchangeRates, getExchangeRate, updateExchangeRate } from '../services/exchangeRateService.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 
+function requirePermission(user: { role: string; permissions: string[] } | undefined, code: string) {
+  if (!user) return false;
+  return user.role === 'admin' || user.permissions.includes(code);
+}
+
 const updateBody = z.object({
   exchangeRateToUsd: z.coerce.number(),
   isActive: z.coerce.boolean().optional(),
@@ -42,6 +47,9 @@ export const exchangeRateRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.put('/:currencyCode', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'settings.manage')) {
+      return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    }
     const parsed = updateBody.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 400, parsed.error.errors[0]?.message || ArabicErrors.validation, 'VALIDATION');

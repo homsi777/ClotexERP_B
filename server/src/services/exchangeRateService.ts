@@ -1,5 +1,6 @@
 import { getPool } from '../db/pool.js';
 import type { PoolClient } from 'pg';
+import { insertAuditLog } from './auditLogService.js';
 
 export type SupportedCurrencyCode = 'USD' | 'SYP' | 'TRY' | 'EGP';
 
@@ -125,6 +126,8 @@ export async function updateExchangeRate(input: {
   await ensureDefaultExchangeRates(input.companyId);
   const isActive = code === 'USD' ? true : input.isActive ?? true;
 
+  const before = await getExchangeRate(input.companyId, code);
+
   const r = await getPool().query<ExchangeRateRow>(
     `UPDATE exchange_rates
         SET exchange_rate_to_usd=$3,
@@ -138,5 +141,26 @@ export async function updateExchangeRate(input: {
   if (!r.rows.length) {
     throw Object.assign(new Error('تعذر تحديث سعر الصرف'), { code: 'NOT_FOUND' });
   }
+
+  // TASK 004: سجل تدقيق لكل تعديل على سعر الصرف المركزي — من غيّر، متى، والقيمة
+  // قبل وبعد. لا يُلغي العملية عند الفشل (سجل تدقيق ثانوي، ليس جزءاً من صحة
+  // القيد المالي نفسه)، فقط يُسجَّل الخطأ بالسجلات لو حدث.
+  insertAuditLog(getPool(), {
+    companyId: input.companyId,
+    userId: input.userId,
+    action: 'EXCHANGE_RATE_UPDATED',
+    entityType: 'exchange_rate',
+    entityId: code,
+    details: {
+      currencyCode: code,
+      previousRateToUsd: before?.exchange_rate_to_usd ?? null,
+      newRateToUsd: rate,
+      previousIsActive: before?.is_active ?? null,
+      newIsActive: isActive,
+    },
+  }).catch((err) => {
+    console.error('[exchangeRateService] فشل تسجيل سجل التدقيق لتعديل سعر الصرف:', err);
+  });
+
   return r.rows[0];
 }

@@ -96,6 +96,11 @@ export const CustomerStatement = () => {
   const [accountStatement, setAccountStatement] = useState<PartyStatementData | null>(null);
   const [accountStatementLoading, setAccountStatementLoading] = useState(false);
   const [accountStatementError, setAccountStatementError] = useState<string | null>(null);
+  // TASK 004: عملة عرض الكشف — accountStatement.totals/openingBalance/rows قادمة
+  // من الخادم بالدولار دائماً (partyStatementService.ts::buildStatement). هذا
+  // الاختيار يحوّلها للعرض فقط عبر سعر الصرف المركزي (exchangeRates)، دون أي
+  // تأثير على الفواتير أو القيود الأصلية.
+  const [displayCurrency, setDisplayCurrency] = useState('USD');
 
   useEffect(() => {
     let cancelled = false;
@@ -365,10 +370,47 @@ export const CustomerStatement = () => {
 
   const selectedCustomer = customerOptions.find((c) => c.id === selectedCustomerId);
   const isPaymentMode = paymentMode === 'payment';
-  const statementCurrency =
-    accountStatement?.rows?.[0]?.currency ||
-    partyVouchers[0]?.currency_code ||
-    'USD';
+
+  // TASK 004: عملة العرض المختارة فعلياً (لا نخمّنها من أول صف بالكشف — كانت
+  // هذه تحديداً سبب خطأ تسمية رصيد بالدولار كـ"EGP" بالمحيط الموثَّق). القيمة
+  // الافتراضية USD مطابقة لحقيقة ما يُخزَّن ويُحسَب بالخادم دائماً.
+  const statementCurrency = displayCurrency;
+  // عرض تفاصيل الأصناف/الألوان (تقرير منفصل تماماً عن accountStatement، لا
+  // نعرف تحويله بثقة ضمن نطاق TASK 004 — يبقى بسلوكه القديم كما هو دون تغيير،
+  // تفادياً لتوسيع الإصلاح خارج الخطأ المُشخَّص فعلياً.
+  const itemDetailCurrencyLabel =
+    accountStatement?.rows?.[0]?.currency || partyVouchers[0]?.currency_code || 'USD';
+  const displayRate = useMemo(() => {
+    if (displayCurrency === 'USD') return 1;
+    const row = exchangeRates.find((r) => r.currency_code === displayCurrency);
+    const rate = row ? Number(row.exchange_rate_to_usd) : NaN;
+    return Number.isFinite(rate) && rate > 0 ? rate : 1;
+  }, [displayCurrency, exchangeRates]);
+
+  // نسخة معروضة فقط من كشف الحساب: نفس البيانات تماماً، لكن totals/
+  // openingBalance/rows[].debit|credit|balance مُحوَّلة بسعر الصرف المركزي
+  // لعملة العرض المختارة — accountStatement الأصلي (ومن ثمّ أي قيد محاسبي
+  // حقيقي) لا يتغيّر إطلاقاً.
+  const displayAccountStatement = useMemo<PartyStatementData | null>(() => {
+    if (!accountStatement) return null;
+    if (displayRate === 1) return accountStatement;
+    return {
+      ...accountStatement,
+      openingBalance: accountStatement.openingBalance * displayRate,
+      totals: {
+        debit: accountStatement.totals.debit * displayRate,
+        credit: accountStatement.totals.credit * displayRate,
+        closingBalance: accountStatement.totals.closingBalance * displayRate,
+      },
+      rows: accountStatement.rows.map((row) => ({
+        ...row,
+        debit: row.debit * displayRate,
+        credit: row.credit * displayRate,
+        balance: row.balance * displayRate,
+      })),
+    };
+  }, [accountStatement, displayRate]);
+
   const paymentFormCurrency =
     cashboxes.find((x) => x.id === payCashboxId)?.currency_code ||
     'USD';
@@ -404,24 +446,24 @@ export const CustomerStatement = () => {
   );
 
   const accountStatementDisplayRows = useMemo(() => {
-    if (!accountStatement?.rows?.length) return [];
+    if (!displayAccountStatement?.rows?.length) return [];
     return flattenAccountStatementDisplayRows({
-      rows: accountStatement.rows,
-      openingBalance: accountStatement.openingBalance,
+      rows: displayAccountStatement.rows,
+      openingBalance: displayAccountStatement.openingBalance,
       saleInvoices: dbSaleInvoicesFromApi,
       invoiceDetailsBySourceId,
       invoiceDetailsByDocumentNo,
     });
-  }, [accountStatement, dbSaleInvoicesFromApi, invoiceDetailsBySourceId, invoiceDetailsByDocumentNo]);
+  }, [displayAccountStatement, dbSaleInvoicesFromApi, invoiceDetailsBySourceId, invoiceDetailsByDocumentNo]);
 
   const accountFinancialSummary = useMemo(() => {
-    if (!accountStatement) return null;
-    const closing = accountStatement.totals.closingBalance;
+    if (!displayAccountStatement) return null;
+    const closing = displayAccountStatement.totals.closingBalance;
     const closingType: 'مدين' | 'دائن' = closing >= 0 ? 'مدين' : 'دائن';
 
     let lastPayment: { date: string; amount: number; documentNo: string } | null = null;
-    for (let i = accountStatement.rows.length - 1; i >= 0; i -= 1) {
-      const row = accountStatement.rows[i];
+    for (let i = displayAccountStatement.rows.length - 1; i >= 0; i -= 1) {
+      const row = displayAccountStatement.rows[i];
       if (row.credit > 0 && row.type === 'RECEIPT_VOUCHER') {
         lastPayment = { date: row.date, amount: row.credit, documentNo: row.documentNo };
         break;
@@ -429,13 +471,13 @@ export const CustomerStatement = () => {
     }
 
     return {
-      debit: accountStatement.totals.debit,
-      credit: accountStatement.totals.credit,
+      debit: displayAccountStatement.totals.debit,
+      credit: displayAccountStatement.totals.credit,
       closingBalance: Math.abs(closing),
       closingType,
       lastPayment,
     };
-  }, [accountStatement]);
+  }, [displayAccountStatement]);
 
   const presetBanner = useMemo(() => {
     if (preset === 'manual') return null;
@@ -707,23 +749,24 @@ export const CustomerStatement = () => {
   // Handle PDF Export
   const handleExportPDF = async () => {
     try {
-      if (accountStatement?.customer) {
+      if (displayAccountStatement?.customer) {
         const pdfHtml = buildTelegramCustomerAccountStatementHtml({
-          customerName: accountStatement.customer.name,
-          customerPhone: accountStatement.customer.phone ?? null,
-          customerAddress: accountStatement.customer.address ?? null,
+          customerName: displayAccountStatement.customer.name,
+          customerPhone: displayAccountStatement.customer.phone ?? null,
+          customerAddress: displayAccountStatement.customer.address ?? null,
           fromDate,
           toDate,
-          openingBalance: accountStatement.openingBalance,
-          rows: accountStatement.rows,
-          totals: accountStatement.totals,
+          openingBalance: displayAccountStatement.openingBalance,
+          rows: displayAccountStatement.rows,
+          totals: displayAccountStatement.totals,
+          currency: displayCurrency,
           invoiceDetailsBySourceId: invoiceDetailsBySourceId,
           invoiceDetailsByDocumentNo,
           saleInvoices: dbSaleInvoicesFromApi,
         });
         await exportPrintHtmlToPdf(
           pdfHtml,
-          buildCustomerStatementFileName(accountStatement.customer.name, fromDate, toDate),
+          buildCustomerStatementFileName(displayAccountStatement.customer.name, fromDate, toDate),
         );
         return;
       }
@@ -752,28 +795,29 @@ export const CustomerStatement = () => {
   };
 
   const sortedAccountStatementRows = useMemo(() => {
-    if (!accountStatement?.rows?.length) return [];
+    if (!displayAccountStatement?.rows?.length) return [];
     return flattenAccountStatementDisplayRows({
-      rows: accountStatement.rows,
-      openingBalance: accountStatement.openingBalance,
+      rows: displayAccountStatement.rows,
+      openingBalance: displayAccountStatement.openingBalance,
       saleInvoices: dbSaleInvoicesFromApi,
       invoiceDetailsBySourceId,
       invoiceDetailsByDocumentNo,
     });
-  }, [accountStatement, dbSaleInvoicesFromApi, invoiceDetailsBySourceId, invoiceDetailsByDocumentNo]);
+  }, [displayAccountStatement, dbSaleInvoicesFromApi, invoiceDetailsBySourceId, invoiceDetailsByDocumentNo]);
 
   const statementPrintHtml = useMemo(() => {
-    console.log('[CustomerStatement] recomputing statementPrintHtml, dbSaleInvoicesFromApi:', dbSaleInvoicesFromApi.length, 'accountStatement rows:', accountStatement?.rows?.length ?? 0);
-    if (accountStatement?.customer) {
+    console.log('[CustomerStatement] recomputing statementPrintHtml, dbSaleInvoicesFromApi:', dbSaleInvoicesFromApi.length, 'accountStatement rows:', displayAccountStatement?.rows?.length ?? 0);
+    if (displayAccountStatement?.customer) {
       return buildTelegramCustomerAccountStatementHtml({
-        customerName: accountStatement.customer.name,
-        customerPhone: accountStatement.customer.phone ?? null,
-        customerAddress: accountStatement.customer.address ?? null,
+        customerName: displayAccountStatement.customer.name,
+        customerPhone: displayAccountStatement.customer.phone ?? null,
+        customerAddress: displayAccountStatement.customer.address ?? null,
         fromDate,
         toDate,
-        openingBalance: accountStatement.openingBalance,
-        rows: accountStatement.rows,
-        totals: accountStatement.totals,
+        openingBalance: displayAccountStatement.openingBalance,
+        rows: displayAccountStatement.rows,
+        totals: displayAccountStatement.totals,
+        currency: displayCurrency,
         invoiceDetailsBySourceId,
         invoiceDetailsByDocumentNo,
         saleInvoices: dbSaleInvoicesFromApi,
@@ -792,7 +836,8 @@ export const CustomerStatement = () => {
       hideFinancialColumns,
     });
   }, [
-    accountStatement,
+    displayAccountStatement,
+    displayCurrency,
     selectedCustomer,
     fromDate,
     toDate,
@@ -844,37 +889,38 @@ export const CustomerStatement = () => {
 
   const handleSendTelegram = async () => {
     try {
-      if (accountStatement?.customer) {
-        const closing = accountStatement.totals.closingBalance;
+      if (displayAccountStatement?.customer) {
+        const closing = displayAccountStatement.totals.closingBalance;
         const closingLabel = closing >= 0 ? arAccountingDebitSide() : arAccountingCreditSide();
         const pdfHtml = statementPrintHtml || buildTelegramCustomerAccountStatementHtml({
-          customerName: accountStatement.customer.name,
-          customerPhone: accountStatement.customer.phone ?? null,
-          customerAddress: accountStatement.customer.address ?? null,
+          customerName: displayAccountStatement.customer.name,
+          customerPhone: displayAccountStatement.customer.phone ?? null,
+          customerAddress: displayAccountStatement.customer.address ?? null,
           fromDate,
           toDate,
-          openingBalance: accountStatement.openingBalance,
-          rows: accountStatement.rows,
-          totals: accountStatement.totals,
+          openingBalance: displayAccountStatement.openingBalance,
+          rows: displayAccountStatement.rows,
+          totals: displayAccountStatement.totals,
+          currency: displayCurrency,
           invoiceDetailsBySourceId: invoiceDetailsBySourceId,
           invoiceDetailsByDocumentNo,
           saleInvoices: dbSaleInvoicesFromApi,
         });
         await sendTelegramAccountStatementPdf({
           partyType: 'customer',
-          partyId: accountStatement.customer.id,
-          partyName: accountStatement.customer.name,
+          partyId: displayAccountStatement.customer.id,
+          partyName: displayAccountStatement.customer.name,
           fromDate,
           toDate,
-          openingBalance: accountStatement.openingBalance,
-          debitTotal: accountStatement.totals.debit,
-          creditTotal: accountStatement.totals.credit,
+          openingBalance: displayAccountStatement.openingBalance,
+          debitTotal: displayAccountStatement.totals.debit,
+          creditTotal: displayAccountStatement.totals.credit,
           closingLabel,
           closingAmount: Math.abs(closing),
-          currency: accountStatement.rows[0]?.currency ?? 'USD',
-          rowsCount: accountStatement.rows.length,
+          currency: displayCurrency,
+          rowsCount: displayAccountStatement.rows.length,
           pdfHtml,
-          fileName: `customer-account-statement-${accountStatement.customer.id}-${fromDate}-${toDate}.pdf`,
+          fileName: `customer-account-statement-${displayAccountStatement.customer.id}-${fromDate}-${toDate}.pdf`,
         });
         showToast({ type: 'success', message: t('toast.telegramSent') });
         return;
@@ -1246,7 +1292,27 @@ export const CustomerStatement = () => {
                    <p className="text-slate-500">{t('customerCard.phoneAddressLabel', { phone: selectedCustomer.phone, address: selectedCustomer.address })}</p>
                  </div>
                </div>
-               
+
+               {accountStatement && !hideFinancialColumns && (
+                 <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <span className="font-bold whitespace-nowrap">{t('statementTable.displayCurrencyLabel')}</span>
+                   <select
+                     value={displayCurrency}
+                     onChange={(e) => setDisplayCurrency(e.target.value)}
+                     className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
+                   >
+                     <option value="USD">USD</option>
+                     {exchangeRates
+                       .filter((r) => r.currency_code !== 'USD' && r.is_active)
+                       .map((r) => (
+                         <option key={r.currency_code} value={r.currency_code}>
+                           {r.currency_code}
+                         </option>
+                       ))}
+                   </select>
+                 </div>
+               )}
+
                {!hideFinancialColumns && (
                 <div className="w-full lg:w-auto">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1435,7 +1501,7 @@ export const CustomerStatement = () => {
                         <span className="text-xs text-slate-600 font-mono flex gap-3">
                           <span>{t('detailView.colRolls')}: {materialTotals.rollCount}</span>
                           <span>{t('detailView.colMeters')}: {materialTotals.meters.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          <span className="font-bold text-slate-900">{materialTotals.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {statementCurrency}</span>
+                          <span className="font-bold text-slate-900">{materialTotals.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {itemDetailCurrencyLabel}</span>
                         </span>
                       </button>
                       {isExpanded && (
@@ -1457,9 +1523,9 @@ export const CustomerStatement = () => {
                                   <td className="py-1.5 pr-2">{row.color_name} {row.color_code ? <span className="text-slate-400 font-mono">({row.color_code})</span> : null}</td>
                                   <td className="py-1.5 font-mono">{row.roll_count}</td>
                                   <td className="py-1.5 font-mono">{Number(row.net_meters_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                  <td className="py-1.5 font-mono font-bold">{Number(row.net_amount_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })} {statementCurrency}</td>
+                                  <td className="py-1.5 font-mono font-bold">{Number(row.net_amount_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })} {itemDetailCurrencyLabel}</td>
                                   <td className="py-1.5 font-mono text-rose-600">
-                                    {Number(row.returned_meters) > 0 ? `${Number(row.returned_meters).toLocaleString(undefined, { minimumFractionDigits: 2 })} (${Number(row.returned_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${statementCurrency})` : '—'}
+                                    {Number(row.returned_meters) > 0 ? `${Number(row.returned_meters).toLocaleString(undefined, { minimumFractionDigits: 2 })} (${Number(row.returned_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${itemDetailCurrencyLabel})` : '—'}
                                   </td>
                                   <td className="py-1.5">
                                     <div className="flex flex-wrap gap-1.5">
@@ -1570,12 +1636,12 @@ export const CustomerStatement = () => {
             </table>
           </div>
 
-          {accountStatement && (
+          {displayAccountStatement && (
             <div className="px-4 py-3 border-t border-slate-200 bg-white text-xs text-slate-600 flex flex-wrap gap-4">
-              <span>{t('statementTable.openingBalance', { currency: statementCurrency, amount: accountStatement.openingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
-              <span>{t('statementTable.totalDebit', { currency: statementCurrency, amount: accountStatement.totals.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
-              <span>{t('statementTable.totalCredit', { currency: statementCurrency, amount: accountStatement.totals.credit.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
-              <span>{t('statementTable.finalBalance', { currency: statementCurrency, amount: accountStatement.totals.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
+              <span>{t('statementTable.openingBalance', { currency: statementCurrency, amount: displayAccountStatement.openingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
+              <span>{t('statementTable.totalDebit', { currency: statementCurrency, amount: displayAccountStatement.totals.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
+              <span>{t('statementTable.totalCredit', { currency: statementCurrency, amount: displayAccountStatement.totals.credit.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
+              <span>{t('statementTable.finalBalance', { currency: statementCurrency, amount: displayAccountStatement.totals.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 }) })}</span>
             </div>
           )}
         </div>

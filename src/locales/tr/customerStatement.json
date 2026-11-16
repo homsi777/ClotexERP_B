@@ -118,6 +118,7 @@
   "statementTable.totalDebit": "Toplam Borç ({{currency}}): {{amount}}",
   "statementTable.totalCredit": "Toplam Alacak ({{currency}}): {{amount}}",
   "statementTable.finalBalance": "Nihai Bakiye ({{currency}}): {{amount}}",
+  "statementTable.displayCurrencyLabel": "Görüntüleme para birimi:",
 
   "itemsTable.colDate": "Tarih",
   "itemsTable.colReference": "Referans",

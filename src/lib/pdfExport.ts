@@ -855,6 +855,10 @@ export function renderCustomerAccountStatementPdfHtml(data: {
   openingBalance: number;
   rows: AccountStatementRow[];
   totals: AccountStatementTotals;
+  /** TASK 004: عملة العرض الفعلية المختارة (totals/openingBalance مُحوَّلة لها
+   * مسبقاً من المستدعي) — إن لم تُمرَّر، نعود للتخمين القديم من أول صف (توافق
+   * خلفي لأي استدعاء لا يزال لا يمرّرها). */
+  currency?: string;
   invoiceDetailsBySourceId?: Record<string, AccountStatementInvoiceDetail[]>;
   invoiceDetailsByDocumentNo?: Record<string, AccountStatementInvoiceDetail[]>;
   saleInvoices?: Invoice[];
@@ -874,7 +878,7 @@ export function renderCustomerAccountStatementPdfHtml(data: {
     totals: data.totals,
     closingLabel,
     closingAmount: Math.abs(closing),
-    currency: data.rows[0]?.currency ?? 'USD',
+    currency: data.currency ?? data.rows[0]?.currency ?? 'USD',
     invoiceDetailsBySourceId: data.invoiceDetailsBySourceId,
     invoiceDetailsByDocumentNo: data.invoiceDetailsByDocumentNo,
     saleInvoices: data.saleInvoices,

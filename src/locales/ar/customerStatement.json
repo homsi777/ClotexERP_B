@@ -118,6 +118,7 @@
   "statementTable.totalDebit": "إجمالي المدين ({{currency}}): {{amount}}",
   "statementTable.totalCredit": "إجمالي الدائن ({{currency}}): {{amount}}",
   "statementTable.finalBalance": "الرصيد النهائي ({{currency}}): {{amount}}",
+  "statementTable.displayCurrencyLabel": "عملة العرض:",
 
   "itemsTable.colDate": "التاريخ",
   "itemsTable.colReference": "المرجع",
