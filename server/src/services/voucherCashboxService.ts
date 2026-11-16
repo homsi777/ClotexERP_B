@@ -14,6 +14,55 @@ function computeUsd(amountOriginal: number, exchangeRateToUsd: number): number {
   return round2(amountOriginal / exchangeRateToUsd);
 }
 
+/**
+ * TASK 006 — المرحلة الثانية: حارس يمنع إلغاء سند قبض/دفع CONFIRMED من
+ * المسار القديم (PATCH /:id/cancel) إن كان لا يزال مرتبطاً فعلياً بفاتورة
+ * بيع/شراء غير مُلغاة — لأن applyVoucherCancellation يعكس أثر السند بالخزينة
+ * والـGL فقط، ولا يصحّح sales_invoices/purchase_invoices.paid_amount على
+ * الإطلاق، فيترك الفاتورة تظهر مدفوعة رغم عكس دفعتها فعلياً. لا يُستدعى هذا
+ * الحارس من مسار إلغاء/إبطال الفاتورة نفسها (voidSalesInvoice/
+ * voidPurchaseInvoice) — تلك المسارات تُغيّر document_status للفاتورة ضمن
+ * نفس المعاملة، فتتجاوز هذا الفحص بأمان (طالما استُدعيت cancelConfirmedVoucher
+ * مباشرة، لا عبر هذا الحارس).
+ */
+export async function assertVoucherCancellationAllowed(
+  client: Pick<PoolClient, 'query'>,
+  companyId: string,
+  voucher: { status: string; reference_document_type?: string | null; reference_document_no?: string | null },
+): Promise<void> {
+  if (voucher.status !== 'CONFIRMED') return;
+  const refType = voucher.reference_document_type ? String(voucher.reference_document_type) : '';
+  const refNo = voucher.reference_document_no ? String(voucher.reference_document_no) : '';
+  if (!refType || !refNo) return;
+
+  if (refType === 'SALE_INVOICE') {
+    const r = await client.query<{ document_status: string }>(
+      `SELECT document_status FROM sales_invoices WHERE company_id=$1 AND invoice_no=$2`,
+      [companyId, refNo],
+    );
+    if (r.rows.length && r.rows[0].document_status !== 'VOIDED') {
+      throw Object.assign(
+        new Error('هذا السند مرتبط بفاتورة بيع ودُفع لتخفيض مديونيتها فعلاً — لا يمكن إلغاؤه من هذا المسار لأن ذلك لن يصحّح مديونية الفاتورة. استخدم إلغاء/مرتجع الفاتورة نفسها.'),
+        { code: 'VALIDATION' },
+      );
+    }
+    return;
+  }
+
+  if (refType === 'PURCHASE_INVOICE') {
+    const r = await client.query<{ document_status: string }>(
+      `SELECT document_status FROM purchase_invoices WHERE company_id=$1 AND invoice_no=$2`,
+      [companyId, refNo],
+    );
+    if (r.rows.length && r.rows[0].document_status !== 'VOIDED') {
+      throw Object.assign(
+        new Error('هذا السند مرتبط بفاتورة شراء ودُفع لتخفيض مديونيتها فعلاً — لا يمكن إلغاؤه من هذا المسار لأن ذلك لن يصحّح مديونية الفاتورة. استخدم إلغاء/مرتجع الفاتورة نفسها.'),
+        { code: 'VALIDATION' },
+      );
+    }
+  }
+}
+
 /** يقرأ بنود السند المقسَّم (voucher_lines) إن وُجدت — مصفوفة فارغة لسند أحادي
  * الخزينة القديم (لا صفوف له أصلاً)، فيعود applyVoucherConfirmation/Cancellation
  * لسلوكهما الافتراضي بناءً على الحقول القديمة بالضبط. */

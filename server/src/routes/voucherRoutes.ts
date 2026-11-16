@@ -8,6 +8,7 @@ import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import {
   applyVoucherCancellation,
   applyVoucherConfirmation,
+  assertVoucherCancellationAllowed,
   loadVoucherConfirmationLines,
 } from '../services/voucherCashboxService.js';
 import {
@@ -620,6 +621,11 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         await client.query('ROLLBACK');
         return sendError(reply, 400, 'السند ملغى مسبقاً', 'INVALID_STATE');
       }
+
+      // TASK 006 — المرحلة الثانية: حماية مسار الإلغاء القديم من إلغاء سند
+      // مُستخدَم فعلاً لتخفيض مديونية فاتورة — انظر توثيق
+      // assertVoucherCancellationAllowed بـvoucherCashboxService.ts.
+      await assertVoucherCancellationAllowed(client, companyId, row);
 
       const cancellationLines = await loadVoucherConfirmationLines(client, companyId, id);
       if (row.status === 'CONFIRMED' && (row.cashbox_id || cancellationLines.length > 0)) {
