@@ -31,6 +31,21 @@ function toIsoDate(value: unknown) {
   return String(value ?? '').slice(0, 10);
 }
 
+/**
+ * سياسة العملات (بشير، البند 2) — يختار أي زوج أعمدة (الأصلي أم المُحوَّل
+ * للدولار) يُستخدَم لحساب الرصيد لصف كشف حساب واحد. دالة صِرفة مُستخرَجة
+ * لتكون قابلة للاختبار دون قاعدة بيانات حقيقية — نفس القاعدة المُطبَّقة
+ * بـbuildStatement حرفياً، لا منطق جديد، فقط استخراج.
+ */
+export function pickStatementRowAmounts(
+  row: Pick<StatementSourceRow, 'debit' | 'credit' | 'debit_usd' | 'credit_usd'>,
+  useOriginalCurrency: boolean,
+): { debit: number; credit: number } {
+  return useOriginalCurrency
+    ? { debit: Number(row.debit), credit: Number(row.credit) }
+    : { debit: Number(row.debit_usd), credit: Number(row.credit_usd) };
+}
+
 async function loadCustomer(companyId: string, customerId: string) {
   const row = await getPool().query(
     `SELECT id, code, name, phone, email, address, notes, telegram_chat_id, telegram_enabled, telegram_label
@@ -52,7 +67,13 @@ async function loadSupplier(companyId: string, supplierId: string) {
 function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatementFilters) {
   const params: unknown[] = [];
   const p = { value: 1 };
-  const dateCondition = (alias: string, col: string) => {
+  // سياسة العملات (بشير، البند 2): currencyAlias اختيارية — فرع قيود اليومية
+  // (journal_lines jl / journal_entries je أدناه) له أليّاسان مختلفان لعمود
+  // التاريخ (je.entry_date) وعمود currency_code (jl.currency_code)، بعكس كل
+  // الفروع الأخرى حيث نفس الجدول يحمل العمودين معاً. هذه الثغرة لم تظهر
+  // سابقاً لأن filters.currency لم يكن يُمرَّر فعلياً من أي مسار قبل هذه
+  // الميزة — مُثبَّتة بتجربة فعلية (قراءة فقط) على بيانات الإنتاج قبل الاعتماد.
+  const dateCondition = (alias: string, col: string, currencyAlias: string = alias) => {
     const conditions: string[] = [];
     if (period === 'opening' && filters.fromDate) {
       conditions.push(`${alias}.${col} < $${p.value}::date`);
@@ -71,7 +92,7 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
       }
     }
     if (filters.currency) {
-      conditions.push(`${alias}.currency_code = $${p.value}`);
+      conditions.push(`${currencyAlias}.currency_code = $${p.value}`);
       params.push(filters.currency);
       p.value++;
     }
@@ -158,7 +179,7 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
     INNER JOIN journal_entries je ON je.id = jl.entry_id AND je.company_id = jl.company_id
     WHERE jl.company_id=$1 AND jl.party_id=$2 AND jl.party_type='CUSTOMER'
       AND je.status='POSTED' AND je.source_type IN ('MANUAL', 'OPENING', 'SYSTEM')
-    ${dateCondition('je', 'entry_date')}
+    ${dateCondition('je', 'entry_date', 'jl')}
   `;
   params.splice(0, 0);
   return { sql, params };
@@ -282,9 +303,19 @@ async function buildStatement(kind: PartyKind, companyId: string, partyId: strin
   const applyBalance = (balance: number, debit: number, credit: number) =>
     kind === 'CUSTOMER' ? balance + debit - credit : balance + credit - debit;
 
+  // سياسة العملات (بشير) — البند 2: عند تحديد عملة واحدة صريحة (filters.currency)،
+  // كل الصفوف المُعادة بالفعل من نفس تلك العملة فقط (الشرط مطبَّق بـ
+  // customerRowsQuery/supplierRowsQuery أعلاه) — فالرصيد يُحسَب من القيم
+  // الأصلية (debit/credit) لا المُحوَّلة للدولار (debit_usd/credit_usd)، فيعكس
+  // مديونية العميل بعملتها الحقيقية دون أي تحويل ضمني. بلا تحديد عملة (الوضع
+  // الافتراضي الحالي، المُستخدَم فعلاً بـTASK 004/006) — السلوك الحالي يبقى
+  // بلا أي تغيير: جمع موحَّد بالدولار عبر كل العملات المختلطة.
+  const useOriginalCurrency = Boolean(filters.currency);
+
   let openingBalance = 0;
   openingRows.forEach((row) => {
-    openingBalance = applyBalance(openingBalance, Number(row.debit_usd), Number(row.credit_usd));
+    const { debit: d, credit: c } = pickStatementRowAmounts(row, useOriginalCurrency);
+    openingBalance = applyBalance(openingBalance, d, c);
   });
 
   let running = openingBalance;
@@ -293,8 +324,7 @@ async function buildStatement(kind: PartyKind, companyId: string, partyId: strin
   const rows = periodRows.map((row) => {
     const debitOriginal = Number(row.debit);
     const creditOriginal = Number(row.credit);
-    const debit = Number(row.debit_usd);
-    const credit = Number(row.credit_usd);
+    const { debit, credit } = pickStatementRowAmounts(row, useOriginalCurrency);
     totalDebit += debit;
     totalCredit += credit;
     running = applyBalance(running, debit, credit);
@@ -339,4 +369,72 @@ export async function getCustomerStatement(companyId: string, customerId: string
 
 export async function getSupplierStatement(companyId: string, supplierId: string, filters: PartyStatementFilters) {
   return buildStatement('SUPPLIER', companyId, supplierId, filters);
+}
+
+export type PartyStatementByCurrency = Awaited<ReturnType<typeof buildStatement>>;
+
+/**
+ * سياسة العملات (بشير) — البند 2: رصيد مستقل لكل عملة فعلية للعميل/المورّد،
+ * دون جمعها ببعضها. لا يُعدِّل buildStatement الحالية (تبقى بسلوكها الحالي
+ * تماماً — المُستخدَمة فعلياً بـTASK 004/006) — يستدعيها مرة واحدة أولاً
+ * بلا فلتر عملة لاستخراج قائمة العملات الفعلية المُستخدَمة فعلياً (من
+ * `rows[].currency` المُعادة أصلاً، لا استعلام إضافي جديد)، ثم مرة واحدة
+ * لكل عملة فعلية بتفعيل filters.currency (فيُستخدَم مسار القيم الأصلية
+ * المُضاف أعلاه تلقائياً). N+1 استدعاء صغير (عدد عملات العميل، عملياً 1-3)
+ * — مقبول تماماً لحجم بيانات كشف حساب فرد واحد، ويتجنّب إعادة كتابة
+ * استعلام UNION المُعقَّد لتجميع "GROUP BY عملة" بالخادم مباشرة.
+ */
+async function buildStatementByCurrency(
+  kind: PartyKind,
+  companyId: string,
+  partyId: string,
+  filters: Omit<PartyStatementFilters, 'currency'>,
+): Promise<{
+  customer?: unknown;
+  supplier?: unknown;
+  period: { from: string | null; to: string | null };
+  byCurrency: Array<{
+    currency: string;
+    openingBalance: number;
+    rows: PartyStatementByCurrency['rows'];
+    totals: PartyStatementByCurrency['totals'];
+  }>;
+}> {
+  const all = await buildStatement(kind, companyId, partyId, filters);
+  const currencies = Array.from(new Set(all.rows.map((r) => r.currency).filter(Boolean))).sort();
+
+  const byCurrency = await Promise.all(
+    currencies.map(async (currency) => {
+      const scoped = await buildStatement(kind, companyId, partyId, { ...filters, currency });
+      return {
+        currency,
+        openingBalance: scoped.openingBalance,
+        rows: scoped.rows,
+        totals: scoped.totals,
+      };
+    }),
+  );
+
+  return {
+    customer: (all as { customer?: unknown }).customer,
+    supplier: (all as { supplier?: unknown }).supplier,
+    period: all.period,
+    byCurrency,
+  };
+}
+
+export async function getCustomerStatementByCurrency(
+  companyId: string,
+  customerId: string,
+  filters: Omit<PartyStatementFilters, 'currency'>,
+) {
+  return buildStatementByCurrency('CUSTOMER', companyId, customerId, filters);
+}
+
+export async function getSupplierStatementByCurrency(
+  companyId: string,
+  supplierId: string,
+  filters: Omit<PartyStatementFilters, 'currency'>,
+) {
+  return buildStatementByCurrency('SUPPLIER', companyId, supplierId, filters);
 }

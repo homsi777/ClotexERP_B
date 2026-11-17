@@ -17,7 +17,12 @@ import { BRAND } from '../../branding';
 import { arAccountingCreditSide, arAccountingDebitSide } from '../../lib/i18n/arTerminology';
 import { listVouchers, createVoucher, confirmVoucher, type VoucherRow } from '../../lib/api/vouchersApi';
 import { listCashboxes, type CashboxDto } from '../../lib/api/cashboxesApi';
-import { getCustomerStatement, type PartyStatementData } from '../../lib/api/partyStatementsApi';
+import {
+  getCustomerStatement,
+  getCustomerStatementByCurrency,
+  type PartyStatementData,
+  type PartyStatementByCurrencyData,
+} from '../../lib/api/partyStatementsApi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   type StatementPreset,
@@ -96,6 +101,13 @@ export const CustomerStatement = () => {
   const [accountStatement, setAccountStatement] = useState<PartyStatementData | null>(null);
   const [accountStatementLoading, setAccountStatementLoading] = useState(false);
   const [accountStatementError, setAccountStatementError] = useState<string | null>(null);
+  // سياسة العملات (بشير) — البند 2: رصيد مستقل لكل عملة فعلية، مستقل تماماً
+  // عن accountStatement الموحّد بالدولار أعلاه (TASK 004) — لا يُعدِّله ولا
+  // يعتمد عليه، فلا خطر على سلوكه الحالي.
+  const [statementByCurrency, setStatementByCurrency] = useState<PartyStatementByCurrencyData | null>(null);
+  const [statementByCurrencyLoading, setStatementByCurrencyLoading] = useState(false);
+  const [statementByCurrencyError, setStatementByCurrencyError] = useState<string | null>(null);
+  const [usdPreviewCurrency, setUsdPreviewCurrency] = useState<string | null>(null);
   // TASK 004: عملة عرض الكشف — accountStatement.totals/openingBalance/rows قادمة
   // من الخادم بالدولار دائماً (partyStatementService.ts::buildStatement). هذا
   // الاختيار يحوّلها للعرض فقط عبر سعر الصرف المركزي (exchangeRates)، دون أي
@@ -336,6 +348,37 @@ export const CustomerStatement = () => {
         setAccountStatementError(e instanceof Error ? e.message : t('toast.loadStatementFailed'));
       } finally {
         if (!cancelled) setAccountStatementLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCustomerId, fromDate, toDate, voucherRefreshTick]);
+
+  // سياسة العملات (بشير) — البند 2: جلب مستقل تماماً عن accountStatement
+  // أعلاه (TASK 004) — نفس محفّزات التحميل (العميل/الفترة/تحديث السندات)
+  // لكن مصدر بيانات وحالة منفصلين، فلا يتأثر أي منهما بفشل أو نجاح الآخر.
+  useEffect(() => {
+    if (!selectedCustomerId || !isUuid(selectedCustomerId)) {
+      setStatementByCurrency(null);
+      setStatementByCurrencyError(null);
+      setStatementByCurrencyLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setStatementByCurrencyLoading(true);
+    setStatementByCurrencyError(null);
+    void (async () => {
+      try {
+        const res = await getCustomerStatementByCurrency(selectedCustomerId, { fromDate, toDate });
+        if (cancelled) return;
+        setStatementByCurrency(res.data);
+      } catch (e) {
+        if (cancelled) return;
+        setStatementByCurrency(null);
+        setStatementByCurrencyError(e instanceof Error ? e.message : t('toast.loadStatementFailed'));
+      } finally {
+        if (!cancelled) setStatementByCurrencyLoading(false);
       }
     })();
     return () => {
@@ -1346,6 +1389,90 @@ export const CustomerStatement = () => {
                 </div>
                )}
             </div>
+
+            {/* سياسة العملات (بشير) — البند 2: رصيد مستقل لكل عملة فعلية،
+                مستقل تماماً عن قسم TASK 004 أعلاه (لا يُعدِّله ولا يُستبدَل به). */}
+            {!hideFinancialColumns && (
+              <div className="p-6 border-b border-slate-200 bg-white">
+                <h4 className="text-lg font-bold text-slate-900 mb-3">{t('byCurrency.title')}</h4>
+                {statementByCurrencyLoading && (
+                  <p className="text-sm text-slate-400">{t('byCurrency.loading')}</p>
+                )}
+                {statementByCurrencyError && (
+                  <p className="text-sm text-rose-600">{statementByCurrencyError}</p>
+                )}
+                {!statementByCurrencyLoading && !statementByCurrencyError && (
+                  !statementByCurrency?.byCurrency.length ? (
+                    <p className="text-sm text-slate-400">{t('byCurrency.empty')}</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {statementByCurrency.byCurrency.map((entry) => {
+                        const closingType: 'مدين' | 'دائن' = entry.totals.closingBalance >= 0 ? 'مدين' : 'دائن';
+                        const rate = exchangeRates.find((r) => r.currency_code === entry.currency);
+                        const rateNum = rate ? Number(rate.exchange_rate_to_usd) : null;
+                        const showingUsd = usdPreviewCurrency === entry.currency;
+                        const usdEquivalent =
+                          showingUsd && rateNum && rateNum > 0
+                            ? entry.totals.closingBalance / rateNum
+                            : null;
+                        return (
+                          <div key={entry.currency} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-bold text-slate-900">{entry.currency}</span>
+                              <span className="text-xs text-slate-500">
+                                {t('byCurrency.openingBalance')}: {entry.openingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 flex justify-between mb-1">
+                              <span>{t('byCurrency.totalDebit')}</span>
+                              <span className="font-mono">{entry.totals.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="text-xs text-slate-600 flex justify-between mb-2">
+                              <span>{t('byCurrency.totalCredit')}</span>
+                              <span className="font-mono">{entry.totals.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className={`text-sm font-bold ${closingType === 'مدين' ? 'text-indigo-700' : 'text-emerald-700'}`}>
+                              {Math.abs(entry.totals.closingBalance).toLocaleString(undefined, { minimumFractionDigits: 2 })} {entry.currency}{' '}
+                              <span className="text-[11px] font-normal text-slate-500">({displayDebitCredit(closingType)})</span>
+                            </div>
+                            {entry.currency !== 'USD' && (
+                              <div className="mt-2">
+                                {!showingUsd ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setUsdPreviewCurrency(entry.currency)}
+                                    className="text-[11px] text-indigo-600 hover:underline"
+                                  >
+                                    {t('byCurrency.showUsdEquivalent')}
+                                  </button>
+                                ) : (
+                                  <div className="text-[11px] text-slate-500">
+                                    {usdEquivalent !== null
+                                      ? t('byCurrency.usdEquivalentLine', {
+                                          amount: Math.abs(usdEquivalent).toLocaleString(undefined, { minimumFractionDigits: 2 }),
+                                          rate: rateNum,
+                                        })
+                                      : t('byCurrency.noRateAvailable')}
+                                    {' '}
+                                    <button
+                                      type="button"
+                                      onClick={() => setUsdPreviewCurrency(null)}
+                                      className="text-indigo-600 hover:underline"
+                                    >
+                                      {t('byCurrency.hide')}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
 
             <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
                 <h4 className="text-lg font-bold text-slate-900 mb-4">{t('summary.title')}</h4>

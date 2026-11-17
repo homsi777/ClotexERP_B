@@ -7,7 +7,7 @@ import { ArabicErrors } from '../utils/arabicErrors.js';
 import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { insertPartyActivityLog } from '../services/partyActivityLogService.js';
-import { getCustomerStatement } from '../services/partyStatementService.js';
+import { getCustomerStatement, getCustomerStatementByCurrency } from '../services/partyStatementService.js';
 import { previewCustomerPurge, purgeCustomerAccount } from '../services/purgeCustomerService.js';
 import { createSalesInvoice } from '../services/salesInvoiceService.js';
 import { applyVoucherConfirmation, insertDraftVoucher } from '../services/voucherCashboxService.js';
@@ -302,6 +302,27 @@ export const customerRoutes: FastifyPluginAsync = async (app) => {
         fromDate: q.fromDate?.trim() || undefined,
         toDate: q.toDate?.trim() || undefined,
         currency: q.currency?.trim() || undefined,
+      });
+      return reply.send({ ok: true, data });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'NOT_FOUND') {
+        return sendError(reply, 404, e instanceof Error ? e.message : 'العميل غير موجود', 'NOT_FOUND');
+      }
+      throw e;
+    }
+  });
+
+  /** سياسة العملات (بشير) — البند 2: رصيد مستقل لكل عملة فعلية لهذا العميل،
+   * دون جمعها ببعضها. تحويل أي رصيد للدولار يبقى اختياراً بالواجهة فقط عند
+   * الطلب (بنفس آلية TASK 004) — هذا المسار يعيد القيم الأصلية الصحيحة أولاً. */
+  app.get('/:id/statement-by-currency', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    try {
+      const data = await getCustomerStatementByCurrency(companyId, id, {
+        fromDate: q.fromDate?.trim() || undefined,
+        toDate: q.toDate?.trim() || undefined,
       });
       return reply.send({ ok: true, data });
     } catch (e) {
