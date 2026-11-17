@@ -607,13 +607,74 @@ export async function reportSalesByAgent(): Promise<UnifiedReportPayload> {
   });
 }
 
-export async function reportSalesByColor(): Promise<UnifiedReportPayload> {
-  return emptyReport({
+/**
+ * TASK 008 (المرحلة الثالثة — استكمال التقارير الناقصة): هذا التقرير كان
+ * placeholder دائماً فارغاً. يُستخرَج الآن من بيانات حقيقية فعلياً — نفس
+ * CTE صافي المرتجعات والإيراد بالدولار المُثبَتة أصلاً بـ
+ * reportSalesByItemColorForCustomer (لون الطوب الفعلي المباع عبر
+ * fabric_rolls.color_id)، بلا تقييد بعميل واحد هنا — تجميع على مستوى
+ * الشركة لكل الفترات (بلا فلتر تاريخ، بنفس نمط reportPurchasesBySupplier/
+ * reportPurchasesByItem الموجودة فعلاً بهذا الملف).
+ */
+export async function reportSalesByColor(companyId: string): Promise<UnifiedReportPayload> {
+  const pool = getPool();
+  const sql = `
+    WITH return_agg AS (
+      SELECT ril.original_sales_invoice_line_id AS line_id,
+             SUM(
+               ROUND(
+                 ril.line_total / NULLIF(
+                   CASE WHEN ri.currency_code = 'USD' THEN 1 ELSE ri.exchange_rate_to_usd END, 0
+                 ), 4
+               )
+             )::numeric AS returned_amount_usd
+      FROM return_invoice_lines ril
+      INNER JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id
+      WHERE ril.company_id = $1
+        AND ri.return_type = 'SALES_RETURN'
+        AND ri.status = 'CONFIRMED'
+        AND ril.original_sales_invoice_line_id IS NOT NULL
+      GROUP BY ril.original_sales_invoice_line_id
+    ),
+    sale_lines AS (
+      SELECT
+        sil.id AS line_id,
+        COALESCE(fc.id::text, 'none') AS color_key,
+        COALESCE(fc.name_ar, fc.name_tr, 'بدون لون') AS color_name,
+        COALESCE(fc.color_code, '') AS color_code,
+        ${SQL_NET_LINE_REVENUE_USD} AS net_sales_usd
+      FROM sales_invoice_lines sil
+      INNER JOIN sales_invoices si ON si.id = sil.invoice_id AND si.company_id = sil.company_id
+      LEFT JOIN fabric_rolls fr ON fr.id = sil.fabric_roll_id AND fr.company_id = sil.company_id
+      LEFT JOIN fabric_colors fc ON fc.id = fr.color_id
+      WHERE si.company_id = $1
+        AND si.document_status = 'CONFIRMED'
+    )
+    SELECT
+      color_name,
+      color_code,
+      COUNT(*)::int AS rolls,
+      ROUND(COALESCE(SUM(sl.net_sales_usd), 0) - COALESCE(SUM(ra.returned_amount_usd), 0), 2)::text AS amount
+    FROM sale_lines sl
+    LEFT JOIN return_agg ra ON ra.line_id = sl.line_id
+    GROUP BY color_key, color_name, color_code
+    ORDER BY amount DESC
+  `;
+  const result = await pool.query(sql, [companyId]);
+  return buildReportPayload({
     key: 'sa_color',
     title: 'المبيعات حسب اللون',
-    columns: [textCol('color_name', 'اللون'), numCol('rolls', 'أتواب'), moneyCol('amount', 'قيمة')],
-    metaNote: 'لا توجد أسطر بيع مرتبطة بالألوان بعد.',
-    dataCompleteness: 'EMPTY_REASON',
+    subtitle: 'صافي المبيعات بعد المرتجعات، بالدولار (USD) — فواتير بيع مؤكدة، كل الفترات',
+    generatedAt: nowIso(),
+    filtersApplied: {},
+    columns: [
+      textCol('color_name', 'اللون'),
+      textCol('color_code', 'كود اللون'),
+      numCol('rolls', 'أتواب'),
+      moneyCol('amount', 'قيمة (USD)'),
+    ],
+    rows: result.rows as Record<string, unknown>[],
+    meta: { total: result.rows.length, dataCompleteness: result.rows.length ? 'FULL' : 'EMPTY_REASON' },
   });
 }
 
