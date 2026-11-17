@@ -120,6 +120,17 @@
   "statementTable.finalBalance": "الرصيد النهائي ({{currency}}): {{amount}}",
   "statementTable.displayCurrencyLabel": "عملة العرض:",
 
+  "byCurrency.title": "الأرصدة المستقلة لكل عملة",
+  "byCurrency.loading": "جاري التحميل…",
+  "byCurrency.empty": "لا توجد حركات مالية بأي عملة لهذا العميل ضمن الفترة المحددة.",
+  "byCurrency.openingBalance": "رصيد افتتاحي",
+  "byCurrency.totalDebit": "إجمالي مدين",
+  "byCurrency.totalCredit": "إجمالي دائن",
+  "byCurrency.showUsdEquivalent": "عرض ما يعادله بالدولار",
+  "byCurrency.usdEquivalentLine": "≈ {{amount}} USD (بسعر صرف {{rate}})",
+  "byCurrency.noRateAvailable": "لا يوجد سعر صرف مركزي مُفعَّل لهذه العملة.",
+  "byCurrency.hide": "إخفاء",
+
   "itemsTable.colDate": "التاريخ",
   "itemsTable.colReference": "المرجع",
   "itemsTable.colFabricName": "اسم الخامة",

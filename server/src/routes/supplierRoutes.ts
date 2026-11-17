@@ -5,7 +5,7 @@ import { authenticateRequest } from '../middleware/auth.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { insertPartyActivityLog } from '../services/partyActivityLogService.js';
-import { getSupplierStatement } from '../services/partyStatementService.js';
+import { getSupplierStatement, getSupplierStatementByCurrency } from '../services/partyStatementService.js';
 import { formatZodValidationMessage, supplierBodySchema } from '../utils/partyBodySchema.js';
 
 const supplierBody = supplierBodySchema;
@@ -78,6 +78,25 @@ export const supplierRoutes: FastifyPluginAsync = async (app) => {
         fromDate: q.fromDate?.trim() || undefined,
         toDate: q.toDate?.trim() || undefined,
         currency: q.currency?.trim() || undefined,
+      });
+      return reply.send({ ok: true, data });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'NOT_FOUND') {
+        return sendError(reply, 404, e instanceof Error ? e.message : 'المورد غير موجود', 'NOT_FOUND');
+      }
+      throw e;
+    }
+  });
+
+  /** سياسة العملات (بشير) — البند 2، بنفس منطق مسار العميل المقابل. */
+  app.get('/:id/statement-by-currency', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    try {
+      const data = await getSupplierStatementByCurrency(companyId, id, {
+        fromDate: q.fromDate?.trim() || undefined,
+        toDate: q.toDate?.trim() || undefined,
       });
       return reply.send({ ok: true, data });
     } catch (e) {

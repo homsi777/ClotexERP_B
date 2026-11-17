@@ -71,3 +71,47 @@ export async function getSupplierStatement(
     `/api/suppliers/${supplierId}/statement${buildStatementQuery(params)}`,
   );
 }
+
+/** سياسة العملات (بشير) — البند 2: رصيد مستقل لكل عملة فعلية للعميل/المورّد. */
+export interface PartyStatementByCurrencyEntry {
+  currency: string;
+  openingBalance: number;
+  rows: PartyStatementRow[];
+  totals: {
+    debit: number;
+    credit: number;
+    closingBalance: number;
+  };
+}
+
+export interface PartyStatementByCurrencyData {
+  customer?: PartyStatementParty;
+  supplier?: PartyStatementParty;
+  period: { from: string | null; to: string | null };
+  byCurrency: PartyStatementByCurrencyEntry[];
+}
+
+function buildStatementByCurrencyQuery(params: { fromDate?: string; toDate?: string }) {
+  const q = new URLSearchParams();
+  if (params.fromDate) q.set('fromDate', params.fromDate);
+  if (params.toDate) q.set('toDate', params.toDate);
+  return q.toString() ? `?${q}` : '';
+}
+
+export async function getCustomerStatementByCurrency(
+  customerId: string,
+  params: { fromDate?: string; toDate?: string },
+) {
+  return apiFetch<{ ok: boolean; data: PartyStatementByCurrencyData }>(
+    `/api/customers/${customerId}/statement-by-currency${buildStatementByCurrencyQuery(params)}`,
+  );
+}
+
+export async function getSupplierStatementByCurrency(
+  supplierId: string,
+  params: { fromDate?: string; toDate?: string },
+) {
+  return apiFetch<{ ok: boolean; data: PartyStatementByCurrencyData }>(
+    `/api/suppliers/${supplierId}/statement-by-currency${buildStatementByCurrencyQuery(params)}`,
+  );
+}

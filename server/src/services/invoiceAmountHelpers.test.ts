@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   allocateHeaderDiscountToLines,
   computePaymentApplication,
+  convertAmountToInvoiceCurrency,
   grossLineTotal,
   INVOICE_AMOUNT_EPS,
   type InvoiceLineAmountInput,
@@ -70,6 +71,60 @@ assert.throws(() =>
     0,
     10,
   ),
+);
+
+// سياسة العملات (بشير) — convertAmountToInvoiceCurrency: يمنع الخصم الرقمي
+// المباشر بين عملتين مختلفتين (الثغرة الموجودة سابقاً بـ
+// validateSaleInvoiceReceiptVoucher/validatePurchaseInvoicePaymentVoucher).
+
+// نفس العملة — تُعاد القيمة كما هي حرفياً (لا تقريب لا داعي له).
+assert.equal(
+  convertAmountToInvoiceCurrency({
+    amount: 123.45,
+    fromCurrency: 'EGP',
+    fromExchangeRateToUsd: 50,
+    toCurrency: 'EGP',
+    toExchangeRateToUsd: 50,
+  }),
+  123.45,
+);
+
+// سند بالدولار يُسدِّد فاتورة بالجنيه المصري (سعر الصرف 50 ج.م = 1$):
+// 100$ → 5000 ج.م.
+assert.equal(
+  convertAmountToInvoiceCurrency({
+    amount: 100,
+    fromCurrency: 'USD',
+    fromExchangeRateToUsd: 1,
+    toCurrency: 'EGP',
+    toExchangeRateToUsd: 50,
+  }),
+  5000,
+);
+
+// سند بالجنيه المصري يُسدِّد فاتورة بالدولار: 5000 ج.م ÷ 50 = 100$.
+assert.equal(
+  convertAmountToInvoiceCurrency({
+    amount: 5000,
+    fromCurrency: 'EGP',
+    fromExchangeRateToUsd: 50,
+    toCurrency: 'USD',
+    toExchangeRateToUsd: 1,
+  }),
+  100,
+);
+
+// عملتان مختلفتان كلتاهما غير USD — التحويل عبر الدولار كوسيط
+// (TRY سعرها 32، EGP سعرها 50): 320 TRY → 10$ → 500 EGP.
+assert.equal(
+  convertAmountToInvoiceCurrency({
+    amount: 320,
+    fromCurrency: 'TRY',
+    fromExchangeRateToUsd: 32,
+    toCurrency: 'EGP',
+    toExchangeRateToUsd: 50,
+  }),
+  500,
 );
 
 console.log('invoiceAmountHelpers.test.ts OK');

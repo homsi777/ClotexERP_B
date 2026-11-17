@@ -11,6 +11,7 @@ import { matchPurchaseLineAgainstProcessingDispatches } from './externalJobPurch
 import {
   allocateHeaderDiscountToLines,
   computePaymentApplication,
+  convertAmountToInvoiceCurrency,
   INVOICE_AMOUNT_EPS,
   validateInvoiceLineAmounts,
 } from './invoiceAmountHelpers.js';
@@ -2003,6 +2004,10 @@ type VoucherPaymentRef = {
   referenceDocumentNo: string | null;
   partyType: string | null;
   partyId: string | null;
+  /** سياسة العملات (بشير) — عملة وسعر صرف السند نفسه، لتحويل مبلغه لعملة
+   * الفاتورة قبل أي مقارنة بالمتبقي (لا مقارنة رقمية مباشرة بين عملتين). */
+  currencyCode?: string;
+  exchangeRateToUsd?: number;
 };
 
 export async function validatePurchaseInvoicePaymentVoucher(
@@ -2019,8 +2024,10 @@ export async function validatePurchaseInvoicePaymentVoucher(
     document_status: string;
     remaining_amount: string;
     supplier_id: string;
+    currency_code: string;
+    exchange_rate_to_usd: string;
   }>(
-    `SELECT document_status, remaining_amount, supplier_id
+    `SELECT document_status, remaining_amount, supplier_id, currency_code, exchange_rate_to_usd
      FROM purchase_invoices
      WHERE company_id=$1 AND invoice_no=$2
      FOR UPDATE`,
@@ -2040,7 +2047,15 @@ export async function validatePurchaseInvoicePaymentVoucher(
   if (remaining <= EPS) {
     throw Object.assign(new Error('الفاتورة مدفوعة بالكامل ولا يمكن صرف مبلغ إضافي'), { code: 'VALIDATION' });
   }
-  const amt = Number(voucher.amount);
+  // سياسة العملات: تحويل مبلغ السند لعملة الفاتورة أولاً — لا مقارنة رقمية
+  // مباشرة بين عملتين مختلفتين (كانت هذه الثغرة موجودة سابقاً).
+  const amt = convertAmountToInvoiceCurrency({
+    amount: Number(voucher.amount),
+    fromCurrency: voucher.currencyCode || 'USD',
+    fromExchangeRateToUsd: voucher.exchangeRateToUsd || 1,
+    toCurrency: row.currency_code,
+    toExchangeRateToUsd: Number(row.exchange_rate_to_usd) || 1,
+  });
   if (amt > remaining + EPS) {
     throw Object.assign(new Error('مبلغ السند يتجاوز المتبقي على الفاتورة'), { code: 'VALIDATION' });
   }
@@ -2063,8 +2078,9 @@ export async function applyPurchaseInvoicePaymentOnVoucherConfirm(
     paid_amount: string;
     remaining_amount: string;
     exchange_rate_to_usd: string;
+    currency_code: string;
   }>(
-    `SELECT id, total_amount, paid_amount, remaining_amount, exchange_rate_to_usd
+    `SELECT id, total_amount, paid_amount, remaining_amount, exchange_rate_to_usd, currency_code
      FROM purchase_invoices
      WHERE company_id=$1 AND invoice_no=$2 AND document_status='CONFIRMED'
      FOR UPDATE`,
@@ -2076,16 +2092,22 @@ export async function applyPurchaseInvoicePaymentOnVoucherConfirm(
   const totalAmt = Number(row.total_amount);
   const paidAmt = Number(row.paid_amount);
   const remaining = Number(row.remaining_amount);
-  const payment = computePaymentApplication(totalAmt, paidAmt, remaining, Number(voucher.amount));
+  // سياسة العملات: تحويل مبلغ السند لعملة الفاتورة أولاً — paid_amount/
+  // remaining_amount بالفاتورة دائماً بعملتها الأصلية.
+  const amountInInvoiceCurrency = convertAmountToInvoiceCurrency({
+    amount: Number(voucher.amount),
+    fromCurrency: voucher.currencyCode || 'USD',
+    fromExchangeRateToUsd: voucher.exchangeRateToUsd || 1,
+    toCurrency: row.currency_code,
+    toExchangeRateToUsd: Number(row.exchange_rate_to_usd) || 1,
+  });
+  const payment = computePaymentApplication(totalAmt, paidAmt, remaining, amountInInvoiceCurrency);
   if (!payment) return;
   const applyAmt = payment.applyAmount;
 
-  const rate =
-    Number(voucher.exchangeRateToUsd) > 0
-      ? Number(voucher.exchangeRateToUsd)
-      : Number(row.exchange_rate_to_usd) > 0
-        ? Number(row.exchange_rate_to_usd)
-        : 1;
+  // paid_amount/remaining_amount بعملة الفاتورة دائماً — سعر صرف الفاتورة
+  // نفسه (لا سعر السند) هو الصحيح لتحويلهما لمعادل الدولار.
+  const rate = Number(row.exchange_rate_to_usd) > 0 ? Number(row.exchange_rate_to_usd) : 1;
   const newPaid = payment.newPaid;
   const pay = paymentStatuses(totalAmt, newPaid);
   const paidUsd = computeUsd(newPaid, rate);

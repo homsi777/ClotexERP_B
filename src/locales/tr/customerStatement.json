@@ -120,6 +120,17 @@
   "statementTable.finalBalance": "Nihai Bakiye ({{currency}}): {{amount}}",
   "statementTable.displayCurrencyLabel": "Görüntüleme para birimi:",
 
+  "byCurrency.title": "Her Para Birimi İçin Bağımsız Bakiye",
+  "byCurrency.loading": "Yükleniyor…",
+  "byCurrency.empty": "Bu müşteri için seçili dönemde herhangi bir para biriminde hareket bulunmuyor.",
+  "byCurrency.openingBalance": "Açılış bakiyesi",
+  "byCurrency.totalDebit": "Toplam borç",
+  "byCurrency.totalCredit": "Toplam alacak",
+  "byCurrency.showUsdEquivalent": "USD karşılığını göster",
+  "byCurrency.usdEquivalentLine": "≈ {{amount}} USD (kur: {{rate}})",
+  "byCurrency.noRateAvailable": "Bu para birimi için aktif merkezi kur bulunmuyor.",
+  "byCurrency.hide": "Gizle",
+
   "itemsTable.colDate": "Tarih",
   "itemsTable.colReference": "Referans",
   "itemsTable.colFabricName": "Kumaş Adı",
