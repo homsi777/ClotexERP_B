@@ -272,6 +272,27 @@ export const ReportsCenter = () => {
     [selectedKey],
   );
 
+  // نفس فلاتر الصفحة الحالية، بدون ترقيم الصفحات — يُعاد استخدامها لإعادة
+  // الجلب الكامل قبل التصدير (buildReportParams أدناه) حتى لا يختلف فلتر
+  // التصدير عن فلتر العرض.
+  const buildReportFilters = useCallback((): Record<string, string | number | undefined> => {
+    const params: Record<string, string | number | undefined> = {};
+    if (!selectedCard) return params;
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    if (search.trim()) params.search = search.trim();
+    if (warehouseId && WAREHOUSE_KEYS.has(selectedCard.id)) {
+      params.warehouseId = warehouseId;
+    }
+    if (cashboxId && CASHBOX_KEYS.has(selectedCard.id)) {
+      params.cashboxId = cashboxId;
+    }
+    if (selectedCard.id === 'purchases_rows' && batchId.trim()) {
+      params.batchId = batchId.trim();
+    }
+    return params;
+  }, [selectedCard, dateFrom, dateTo, search, warehouseId, cashboxId, batchId]);
+
   const loadLiveReport = useCallback(async () => {
     if (!selectedCard) return;
     setRepLoading(true);
@@ -280,19 +301,8 @@ export const ReportsCenter = () => {
       const params: Record<string, string | number | undefined> = {
         page,
         pageSize: selectedCard.id === 'inventory_rolls' ? 10000 : 50,
+        ...buildReportFilters(),
       };
-      if (dateFrom) params.dateFrom = dateFrom;
-      if (dateTo) params.dateTo = dateTo;
-      if (search.trim()) params.search = search.trim();
-      if (warehouseId && WAREHOUSE_KEYS.has(selectedCard.id)) {
-        params.warehouseId = warehouseId;
-      }
-      if (cashboxId && CASHBOX_KEYS.has(selectedCard.id)) {
-        params.cashboxId = cashboxId;
-      }
-      if (selectedCard.id === 'purchases_rows' && batchId.trim()) {
-        params.batchId = batchId.trim();
-      }
       const res = await fetchUnifiedReport(selectedCard.path, params);
       setReport({ ...res.report, key: selectedCard.id });
     } catch (e) {
@@ -301,7 +311,7 @@ export const ReportsCenter = () => {
     } finally {
       setRepLoading(false);
     }
-  }, [selectedCard, page, applyNonce, dateFrom, dateTo, search, warehouseId, cashboxId, batchId, t]);
+  }, [selectedCard, page, applyNonce, buildReportFilters, t]);
 
    useEffect(() => {
      void loadLiveReport();
@@ -320,25 +330,27 @@ export const ReportsCenter = () => {
 
    const selectedTitle = selectedCard ? getReportTitle(selectedCard.id) : '';
 
-   // Sorting logic for reports
-   const sortedReport = useMemo<UnifiedReportPayload | null>(() => {
-     if (!report || !report.rows?.length) return report;
+   // Sorting logic for reports — مستخرَجة كدالة مستقلة (applySort) لإعادة
+   // استخدامها على المجموعة الكاملة قبل التصدير (handleExport/handlePrint)،
+   // لا فقط على الصفحة المعروضة حالياً.
+   const applySort = useCallback((payload: UnifiedReportPayload | null): UnifiedReportPayload | null => {
+     if (!payload || !payload.rows?.length) return payload;
 
      const isInventoryRolls = selectedCard?.id === 'inventory_rolls';
-     let rows = [...report.rows];
+     let rows = [...payload.rows];
 
      // Column-based sorting for inventory rolls
      if (isInventoryRolls && columnSortBy) {
        rows = sortInventoryRollRows(rows, columnSortBy, columnSortDir);
      } else if (sortMode !== 'default') {
        // Preserve existing sortMode logic for other reports
-       const dateKey = report.columns.find((c) =>
+       const dateKey = payload.columns.find((c) =>
          /(date|created|updated|time|تاريخ)/i.test(c.key) || /(date|created|updated|time|تاريخ)/i.test(c.label),
        )?.key;
-       let alphaKey = report.columns.find((c) =>
+       let alphaKey = payload.columns.find((c) =>
          /(name|item|fabric|customer|supplier|اسم|خامة|عميل|مورد)/i.test(c.key) ||
          /(name|item|fabric|customer|supplier|اسم|خامة|عميل|مورد)/i.test(c.label),
-       )?.key ?? report.columns[0]?.key;
+       )?.key ?? payload.columns[0]?.key;
 
        if (sortMode === 'alpha_asc' || sortMode === 'alpha_desc') {
          const dir = sortMode === 'alpha_asc' ? 1 : -1;
@@ -355,11 +367,35 @@ export const ReportsCenter = () => {
          });
        }
      } else {
-       return report;
+       return payload;
      }
 
-     return { ...report, rows };
-   }, [report, sortMode, selectedCard, columnSortBy, columnSortDir]);
+     return { ...payload, rows };
+   }, [sortMode, selectedCard, columnSortBy, columnSortDir]);
+
+   const sortedReport = useMemo<UnifiedReportPayload | null>(() => applySort(report), [report, applySort]);
+
+  const MAX_EXPORT_ROWS = 10000;
+
+  /** TASK 008 (التصدير والطباعة): التقرير المعروض مُقسَّم لصفحات (50 صفاً
+   * افتراضياً) — تصدير هذه الصفحة فقط Excel/PDF كان يُسقِط صامتاً أي نتائج
+   * خارجها. عند وجود المزيد (meta.total أكبر من الصفوف المحمَّلة حالياً)،
+   * نُعيد الجلب بحجم صفحة كامل (بنفس الفلاتر الحالية تماماً) قبل التصدير،
+   * ثم نُطبِّق نفس الفرز المعروض (applySort) على المجموعة الكاملة. */
+  const fetchFullReportForExport = useCallback(async (): Promise<UnifiedReportPayload | null> => {
+    if (!selectedCard || !report) return sortedReport;
+    const total = report.meta?.total;
+    const loadedCount = report.rows?.length ?? 0;
+    if (!total || total <= loadedCount) return sortedReport;
+
+    const params: Record<string, string | number | undefined> = {
+      page: 1,
+      pageSize: Math.min(total, MAX_EXPORT_ROWS),
+      ...buildReportFilters(),
+    };
+    const res = await fetchUnifiedReport(selectedCard.path, params);
+    return applySort({ ...res.report, key: selectedCard.id });
+  }, [selectedCard, report, sortedReport, buildReportFilters, applySort]);
 
   const waitForPaint = () =>
     new Promise<void>((resolve) => {
@@ -371,8 +407,10 @@ export const ReportsCenter = () => {
     setExporting('excel');
     setExportNotice({ type: 'info', text: t('toast.preparingExcel') });
     try {
+      const full = await fetchFullReportForExport();
+      if (!full) return;
       await waitForPaint();
-      exportReportToExcel(sortedReport, safeReportFilename(selectedKey));
+      exportReportToExcel(full, safeReportFilename(selectedKey));
       setExportNotice({ type: 'success', text: t('toast.excelSuccess') });
     } catch (error) {
       console.error('Report Excel export failed', error);
@@ -387,8 +425,10 @@ export const ReportsCenter = () => {
     setExporting('pdf');
     setExportNotice({ type: 'info', text: t('toast.preparingPdf') });
     try {
+      const full = await fetchFullReportForExport();
+      if (!full) return;
       await waitForPaint();
-      await exportReportPdf(sortedReport, `${safeReportFilename(selectedKey)}.pdf`);
+      await exportReportPdf(full, `${safeReportFilename(selectedKey)}.pdf`);
       setExportNotice({ type: 'success', text: t('toast.pdfSuccess') });
     } catch (error) {
       console.error('Report print failed', error);
