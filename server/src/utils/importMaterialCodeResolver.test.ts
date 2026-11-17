@@ -5,9 +5,19 @@ import {
   looksLikeUniqueDesignSku,
   materialCodeFieldsLookLikeColorMistake,
   reconcileImportMaterialAndColorCodes,
+  resolveDisplayedMaterialCode,
   sanitizeNormalizedImportRow,
   sanitizeStockImportRow,
 } from './importMaterialCodeResolver.js';
+
+// TASK 007 — شجرة التصنيفات (/inventory/categories) كانت تعرض internal_code
+// الوهمي (IMP-AUTO-...) بدل supplier_code الحقيقي (كـ"DYED") بالمستوى الثاني
+// (fabricCategoryRoutes.ts). الكود الحقيقي لم يُفقَد أبداً من قاعدة البيانات
+// (ثابت بالتحقق على بيانات الإنتاج) — كان خللاً بعرض الشجرة فقط.
+assert.equal(resolveDisplayedMaterialCode('IMP-AUTO-POPLIN', 'DYED'), 'DYED');
+assert.equal(resolveDisplayedMaterialCode('5114', 'DYED'), '5114', 'كود داخلي حقيقي (ليس placeholder) يبقى هو المعروض');
+assert.equal(resolveDisplayedMaterialCode('IMP-AUTO-X', null), '', 'لا كود حقيقي متاح أصلاً — فارغ لا placeholder');
+assert.equal(resolveDisplayedMaterialCode(null, 'DYED'), 'DYED');
 
 assert.equal(looksLikeLikelyColorCode('8'), true);
 assert.equal(looksLikeLikelyColorCode('12'), true);

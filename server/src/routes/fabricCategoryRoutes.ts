@@ -5,6 +5,7 @@ import { authenticateRequest } from '../middleware/auth.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { syncCategoryUpdateToMasterData } from '../services/syncCategoryToMasterData.js';
+import { resolveDisplayedMaterialCode } from '../utils/importMaterialCodeResolver.js';
 
 const categoryBody = z.object({
   name: z.string().optional(),
@@ -187,13 +188,15 @@ const ensureCategory = async (
 
       const materials = await client.query<{
         item_name: string;
-        item_code: string | null;
+        internal_code: string | null;
+        supplier_code: string | null;
         color_name: string | null;
         color_code: string | null;
       }>(
         `SELECT
            fi.name AS item_name,
-           COALESCE(NULLIF(fi.internal_code, ''), NULLIF(fi.supplier_code, ''), fi.name) AS item_code,
+           fi.internal_code,
+           fi.supplier_code,
            COALESCE(NULLIF(fc.name_ar, ''), NULLIF(fc.name_tr, ''), NULLIF(fc.color_code, ''), NULLIF(fc.supplier_color_code, '')) AS color_name,
            COALESCE(NULLIF(fc.color_code, ''), NULLIF(fc.supplier_color_code, '')) AS color_code
          FROM fabric_items fi
@@ -214,7 +217,12 @@ const ensureCategory = async (
       for (const row of materials.rows) {
         const itemName = safeText(row.item_name);
         if (!itemName) continue;
-        const itemCodeRaw = safeText(row.item_code) || itemName;
+        // TASK 007: internal_code قد يكون معرّف هوية مُولَّداً تلقائياً
+        // (IMP-AUTO-...) حين لا يُعرف كود حقيقي وقت الاستيراد — resolveDisplayedMaterialCode
+        // (نفس الدالة المستخدمة بشاشة المخزون) تتجاوزه لصالح supplier_code
+        // الحقيقي (كـ"DYED") بدل عرضه كأنه الكود الفعلي بالمستوى الثاني للشجرة.
+        const resolvedCode = resolveDisplayedMaterialCode(row.internal_code, row.supplier_code);
+        const itemCodeRaw = safeText(resolvedCode) || itemName;
         const itemCode = toCode(itemCodeRaw, 'MAT');
         const materialKey = `${norm(itemName)}::${norm(itemCodeRaw)}`;
         if (!seenMaterials.has(materialKey)) {
