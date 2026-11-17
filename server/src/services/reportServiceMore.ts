@@ -678,13 +678,50 @@ export async function reportSalesByColor(companyId: string): Promise<UnifiedRepo
   });
 }
 
-export async function reportSalesMargins(): Promise<UnifiedReportPayload> {
-  return emptyReport({
+/**
+ * TASK 008 (المرحلة الثالثة): كان placeholder فارغاً. يُستخرَج الآن من
+ * بيانات حقيقية — إجمالي الإيراد والتكلفة بالدولار (نفس SQL_NET_LINE_REVENUE_USD
+ * وSQL_LINE_COST_USD المُختبَرتين فعلاً بـreportProfitDetails) مجمَّعة على
+ * مستوى الصنف. **لا تُطرَح مرتجعات المبيعات هنا عمداً** (بعكس
+ * reportSalesByColor) — حساب تكلفة الوحدات المرتجعة بدقة يحتاج ربطاً إضافياً
+ * بسطر الفاتورة الأصلي لم يُنجَز بهذه المرحلة؛ لذلك "إيراد إجمالي" لا
+ * "صافي بعد المرتجعات" — موضَّح صراحة بعنوان التقرير لتفادي رقم مُصطنَع دقته
+ * غير مضمونة.
+ */
+export async function reportSalesMargins(companyId: string): Promise<UnifiedReportPayload> {
+  const pool = getPool();
+  const sql = `
+    SELECT
+      COALESCE(fi.id::text, 'none') AS item_key,
+      COALESCE(NULLIF(fi.internal_code, ''), '') AS item_code,
+      COALESCE(NULLIF(fi.name, ''), 'بدون خامة') AS item,
+      ROUND(COALESCE(SUM(${SQL_NET_LINE_REVENUE_USD}), 0), 2)::text AS revenue,
+      ROUND(COALESCE(SUM(${SQL_LINE_COST_USD}), 0), 2)::text AS cost,
+      ROUND(COALESCE(SUM(${SQL_NET_LINE_REVENUE_USD}), 0) - COALESCE(SUM(${SQL_LINE_COST_USD}), 0), 2)::text AS margin
+    FROM sales_invoice_lines sil
+    INNER JOIN sales_invoices si ON si.id = sil.invoice_id AND si.company_id = sil.company_id
+    LEFT JOIN fabric_rolls fr ON fr.id = sil.fabric_roll_id AND fr.company_id = sil.company_id
+    LEFT JOIN fabric_items fi ON fi.id = COALESCE(sil.fabric_item_id, fr.item_id) AND fi.company_id = sil.company_id
+    WHERE si.company_id = $1 AND si.document_status = 'CONFIRMED'
+    GROUP BY fi.id, fi.internal_code, fi.name
+    ORDER BY margin DESC
+  `;
+  const result = await pool.query(sql, [companyId]);
+  return buildReportPayload({
     key: 'sa_margins',
     title: 'تحليل هوامش الربح',
-    columns: [textCol('item', 'بند'), moneyCol('revenue', 'إيراد'), moneyCol('cost', 'تكلفة'), moneyCol('margin', 'هامش')],
-    metaNote: 'يتطلب بيانات بيع وتكلفة مرحّلة على مستوى الصنف.',
-    dataCompleteness: 'EMPTY_REASON',
+    subtitle: 'إيراد وتكلفة إجماليان بالدولار (USD) لكل صنف — فواتير بيع مؤكدة، بلا طرح مرتجعات (غير محتسَبة بهذه المرحلة)',
+    generatedAt: nowIso(),
+    filtersApplied: {},
+    columns: [
+      textCol('item_code', 'كود الخامة'),
+      textCol('item', 'الصنف'),
+      moneyCol('revenue', 'إيراد (USD)'),
+      moneyCol('cost', 'تكلفة (USD)'),
+      moneyCol('margin', 'هامش (USD)'),
+    ],
+    rows: result.rows as Record<string, unknown>[],
+    meta: { total: result.rows.length, dataCompleteness: result.rows.length ? 'PARTIAL' : 'EMPTY_REASON' },
   });
 }
 

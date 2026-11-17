@@ -248,8 +248,8 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     const report = await reportSalesByColor(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/sales/margins', { preHandler: [authenticateRequest, requireReportPermission('reports.view')] }, async (req, reply) => {
-    const report = await reportSalesMargins();
+  app.get('/sales/margins', { preHandler: [authenticateRequest, requireReportPermission('reports.financial.view')] }, async (req, reply) => {
+    const report = await reportSalesMargins(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
 
