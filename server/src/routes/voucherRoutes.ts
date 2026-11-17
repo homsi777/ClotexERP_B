@@ -486,6 +486,13 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply, 400, 'يجب اختيار صندوق أو إضافة بند دفع واحد على الأقل قبل التأكيد', 'VALIDATION');
       }
 
+      // سياسة العملات: عملة وسعر صرف السند نفسه — تُستخدَم لتحويل مبلغه لعملة
+      // الفاتورة المرجعية قبل أي مقارنة/خصم (voucherRoutes.ts لا يفترض تطابق
+      // العملتين إطلاقاً بعد الآن).
+      const voucherCurrencyCode = String(row.currency_code || 'USD').trim().toUpperCase();
+      const voucherExchangeRateToUsd =
+        Number(row.exchange_rate_to_usd ?? 1) > 0 ? Number(row.exchange_rate_to_usd ?? 1) : 1;
+
       await validateSaleInvoiceReceiptVoucher(client, companyId, {
         voucherType: row.voucher_type,
         amount: Number(row.amount),
@@ -493,6 +500,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         referenceDocumentNo: row.reference_document_no,
         partyType: row.party_type,
         partyId: row.party_id,
+        currencyCode: voucherCurrencyCode,
+        exchangeRateToUsd: voucherExchangeRateToUsd,
       });
       await validatePurchaseInvoicePaymentVoucher(client, companyId, {
         voucherType: row.voucher_type,
@@ -501,6 +510,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         referenceDocumentNo: row.reference_document_no,
         partyType: row.party_type,
         partyId: row.party_id,
+        currencyCode: voucherCurrencyCode,
+        exchangeRateToUsd: voucherExchangeRateToUsd,
       });
 
       await applyVoucherConfirmation(client, {
@@ -553,8 +564,6 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         [id, companyId],
       );
 
-      const exchangeRateToUsd =
-        Number(row.exchange_rate_to_usd ?? 1) > 0 ? Number(row.exchange_rate_to_usd ?? 1) : 1;
       await applySaleInvoiceReceiptOnVoucherConfirm(client, companyId, userId, {
         voucherId: id,
         voucherType: row.voucher_type,
@@ -563,7 +572,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         referenceDocumentNo: row.reference_document_no,
         partyType: row.party_type,
         partyId: row.party_id,
-        exchangeRateToUsd,
+        currencyCode: voucherCurrencyCode,
+        exchangeRateToUsd: voucherExchangeRateToUsd,
       });
       await applyPurchaseInvoicePaymentOnVoucherConfirm(client, companyId, userId, {
         voucherId: id,
@@ -573,7 +583,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         referenceDocumentNo: row.reference_document_no,
         partyType: row.party_type,
         partyId: row.party_id,
-        exchangeRateToUsd,
+        currencyCode: voucherCurrencyCode,
+        exchangeRateToUsd: voucherExchangeRateToUsd,
       });
 
       await client.query('COMMIT');

@@ -30,6 +30,11 @@ export const GL_KEYS = {
   CHECKS_RECEIVABLE: 'GL_CHECKS_RECEIVABLE',
   /** الطرف المقابل لقيود ترحيل الرصيد الافتتاحي اليدوي لعميل/مورّد (حقوق ملكية). */
   OPENING_BALANCE_EQUITY: 'GL_OPENING_BALANCE_EQUITY',
+  /** فروقات صرف عملة محقَّقة عند تسوية فاتورة بعملة مختلفة عن عملتها الأصلية
+   * (سياسة العملات — بشير). حساب واحد يحمل رصيداً دائناً (ربح) أو مديناً
+   * (خسارة) حسب صافي الفروقات — لا تُرحَّل إليه كل عملية تحويل تلقائياً،
+   * فقط الفروقات المُحقَّقة فعلياً وقت التسوية حسب القاعدة المعتمدة. */
+  FX_GAIN_LOSS: 'GL_FX_GAIN_LOSS',
 } as const;
 
 /** يُحدِّد مفتاح GL المناسب حسب نوع حساب الخزينة — CASH يبقى على GL_CASH الموحّد
@@ -261,6 +266,7 @@ export async function ensureCompanyInvoiceGlAccounts(client: PoolClient, company
   }> = [
     { code: '1130', name: 'مخزون الأقمشة', account_type: 'ASSET', parent_code: '11', system_key: GL_KEYS.INVENTORY, sort_order: 45 },
     { code: '4001', name: 'إيرادات مبيعات أقمشة', account_type: 'REVENUE', parent_code: '4', system_key: GL_KEYS.SALES_REVENUE, sort_order: 102 },
+    { code: '4002', name: 'أرباح وخسائر فروقات صرف عملة', account_type: 'REVENUE', parent_code: '4', system_key: GL_KEYS.FX_GAIN_LOSS, sort_order: 103 },
     { code: '5102', name: 'حسومات منحة للعملاء', account_type: 'EXPENSE', parent_code: '5', system_key: GL_KEYS.SALES_DISCOUNT_ALLOWANCE, sort_order: 132 },
     { code: '5131', name: 'تكلفة البضاعة المباعة', account_type: 'EXPENSE', parent_code: '5', system_key: GL_KEYS.COGS, sort_order: 135 },
   ];

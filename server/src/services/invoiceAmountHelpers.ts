@@ -96,3 +96,29 @@ export function computePaymentApplication(
   const newRemaining = round2(Math.max(0, totalAmount - newPaid));
   return { applyAmount, newPaid, newRemaining };
 }
+
+/**
+ * سياسة العملات (بشير) — البند 4: "تحويل مبلغ السداد إلى عملة الفاتورة قبل
+ * الخصم من رصيدها، ومنع الخصم الرقمي المباشر بين عملتين." هذه الدالة هي
+ * نقطة التحويل الوحيدة المُستخدَمة بمسارَي سداد فاتورة البيع والشراء —
+ * exchangeRateToUsd بكل الجداول يعني دائماً "كم وحدة من هذه العملة تساوي
+ * 1 USD" (نفس اصطلاح exchangeRateService.ts — سعر USD نفسه دائماً 1)،
+ * فالتحويل عبر الدولار كوسيط صحيح حتى لو كانت العملتان غير USD أصلاً.
+ * عملة متطابقة (fromCurrency === toCurrency) تُعاد بلا أي حساب لتفادي خطأ
+ * تقريب لا داعي له.
+ */
+export function convertAmountToInvoiceCurrency(input: {
+  amount: number;
+  fromCurrency: string;
+  fromExchangeRateToUsd: number;
+  toCurrency: string;
+  toExchangeRateToUsd: number;
+}): number {
+  const from = String(input.fromCurrency || 'USD').trim().toUpperCase();
+  const to = String(input.toCurrency || 'USD').trim().toUpperCase();
+  if (from === to) return input.amount;
+  const fromRate = input.fromExchangeRateToUsd > 0 ? input.fromExchangeRateToUsd : 1;
+  const toRate = input.toExchangeRateToUsd > 0 ? input.toExchangeRateToUsd : 1;
+  const usdAmount = from === 'USD' ? input.amount : input.amount / fromRate;
+  return to === 'USD' ? usdAmount : usdAmount * toRate;
+}
