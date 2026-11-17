@@ -94,24 +94,101 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
         <button onClick={() => setServices(a => [...a,{ name:'',quantity:'1',basis:'METER' }])}>{lifecycleT('lifecycle.addService')}</button><button onClick={() => run(() => manufacturingAction(jobId,'services',{ services: services.map(s => ({...s,quantity:Number(s.quantity)})) }),lifecycleT('lifecycle.servicesSaved'))}>{lifecycleT('lifecycle.saveServices')}</button>
       </fieldset></details>}
       {!receiving && open && canReceive && <Link className="text-indigo-700 font-bold" to={`/inventory/create?externalJobId=${jobId}`}>{lifecycleT('lifecycle.receive')}</Link>}
-      {receiving && canReceive && open && <fieldset disabled={busy} className="space-y-3 border p-3 rounded">
-        <legend>{lifecycleT('lifecycle.receiptLegend')}</legend>
-        <label>{lifecycleT('lifecycle.warehouse')}<select className={inputClass} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}><option value="">{lifecycleT('lifecycle.chooseWarehouse')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
-        <label>{lifecycleT('lifecycle.location')}<select className={inputClass} value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">{lifecycleT('lifecycle.noLocation')}</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-        <label>{lifecycleT('lifecycle.dyePaper')}<input className={inputClass} required value={paper} onChange={e => setPaper(e.target.value)}/></label>
-        {rows.map((r,i) => <div className="border p-3 space-y-2" key={i}>
-          <select aria-label={lifecycleT('lifecycle.sentRoll')} className={inputClass} value={r.sourceLineId} onChange={e => { const l=data.lines.find(x=>x.id===e.target.value);patch(i,{sourceLineId:e.target.value,widthCm:l?.width_cm??'',gsm:l?.gsm??''}); }}><option value="">{lifecycleT('lifecycle.chooseRoll')}</option>{data.lines.filter(l=>remaining(l)>0).map(l=><option key={l.id} value={l.id}>{l.item_name} — {l.color_name} — {l.sent_barcode}{lifecycleT('lifecycle.remainingOption')}{remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}</select>
-          <div className="grid grid-cols-2 gap-2">{(['lengthM','weightKg','barcode','widthCm','gsm'] as const).map((k,j)=><label key={k}>{[lifecycleT('lifecycle.actualMeters'),lifecycleT('lifecycle.actualWeight'),lifecycleT('lifecycle.newBarcode'),lifecycleT('lifecycle.width'),lifecycleT('lifecycle.gsm')][j]}<input className={inputClass} type={k==='barcode'?'text':'number'} min="0" step="0.001" value={r[k]} onChange={e=>patch(i,{[k]:e.target.value})}/></label>)}</div>
-          <div className="flex gap-2"><input placeholder={lifecycleT('lifecycle.returnedColor')} className={inputClass} value={r.colorName} onChange={e=>patch(i,{colorName:e.target.value})}/><input placeholder={lifecycleT('lifecycle.returnedColorCode')} className={inputClass} value={r.colorCode} onChange={e=>patch(i,{colorCode:e.target.value})}/></div>
-          <label><input type="checkbox" checked={r.defective} onChange={e=>patch(i,{defective:e.target.checked})}/>{lifecycleT('lifecycle.defectiveCheck')}</label>
-          {r.defective && <><select aria-label={lifecycleT('lifecycle.defectReason')} className={inputClass} value={r.defectReason} onChange={e=>patch(i,{defectReason:e.target.value as Row['defectReason']})}><option value="DYE_HOUSE">{lifecycleT('lifecycle.dyeDefect')}</option><option value="INTERNAL_KNITTING">{lifecycleT('lifecycle.knittingDefect')}</option><option value="OTHER">{lifecycleT('lifecycle.otherDefect')}</option></select><input placeholder={lifecycleT('lifecycle.responsible')} className={inputClass} value={r.responsibleParty} onChange={e=>patch(i,{responsibleParty:e.target.value})}/></>}
-          <input aria-label={lifecycleT('lifecycle.lineNotes')} placeholder={lifecycleT('lifecycle.lineNotes')} className={inputClass} value={r.notes} onChange={e=>patch(i,{notes:e.target.value})}/><button onClick={()=>setRows(a=>a.filter((_,j)=>j!==i))}>{lifecycleT('lifecycle.deleteLine')}</button>
-        </div>)}
-        <button onClick={()=>setRows(a=>[...a,blank()])}>{lifecycleT('lifecycle.addRoll')}</button>
-        <p>{lifecycleT('lifecycle.completedServices')}</p>{data.services.map(s=><label className="block" key={s.id}><input type="checkbox" checked={completed.includes(s.id)} onChange={e=>setCompleted(a=>e.target.checked?[...new Set([...a,s.id])]:a.filter(id=>id!==s.id))}/>{s.name}</label>)}
-        <textarea placeholder={lifecycleT('lifecycle.receiptNotes')} className={inputClass} value={notes} onChange={e=>setNotes(e.target.value)}/><textarea placeholder={lifecycleT('lifecycle.attachments')} className={inputClass} value={attachments} onChange={e=>setAttachments(e.target.value)}/>
-        <p>{lifecycleT('lifecycle.reviewPrefix')}{rows.length}{lifecycleT('lifecycle.rollsSuffix')}{rows.reduce((n,r)=>n+Number(r.lengthM||0),0).toFixed(3)}{lifecycleT('lifecycle.metersSeparator')}{rows.reduce((n,r)=>n+Number(r.weightKg||0),0).toFixed(3)}{lifecycleT('lifecycle.weightNote')}</p>
-        <button disabled={!warehouseId||!paper.trim()||!rows.length||rows.some(r=>!r.sourceLineId||Number(r.lengthM)<=0)} onClick={receive} className="bg-emerald-700 text-white px-4 py-2 rounded">{lifecycleT('lifecycle.confirmReceipt')}</button>
+      {/* سياسة بشير — "نفس شعور فاتورة الشراء": رأس المستند (مستودع/موقع/
+          ورقة الصباغة) أعلاه، ثم جدول أسطر بعمود لكل حقل + زر حذف بكل صف +
+          صف إجماليات أسفله، بنفس النمط البصري المُستخدَم بجداول فواتير
+          الشراء/البيع والمناقلات بالمشروع — المنطق والنداء الخلفي (receive)
+          لم يتغيّرا بحرف واحد، تعديل عرض فقط. */}
+      {receiving && canReceive && open && <fieldset disabled={busy} className="space-y-3 border rounded-xl p-4 bg-slate-50">
+        <legend className="font-bold px-1">{lifecycleT('lifecycle.receiptLegend')}</legend>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <label className="text-sm">{lifecycleT('lifecycle.warehouse')}<select className={inputClass} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}><option value="">{lifecycleT('lifecycle.chooseWarehouse')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+          <label className="text-sm">{lifecycleT('lifecycle.location')}<select className={inputClass} value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">{lifecycleT('lifecycle.noLocation')}</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          <label className="text-sm">{lifecycleT('lifecycle.dyePaper')}<input className={inputClass} required value={paper} onChange={e => setPaper(e.target.value)}/></label>
+        </div>
+
+        <div className="overflow-x-auto bg-white border rounded-lg">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-100 text-slate-600">
+              <tr>
+                <th className="p-2 text-right min-w-[220px]">{lifecycleT('lifecycle.sentRoll')}</th>
+                <th className="p-2 text-right">{lifecycleT('lifecycle.actualMeters')}</th>
+                <th className="p-2 text-right">{lifecycleT('lifecycle.actualWeight')}</th>
+                <th className="p-2 text-right">{lifecycleT('lifecycle.newBarcode')}</th>
+                <th className="p-2 text-right">{lifecycleT('lifecycle.width')}</th>
+                <th className="p-2 text-right">{lifecycleT('lifecycle.gsm')}</th>
+                <th className="p-2 text-right min-w-[140px]">{lifecycleT('lifecycle.returnedColor')}</th>
+                <th className="p-2 text-right">{lifecycleT('lifecycle.defectiveCheck')}</th>
+                <th className="p-2 text-right min-w-[160px]">{lifecycleT('lifecycle.lineNotes')}</th>
+                <th className="p-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <React.Fragment key={i}>
+                  <tr className="border-t align-top">
+                    <td className="p-2">
+                      <select aria-label={lifecycleT('lifecycle.sentRoll')} className={inputClass} value={r.sourceLineId} onChange={e => { const l=data.lines.find(x=>x.id===e.target.value);patch(i,{sourceLineId:e.target.value,widthCm:l?.width_cm??'',gsm:l?.gsm??''}); }}>
+                        <option value="">{lifecycleT('lifecycle.chooseRoll')}</option>
+                        {data.lines.filter(l=>remaining(l)>0).map(l=><option key={l.id} value={l.id}>{l.item_name} — {l.color_name} — {l.sent_barcode}{lifecycleT('lifecycle.remainingOption')}{remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.actualMeters')} className={inputClass} type="number" min="0" step="0.001" value={r.lengthM} onChange={e=>patch(i,{lengthM:e.target.value})}/></td>
+                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.actualWeight')} className={inputClass} type="number" min="0" step="0.001" value={r.weightKg} onChange={e=>patch(i,{weightKg:e.target.value})}/></td>
+                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.newBarcode')} className={inputClass} value={r.barcode} onChange={e=>patch(i,{barcode:e.target.value})}/></td>
+                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.width')} className={inputClass} type="number" min="0" step="0.001" value={r.widthCm} onChange={e=>patch(i,{widthCm:e.target.value})}/></td>
+                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.gsm')} className={inputClass} type="number" min="0" step="0.001" value={r.gsm} onChange={e=>patch(i,{gsm:e.target.value})}/></td>
+                    <td className="p-2 space-y-1">
+                      <input placeholder={lifecycleT('lifecycle.returnedColor')} className={inputClass} value={r.colorName} onChange={e=>patch(i,{colorName:e.target.value})}/>
+                      <input placeholder={lifecycleT('lifecycle.returnedColorCode')} className={inputClass} value={r.colorCode} onChange={e=>patch(i,{colorCode:e.target.value})}/>
+                    </td>
+                    <td className="p-2 text-center"><input type="checkbox" checked={r.defective} onChange={e=>patch(i,{defective:e.target.checked})}/></td>
+                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.lineNotes')} placeholder={lifecycleT('lifecycle.lineNotes')} className={inputClass} value={r.notes} onChange={e=>patch(i,{notes:e.target.value})}/></td>
+                    <td className="p-2"><button type="button" onClick={()=>setRows(a=>a.filter((_,j)=>j!==i))}>{lifecycleT('lifecycle.deleteLine')}</button></td>
+                  </tr>
+                  {r.defective && (
+                    <tr className="bg-amber-50 border-t">
+                      <td className="p-2 text-amber-800 text-[11px]">{lifecycleT('lifecycle.defectiveCheck')}</td>
+                      <td className="p-2" colSpan={2}>
+                        <select aria-label={lifecycleT('lifecycle.defectReason')} className={inputClass} value={r.defectReason} onChange={e=>patch(i,{defectReason:e.target.value as Row['defectReason']})}>
+                          <option value="DYE_HOUSE">{lifecycleT('lifecycle.dyeDefect')}</option>
+                          <option value="INTERNAL_KNITTING">{lifecycleT('lifecycle.knittingDefect')}</option>
+                          <option value="OTHER">{lifecycleT('lifecycle.otherDefect')}</option>
+                        </select>
+                      </td>
+                      <td className="p-2" colSpan={2}>
+                        <input placeholder={lifecycleT('lifecycle.responsible')} className={inputClass} value={r.responsibleParty} onChange={e=>patch(i,{responsibleParty:e.target.value})}/>
+                      </td>
+                      <td colSpan={5}></td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t bg-slate-100 font-bold">
+                <td className="p-2">{lifecycleT('lifecycle.reviewPrefix')}{rows.length}{lifecycleT('lifecycle.rollsSuffix')}</td>
+                <td className="p-2">{rows.reduce((n,r)=>n+Number(r.lengthM||0),0).toFixed(3)}{lifecycleT('lifecycle.metersSeparator')}</td>
+                <td className="p-2">{rows.reduce((n,r)=>n+Number(r.weightKg||0),0).toFixed(3)}{lifecycleT('lifecycle.weightNote')}</td>
+                <td colSpan={7}></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <button type="button" onClick={()=>setRows(a=>[...a,blank()])} className="text-indigo-700 font-bold">+ {lifecycleT('lifecycle.addRoll')}</button>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t">
+          <div>
+            <p className="text-sm font-bold mb-1">{lifecycleT('lifecycle.completedServices')}</p>
+            {data.services.map(s=><label className="block text-sm" key={s.id}><input type="checkbox" checked={completed.includes(s.id)} onChange={e=>setCompleted(a=>e.target.checked?[...new Set([...a,s.id])]:a.filter(id=>id!==s.id))}/> {s.name}</label>)}
+          </div>
+          <div className="space-y-2">
+            <textarea placeholder={lifecycleT('lifecycle.receiptNotes')} className={inputClass} value={notes} onChange={e=>setNotes(e.target.value)}/>
+            <textarea placeholder={lifecycleT('lifecycle.attachments')} className={inputClass} value={attachments} onChange={e=>setAttachments(e.target.value)}/>
+          </div>
+        </div>
+
+        <button disabled={!warehouseId||!paper.trim()||!rows.length||rows.some(r=>!r.sourceLineId||Number(r.lengthM)<=0)} onClick={receive} className="bg-emerald-700 text-white px-4 py-2 rounded font-bold">{lifecycleT('lifecycle.confirmReceipt')}</button>
       </fieldset>}
       {data.batches.map(b=><details key={b.id} open><summary>{lifecycleT('lifecycle.batchPrefix')}{b.dye_paper_no} — {new Date(b.received_at).toLocaleString(lifecycleI18n.language)}</summary><p>{b.notes}</p><p>{lifecycleT('lifecycle.servicesPrefix')}{b.service_ids.map(id=>data.services.find(s=>s.id===id)?.name??id).join(lifecycleT('lifecycle.separator'))}</p>{b.attachments.map(url=><a className="block text-indigo-600" key={url} href={url} target="_blank" rel="noopener noreferrer">{lifecycleT('lifecycle.attachment')}</a>)}
         {b.lines.map(l=><div key={l.id} className="border p-2"><p>{l.original_barcode} ← {l.barcode} — {l.length_m}{lifecycleT('lifecycle.meterWeightSeparator')}{l.weight_kg??lifecycleT('lifecycle.unknown')}{lifecycleT('lifecycle.kgSeparator')}{lifecycleT(`lifecycle.rollStatus.${l.status}`, { defaultValue: l.status })}</p><p>{l.defect_reason ? lifecycleT(`lifecycle.defect.${l.defect_reason}`) : ''} {l.responsible_party} {l.notes} {l.resolution ? lifecycleT(`lifecycle.decision.${l.resolution}`) : ''} {l.resolution_notes}</p>
