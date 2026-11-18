@@ -26,7 +26,23 @@ export function overtimePaidHours(actualHours: number, kind: OvertimeDayKind): n
   return round2(h * OVERTIME_MULTIPLIER[kind]);
 }
 
+/**
+ * قيمة ساعة الأجر العادية = الأجر الشامل ÷ 30 ÷ 8.
+ * مستخرجة ومتحقَّق منها من ملف مرتبات أكتوبر 2026: 8 ساعات ليلية لموظف شامله 13,800 = 690
+ * (57.5 × 8 × 1.5)، و7 ساعات عطلة ×2 لموظف شامله 11,000 = 641.67 (45.83 × 7 × 2).
+ */
+export function hourlyRateFromComprehensive(comprehensiveWage: number): number {
+  const w = Number(comprehensiveWage);
+  if (!Number.isFinite(w) || w <= 0) return 0;
+  return w / 30 / 8;
+}
+
 export type OvertimeEntry = { actualHours: number; kind: OvertimeDayKind };
+
+/** قيمة الإضافي لموظف = ساعات مدفوعة × (الشامل ÷ 30 ÷ 8)، مقرَّبة لمنزلتين. */
+export function overtimeAmountForWage(entries: OvertimeEntry[], comprehensiveWage: number): number {
+  return round2(totalOvertimePaidHours(entries) * hourlyRateFromComprehensive(comprehensiveWage));
+}
 
 /** إجمالي الساعات المدفوعة لعدة إدخالات إضافي. */
 export function totalOvertimePaidHours(entries: OvertimeEntry[]): number {

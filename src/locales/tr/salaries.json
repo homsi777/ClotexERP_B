@@ -223,7 +223,8 @@
       "PURCHASE_DEDUCTION": "Alışveriş kesintisi",
       "SETTLEMENT_DEDUCT": "Mahsup (kesinti)",
       "ATTENDANCE_ABSENCE_DEDUCTION": "İzinsiz devamsızlık kesintisi",
-      "ATTENDANCE_HALF_PAY_DEDUCTION": "Yarım ücret kesintisi (hastalık/evlilik)"
+      "ATTENDANCE_HALF_PAY_DEDUCTION": "Yarım ücret kesintisi (hastalık/evlilik)",
+      "OVERTIME": "Fazla mesai"
     },
     "groupAdditions": "Hak edişler",
     "groupDeductions": "Kesintiler",
@@ -248,7 +249,16 @@
     "fromAttendanceWeekly": "Haftalık maaş: günlük ücret kuralı yok",
     "fromAttendanceFailed": "Devam verisi alınamadı",
     "importedWarning": "Bu satır Excel'den içe aktarıldı ve devamsızlık kesintisini zaten içerebilir. Devam kalemlerini yalnızca içe aktarılan tabloda hesaplanmadıysa ekleyin, aksi halde iki kez kesilir.",
-    "importedConfirm": "Satır Excel'den içe aktarıldı ve devamsızlık kesintisini içerebilir. Dahil olmadığından emin misiniz?"
+    "importedConfirm": "Satır Excel'den içe aktarıldı ve devamsızlık kesintisini içerebilir. Dahil olmadığından emin misiniz?",
+    "overtimeTitle": "Fazla mesai hesaplayıcı",
+    "overtimeHours": "Saat sayısı",
+    "overtimeNormal": "Normal gün (×1.5)",
+    "overtimeHoliday": "Cuma / resmi tatil (×2)",
+    "overtimeAdd": "Hesapla ve ekle",
+    "overtimeNeedHours": "Sıfırdan büyük saat girin",
+    "overtimeFailed": "Fazla mesai hesaplanamadı",
+    "overtimeWeekly": "Haftalık maaş: saatlik ücret kuralı yok",
+    "overtimeImportedConfirm": "Satır Excel'den içe aktarıldı ve fazla mesaiyi zaten içerebilir. Dahil olmadığından emin misiniz?"
   },
   "leaveBalances": {
     "title": "Yıllık izin bakiyeleri",

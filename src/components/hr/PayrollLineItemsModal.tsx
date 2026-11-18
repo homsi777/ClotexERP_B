@@ -10,6 +10,7 @@ import { getMonthlyStatusEffects } from '../../lib/api/attendanceApi';
 import { useToast } from '../NonBlockingToast';
 
 const ADDITION_KINDS: PayrollLineItemKind[] = [
+  'OVERTIME',
   'BONUS',
   'TRANSPORT',
   'ANNUAL_INCREASE',
@@ -56,6 +57,46 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, periodMonth, per
   );
   const [saving, setSaving] = useState(false);
   const [fetchingAttendance, setFetchingAttendance] = useState(false);
+  const [otHours, setOtHours] = useState('');
+  const [otKind, setOtKind] = useState<'NORMAL' | 'HOLIDAY'>('NORMAL');
+  const [otBusy, setOtBusy] = useState(false);
+
+  // الإضافي = الساعات × (الأجر الشامل ÷ 30 ÷ 8) × (1.5 عادي | 2 جمعة/عطلة) — نفس معادلة ملف Excel
+  // (server/src/services/hr/overtime.ts). يضيف بنداً قابلاً للتعديل ولا يحفظ.
+  const addOvertime = async () => {
+    const hours = Number(otHours);
+    if (!(hours > 0)) {
+      showToast({ type: 'warning', message: t('lineItems.overtimeNeedHours') });
+      return;
+    }
+    if (importedFromExcel && !window.confirm(t('lineItems.overtimeImportedConfirm'))) return;
+    setOtBusy(true);
+    try {
+      const res = await getMonthlyStatusEffects(periodYear, periodMonth, line.employee_id);
+      const row = res.data.rows[0];
+      if (!row || !row.moneyComputed) {
+        showToast({ type: 'warning', message: t('lineItems.overtimeWeekly') });
+        return;
+      }
+      const multiplier = otKind === 'HOLIDAY' ? 2 : 1.5;
+      const hourly = row.comprehensiveWage / 30 / 8;
+      const amount = Math.round(hours * multiplier * hourly * 100) / 100;
+      setRows((cur) => [
+        ...cur,
+        {
+          key: nextKey(),
+          kind: 'OVERTIME',
+          amount: String(amount),
+          note: `${hours} ساعة × ${multiplier} × أجر الساعة ${Math.round(hourly * 100) / 100}`,
+        },
+      ]);
+      setOtHours('');
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('lineItems.overtimeFailed') });
+    } finally {
+      setOtBusy(false);
+    }
+  };
   const importedFromExcel = Boolean(line.excel_detail && Object.keys(line.excel_detail).length > 0);
 
   // يعبّئ بندَي الحضور (غياب بدون إذن + نصف أجر) من معاينة الحضور لهذا الموظف والشهر.
@@ -184,6 +225,37 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, periodMonth, per
             {fetchingAttendance && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {t('lineItems.fromAttendance')}
           </button>
+
+          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <span className="text-xs font-bold text-slate-700">{t('lineItems.overtimeTitle')}</span>
+            <input
+              type="number"
+              min={0}
+              step={0.25}
+              value={otHours}
+              onChange={(e) => setOtHours(e.target.value)}
+              placeholder={t('lineItems.overtimeHours')}
+              className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+              dir="ltr"
+            />
+            <select
+              value={otKind}
+              onChange={(e) => setOtKind(e.target.value as 'NORMAL' | 'HOLIDAY')}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm"
+            >
+              <option value="NORMAL">{t('lineItems.overtimeNormal')}</option>
+              <option value="HOLIDAY">{t('lineItems.overtimeHoliday')}</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => void addOvertime()}
+              disabled={otBusy}
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+            >
+              {otBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {t('lineItems.overtimeAdd')}
+            </button>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             {[...ADDITION_KINDS, ...DEDUCTION_KINDS].map((k) => (

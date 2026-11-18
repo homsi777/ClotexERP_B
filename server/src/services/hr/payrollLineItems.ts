@@ -19,6 +19,8 @@ export const ADDITION_KINDS = [
   'ANNUAL_INCREASE',
   'SALARY_ADJUSTMENT',
   'SETTLEMENT_ADD',
+  // TASK 015: إضافي = ساعات × (الشامل ÷ 30 ÷ 8) × (1.5 أو 2) — تحسبه حاسبة نافذة البنود.
+  'OVERTIME',
 ] as const;
 export const DEDUCTION_KINDS = [
   'PURCHASE_DEDUCTION',

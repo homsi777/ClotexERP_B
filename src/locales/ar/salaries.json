@@ -223,7 +223,8 @@
       "PURCHASE_DEDUCTION": "خصم مشتريات",
       "SETTLEMENT_DEDUCT": "تسوية بالخصم",
       "ATTENDANCE_ABSENCE_DEDUCTION": "خصم غياب بدون إذن",
-      "ATTENDANCE_HALF_PAY_DEDUCTION": "خصم نصف أجر (مرضية/زواج)"
+      "ATTENDANCE_HALF_PAY_DEDUCTION": "خصم نصف أجر (مرضية/زواج)",
+      "OVERTIME": "إضافي"
     },
     "groupAdditions": "استحقاقات",
     "groupDeductions": "استقطاعات",
@@ -248,7 +249,16 @@
     "fromAttendanceWeekly": "راتب أسبوعي: لا قاعدة لأجر اليوم",
     "fromAttendanceFailed": "تعذّر جلب بيانات الحضور",
     "importedWarning": "هذا السطر مستورد من Excel وقد يتضمن خصم الغياب أصلاً. أضف بنود الحضور فقط إن كان الغياب غير محسوب بالكشف المستورد، وإلا ستُخصم مرتين.",
-    "importedConfirm": "السطر مستورد من Excel وقد يشمل خصم الغياب. هل أنت متأكد أنه غير محسوب ضمنه؟"
+    "importedConfirm": "السطر مستورد من Excel وقد يشمل خصم الغياب. هل أنت متأكد أنه غير محسوب ضمنه؟",
+    "overtimeTitle": "حاسبة الإضافي",
+    "overtimeHours": "عدد الساعات",
+    "overtimeNormal": "يوم عادي (×1.5)",
+    "overtimeHoliday": "جمعة / عطلة رسمية (×2)",
+    "overtimeAdd": "احسب وأضف",
+    "overtimeNeedHours": "أدخل عدد ساعات أكبر من صفر",
+    "overtimeFailed": "تعذّر حساب الإضافي",
+    "overtimeWeekly": "راتب أسبوعي: لا قاعدة لأجر الساعة",
+    "overtimeImportedConfirm": "السطر مستورد من Excel وقد يتضمن الإضافي أصلاً. هل أنت متأكد أنه غير محسوب ضمنه؟"
   },
   "leaveBalances": {
     "title": "أرصدة الإجازات السنوية",

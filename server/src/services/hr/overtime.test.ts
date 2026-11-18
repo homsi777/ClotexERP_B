@@ -1,6 +1,12 @@
 /** TASK 011 — اختبارات ساعات الإضافي (دالة صِرفة). */
 import assert from 'node:assert/strict';
-import { overtimePaidHours, totalOvertimePaidHours, overtimeAmount } from './overtime.js';
+import {
+  hourlyRateFromComprehensive,
+  overtimeAmount,
+  overtimeAmountForWage,
+  overtimePaidHours,
+  totalOvertimePaidHours,
+} from './overtime.js';
 
 function testNormalDayHourIsOneAndHalf() {
   assert.equal(overtimePaidHours(4, 'NORMAL'), 6);
@@ -35,7 +41,27 @@ function testOvertimeAmountUsesHourlyRate() {
   assert.equal(amount, 650);
 }
 
+function testExcelOctoberNightHoursCase() {
+  // ملف مرتبات أكتوبر: شامل 13,800، 8 ساعات ليلية (×1.5) ⇒ 690 بالضبط.
+  assert.equal(hourlyRateFromComprehensive(13800), 57.5);
+  assert.equal(overtimeAmountForWage([{ actualHours: 8, kind: 'NORMAL' }], 13800), 690);
+}
+
+function testExcelOctoberMixedCase() {
+  // شامل 11,000: 18 ساعة ليلية (×1.5) = 1,237.5 ، و7 ساعات عطلة (×2) = 641.67.
+  assert.equal(overtimeAmountForWage([{ actualHours: 18, kind: 'NORMAL' }], 11000), 1237.5);
+  assert.equal(overtimeAmountForWage([{ actualHours: 7, kind: 'FRIDAY_OR_HOLIDAY' }], 11000), 641.67);
+}
+
+function testInvalidWageGivesZero() {
+  assert.equal(hourlyRateFromComprehensive(0), 0);
+  assert.equal(overtimeAmountForWage([{ actualHours: 5, kind: 'NORMAL' }], -10), 0);
+}
+
 testNormalDayHourIsOneAndHalf();
+testExcelOctoberNightHoursCase();
+testExcelOctoberMixedCase();
+testInvalidWageGivesZero();
 testFridayOrHolidayHourIsTwo();
 testZeroOrNegativeHoursYieldZero();
 testTotalAcrossMixedEntries();
