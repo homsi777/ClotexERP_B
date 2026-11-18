@@ -11,6 +11,10 @@ import {
   validateMaintenanceCompletion,
   type MachineStatus,
 } from '../services/manufacturingReferenceRules.js';
+import {
+  previewManufacturingSpecificationWorkbook,
+  previewWarpCardTemplate,
+} from '../services/manufacturingSpecificationWorkbook.js';
 
 const machineTypeSchema = z.enum(['WARPING', 'SIZING', 'LOOM', 'PROCESSING', 'INSPECTION', 'OTHER']);
 const machineStatusSchema = z.enum(MACHINE_STATUSES);
@@ -22,6 +26,11 @@ const severitySchema = z.enum(['MINOR', 'MAJOR', 'CRITICAL']);
 const nullableText = z.string().trim().max(1000).nullable().optional();
 const codeText = z.string().trim().min(1).max(64);
 const nameText = z.string().trim().min(1).max(160);
+const workbookPreviewSchema = z.object({
+  fileName: z.string().trim().min(1).max(255).refine((name) => /\.xlsx?$/i.test(name), 'يجب اختيار ملف Excel بصيغة xlsx أو xls'),
+  documentType: z.enum(['SPECIFICATION', 'WARP_CARD']).default('SPECIFICATION'),
+  base64: z.string().min(1).max(5_600_000),
+});
 
 const departmentSchema = z.object({
   code: codeText,
@@ -92,6 +101,34 @@ function handleDbError(reply: FastifyReply, error: unknown) {
 
 export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', authenticateRequest);
+
+  app.post('/specifications/preview', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.reference.view', 'manufacturing.reference.manage'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية معاينة ملفات مواصفات التصنيع', 'FORBIDDEN');
+    }
+    const parsed = workbookPreviewSchema.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'ملف غير صالح', 'VALIDATION');
+
+    const buffer = Buffer.from(parsed.data.base64, 'base64');
+    if (buffer.length === 0 || buffer.length > 4 * 1024 * 1024) {
+      return sendError(reply, 400, 'حجم ملف Excel يجب ألا يتجاوز 4 ميغابايت', 'FILE_TOO_LARGE');
+    }
+    const isZipWorkbook = buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b;
+    const isLegacyWorkbook = buffer.length >= 8
+      && buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
+    if (!isZipWorkbook && !isLegacyWorkbook) {
+      return sendError(reply, 400, 'محتوى الملف لا يطابق صيغة Excel', 'INVALID_FILE');
+    }
+
+    try {
+      const data = parsed.data.documentType === 'WARP_CARD'
+        ? previewWarpCardTemplate(buffer)
+        : previewManufacturingSpecificationWorkbook(buffer);
+      return reply.send({ ok: true, data });
+    } catch {
+      return sendError(reply, 400, 'تعذر قراءة ملف Excel؛ تحقق من أن الملف غير تالف أو محمي بكلمة مرور', 'INVALID_WORKBOOK');
+    }
+  });
 
   app.get('/overview', async (req, reply) => {
     if (!requireAny(req.user, ['manufacturing.dashboard.view', 'manufacturing.reference.view'])) {
