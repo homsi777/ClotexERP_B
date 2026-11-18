@@ -171,6 +171,48 @@ export const labelPrintRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: rows.rows.map(toDto), template });
   });
 
+  // ── TASK 009 (بشير): معاينة لصاقتَي القص — التوب المتبقي + القطعة المقصوصة ──
+  // تتجاوز فلتر "AVAILABLE" لأن القطعة المقصوصة بحالة SOLD؛ تُعيد نفس بنية
+  // لصاقة التوب العادية (ROLL_LABEL_SELECT/toDto) لتُطبع بنفس المحرك الحالي.
+  app.post('/rolls/preview-cut', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const schema = z.object({
+      originalRollId: z.string().uuid(),
+      cutPieceRollId: z.string().uuid(),
+      templateId: z.string().uuid().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, parsed.error.errors[0]?.message ?? ArabicErrors.validation, 'VALIDATION');
+    }
+    const { originalRollId, cutPieceRollId, templateId } = parsed.data;
+    const pool = getPool();
+
+    let template = null;
+    if (templateId) {
+      const tr = await pool.query('SELECT * FROM label_templates WHERE id=$1 AND company_id=$2', [templateId, companyId]);
+      if (tr.rows.length) template = tr.rows[0];
+    }
+    if (!template) {
+      const tr = await pool.query(
+        'SELECT * FROM label_templates WHERE company_id=$1 AND is_default=true AND is_active=true LIMIT 1',
+        [companyId],
+      );
+      if (tr.rows.length) template = tr.rows[0];
+    }
+
+    const rows = await pool.query<RollLabelRow>(
+      `${ROLL_LABEL_SELECT} WHERE fr.id = ANY($1) AND fr.company_id=$2`,
+      [[originalRollId, cutPieceRollId], companyId],
+    );
+    const byId = new Map(rows.rows.map((r) => [r.id, toDto(r)]));
+    // الترتيب الثابت: القطعة المقصوصة (المباعة) أولاً ثم التوب المتبقي.
+    const ordered = [cutPieceRollId, originalRollId]
+      .map((id) => byId.get(id))
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+    return reply.send({ ok: true, data: ordered, template });
+  });
+
   // ── D. Preview by import batch ──────────────────────────────────────────
   app.post('/rolls/preview-by-batch', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;

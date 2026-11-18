@@ -96,6 +96,18 @@ export async function getDefaultLabelTemplate(): Promise<LabelTemplateDto | null
   return res.data;
 }
 
+export async function previewCutLabels(
+  originalRollId: string,
+  cutPieceRollId: string,
+  templateId?: string,
+): Promise<{ data: RollLabelPreviewDto[]; template: LabelTemplateDto | null }> {
+  const res = await apiFetch<{ ok: boolean; data: RollLabelPreviewDto[]; template: LabelTemplateDto | null }>(
+    '/api/labels/rolls/preview-cut',
+    { method: 'POST', body: JSON.stringify({ originalRollId, cutPieceRollId, templateId }) },
+  );
+  return { data: res.data, template: res.template };
+}
+
 export async function previewRollLabels(
   rollIds: string[],
   templateId?: string,

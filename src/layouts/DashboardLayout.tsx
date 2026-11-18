@@ -105,6 +105,7 @@ const Topbar = () => {
         { labelKey: 'inventory.movementsLog', to: '/inventory/movements-log' },
         { labelKey: 'inventory.yarn', to: '/inventory/yarn' },
         { labelKey: 'inventory.rolls', to: '/inventory' },
+        { labelKey: 'inventory.rollCut', to: '/inventory/roll-cut' },
         { labelKey: 'inventory.categories', to: '/inventory/categories' },
         { labelKey: 'inventory.settings', to: '/inventory/settings' },
         { labelKey: 'inventory.bulkPricing', to: '/inventory/bulk-pricing' },

@@ -60,6 +60,7 @@ import {
 } from '../../lib/cartela/careSymbols';
 import { getCareSymbolSvg } from '../../lib/cartela/careSymbolSvg';
 import { generateQrSvg } from '../../lib/printing/qrGenerator';
+import { CartelaRegistryTree } from '../../components/cartela/CartelaRegistryTree';
 import {
   buildCartelaLabelHtml,
   buildCartelaLabelPreviewHtml,
@@ -142,6 +143,8 @@ export const CartelaLabels: React.FC = () => {
 
   const [savedDefaultFontSizePt, setSavedDefaultFontSizePt] = useState(loadDefaultCartelaFontSizePt);
   const [items, setItems] = useState<CartelaLabelListItem[]>([]);
+  // TASK 010 (بشير): الشجرة (خامة ← دسان ← ألوان) هي العرض الافتراضي؛ الجدول المسطح يبقى للتحديد الجماعي.
+  const [registryView, setRegistryView] = useState<'tree' | 'table'>('tree');
   const [listLoading, setListLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -794,6 +797,13 @@ export const CartelaLabels: React.FC = () => {
               />
               <button
                 type="button"
+                onClick={() => setRegistryView((v) => (v === 'tree' ? 'table' : 'tree'))}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                {registryView === 'tree' ? t('tree.switchToTable') : t('tree.switchToTree')}
+              </button>
+              <button
+                type="button"
                 onClick={() => void loadList()}
                 className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
@@ -809,6 +819,22 @@ export const CartelaLabels: React.FC = () => {
               </button>
             </div>
           </div>
+          {registryView === 'tree' ? (
+            listLoading ? (
+              <div className="p-6 text-center text-slate-500">{t('registry.loading')}</div>
+            ) : items.length === 0 ? (
+              <div className="p-6 text-center text-slate-500">{t('registry.emptyState')}</div>
+            ) : (
+              <CartelaRegistryTree
+                items={items}
+                searchActive={search.trim().length > 0}
+                printingId={registryPrintingId}
+                onEdit={(id) => void loadOne(id)}
+                onPrintCartela={(id) => void handleRegistryPrint(id)}
+              />
+            )
+          ) : (
+            <>
           <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/70 flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-700">
               <span className="font-bold text-indigo-700">{selectedCartelaIds.size}</span>
@@ -962,6 +988,8 @@ export const CartelaLabels: React.FC = () => {
               </tbody>
             </table>
           </div>
+            </>
+          )}
         </section>
       )}
 

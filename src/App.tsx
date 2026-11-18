@@ -178,6 +178,7 @@ import { InventorySettings } from './pages/inventory/InventorySettings';
 import { StickerPrinting } from './pages/inventory/StickerPrinting';
 import { CustomStickerPrinting } from './pages/inventory/CustomStickerPrinting';
 import { CartelaLabels } from './pages/inventory/CartelaLabels';
+import { RollCut } from './pages/inventory/RollCut';
 import { BulkPricing } from './pages/inventory/BulkPricing';
 import { Warehouses } from './pages/inventory/Warehouses';
 import { Transfers } from './pages/inventory/Transfers';
@@ -266,6 +267,7 @@ export default function App() {
             <Route path="inventory/yarn" element={<YarnManagement />} />
             <Route path="inventory/settings" element={<InventorySettings />} />
             <Route path="inventory/labels" element={<StickerPrinting />} />
+            <Route path="inventory/roll-cut" element={<RollCut />} />
             <Route path="inventory/custom-label" element={<CustomStickerPrinting />} />
             <Route path="cartela" element={<CartelaLabels />} />
             <Route path="inventory/cartela" element={<Navigate to="/cartela" replace />} />

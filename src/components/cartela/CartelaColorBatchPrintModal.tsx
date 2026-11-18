@@ -27,6 +27,8 @@ type PrintMode = 'dialog' | 'silent';
 type Props = {
   colors: CartelaColorSwatchDto[];
   onClose: () => void;
+  /** مقاس جاهز لهذه الطباعة فقط (مثل 2.5×5) فوق إعدادات المستخدم المحفوظة، دون حفظه. */
+  presetSettings?: Partial<CartelaColorPrintSettings>;
 };
 
 function PreviewFrame({ html, title }: { html: string; title: string }) {
@@ -42,7 +44,7 @@ function PreviewFrame({ html, title }: { html: string; title: string }) {
   );
 }
 
-export const CartelaColorBatchPrintModal: React.FC<Props> = ({ colors, onClose }) => {
+export const CartelaColorBatchPrintModal: React.FC<Props> = ({ colors, onClose, presetSettings }) => {
   const { t } = useTranslation('cartelaLabels');
   const { showToast } = useToast();
   const { settings: electronSettings } = useElectronSettings();
@@ -51,7 +53,9 @@ export const CartelaColorBatchPrintModal: React.FC<Props> = ({ colors, onClose }
     defaultLabelPrinterName: electronSettings?.defaultLabelPrinterName,
   });
 
-  const [printSettings, setPrintSettings] = useState<CartelaColorPrintSettings>(() => loadCartelaColorPrintSettings());
+  const [printSettings, setPrintSettings] = useState<CartelaColorPrintSettings>(() =>
+    normalizeCartelaColorPrintSettings({ ...loadCartelaColorPrintSettings(), ...presetSettings }),
+  );
   const [busy, setBusy] = useState<PrintMode | null>(null);
 
   const cells = useMemo<CartelaColorStickerCell[]>(
@@ -163,7 +167,7 @@ export const CartelaColorBatchPrintModal: React.FC<Props> = ({ colors, onClose }
                 <input
                   type="number"
                   min={8}
-                  max={25}
+                  max={50}
                   step={0.5}
                   value={printSettings.cellHeightMm}
                   onChange={(e) => patchSetting('cellHeightMm', Number(e.target.value))}
