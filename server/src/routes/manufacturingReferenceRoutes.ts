@@ -46,6 +46,14 @@ const machineSchema = z.object({
   machineType: machineTypeSchema,
   widthCm: z.number().positive().nullable().optional(),
   fixedLocation: z.string().trim().max(240).nullable().optional(),
+  manufacturer: z.string().trim().max(160).nullable().optional(),
+  model: z.string().trim().max(160).nullable().optional(),
+  serialNumber: z.string().trim().max(160).nullable().optional(),
+  manufactureYear: z.number().int().min(1800).max(2100).nullable().optional(),
+  powerKw: z.number().positive().nullable().optional(),
+  ratedSpeed: z.number().positive().nullable().optional(),
+  ratedSpeedUnit: z.enum(['RPM', 'PICKS_PER_MINUTE', 'METERS_PER_MINUTE', 'OTHER']).nullable().optional(),
+  technicalSpecs: z.record(z.union([z.string().max(500), z.number(), z.boolean()])).refine((value) => Object.keys(value).length <= 50).optional(),
   assetValue: z.number().min(0).nullable().optional(),
   assetCurrencyCode: z.string().trim().length(3).nullable().optional(),
   ownershipType: ownershipSchema.default('COMPANY'),
@@ -209,7 +217,8 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
     if (q.departmentId && z.string().uuid().safeParse(q.departmentId).success) { params.push(q.departmentId); conditions.push(`m.department_id=$${params.length}`); }
     const rows = await getPool().query(
       `SELECT m.id,m.department_id,d.name AS department_name,m.code,m.name,m.machine_type,m.width_cm,
-              m.fixed_location,m.asset_value,m.asset_currency_code,m.ownership_type,m.owner_name,
+              m.fixed_location,m.manufacturer,m.model,m.serial_number,m.manufacture_year,m.power_kw,
+              m.rated_speed,m.rated_speed_unit,m.technical_specs,m.asset_value,m.asset_currency_code,m.ownership_type,m.owner_name,
               m.operational_status,m.notes,m.version,m.is_active,m.created_at,m.updated_at
        FROM manufacturing_machines m
        LEFT JOIN manufacturing_departments d ON d.id=m.department_id AND d.company_id=m.company_id
@@ -228,11 +237,14 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
     try {
       const row = await getPool().query(
         `INSERT INTO manufacturing_machines(company_id,department_id,code,name,machine_type,width_cm,fixed_location,
+          manufacturer,model,serial_number,manufacture_year,power_kw,rated_speed,rated_speed_unit,technical_specs,
           asset_value,asset_currency_code,ownership_type,owner_name,notes,is_active,created_by_user_id,updated_by_user_id)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19,$20,$21,$22,$22)
          RETURNING *`,
         [req.user!.companyId,d.departmentId ?? null,normalizeReferenceCode(d.code),d.name,d.machineType,d.widthCm ?? null,
-          d.fixedLocation ?? null,d.assetValue ?? null,d.assetCurrencyCode?.toUpperCase() ?? null,d.ownershipType,
+          d.fixedLocation ?? null,d.manufacturer ?? null,d.model ?? null,d.serialNumber ?? null,d.manufactureYear ?? null,
+          d.powerKw ?? null,d.ratedSpeed ?? null,d.ratedSpeedUnit ?? null,JSON.stringify(d.technicalSpecs ?? {}),
+          d.assetValue ?? null,d.assetCurrencyCode?.toUpperCase() ?? null,d.ownershipType,
           d.ownershipType === 'CUSTODY' ? d.ownerName?.trim() : null,d.notes ?? null,d.isActive ?? true,req.user!.sub],
       );
       return reply.status(201).send({ ok: true, data: row.rows[0] });
@@ -250,11 +262,14 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
     try {
       const row = await getPool().query(
         `UPDATE manufacturing_machines SET department_id=$4,code=$5,name=$6,machine_type=$7,width_cm=$8,
-          fixed_location=$9,asset_value=$10,asset_currency_code=$11,ownership_type=$12,owner_name=$13,
-          notes=$14,is_active=$15,version=version+1,updated_by_user_id=$16,updated_at=now()
+          fixed_location=$9,manufacturer=$10,model=$11,serial_number=$12,manufacture_year=$13,power_kw=$14,
+          rated_speed=$15,rated_speed_unit=$16,technical_specs=COALESCE($17::jsonb,technical_specs),asset_value=$18,asset_currency_code=$19,
+          ownership_type=$20,owner_name=$21,notes=$22,is_active=$23,version=version+1,updated_by_user_id=$24,updated_at=now()
          WHERE id=$1 AND company_id=$2 AND version=$3 RETURNING *`,
         [id,req.user!.companyId,d.version,d.departmentId ?? null,normalizeReferenceCode(d.code),d.name,d.machineType,
-          d.widthCm ?? null,d.fixedLocation ?? null,d.assetValue ?? null,d.assetCurrencyCode?.toUpperCase() ?? null,
+          d.widthCm ?? null,d.fixedLocation ?? null,d.manufacturer ?? null,d.model ?? null,d.serialNumber ?? null,
+          d.manufactureYear ?? null,d.powerKw ?? null,d.ratedSpeed ?? null,d.ratedSpeedUnit ?? null,
+          d.technicalSpecs === undefined ? null : JSON.stringify(d.technicalSpecs),d.assetValue ?? null,d.assetCurrencyCode?.toUpperCase() ?? null,
           d.ownershipType,d.ownershipType === 'CUSTODY' ? d.ownerName?.trim() : null,d.notes ?? null,d.isActive ?? true,req.user!.sub],
       );
       if (!row.rows.length) return sendError(reply, 409, 'تم تعديل الماكينة من مستخدم آخر؛ حدّث الصفحة ثم أعد المحاولة', 'VERSION_CONFLICT');

@@ -53,6 +53,14 @@ CREATE TABLE manufacturing_machines (
   machine_type text NOT NULL CHECK (machine_type IN ('WARPING','SIZING','LOOM','PROCESSING','INSPECTION','OTHER')),
   width_cm numeric(14,2) CHECK (width_cm IS NULL OR width_cm > 0),
   fixed_location text,
+  manufacturer text,
+  model text,
+  serial_number text,
+  manufacture_year integer CHECK (manufacture_year IS NULL OR manufacture_year BETWEEN 1800 AND 2100),
+  power_kw numeric(14,3) CHECK (power_kw IS NULL OR power_kw > 0),
+  rated_speed numeric(14,3) CHECK (rated_speed IS NULL OR rated_speed > 0),
+  rated_speed_unit text CHECK (rated_speed_unit IS NULL OR rated_speed_unit IN ('RPM','PICKS_PER_MINUTE','METERS_PER_MINUTE','OTHER')),
+  technical_specs jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(technical_specs) = 'object'),
   asset_value numeric(18,2) CHECK (asset_value IS NULL OR asset_value >= 0),
   asset_currency_code text REFERENCES currencies(code),
   ownership_type text NOT NULL DEFAULT 'COMPANY' CHECK (ownership_type IN ('COMPANY','CUSTODY')),
@@ -84,6 +92,9 @@ CREATE INDEX manufacturing_machines_department
   ON manufacturing_machines(company_id, department_id);
 CREATE INDEX manufacturing_machines_type
   ON manufacturing_machines(company_id, machine_type);
+CREATE UNIQUE INDEX manufacturing_machines_company_serial_unique
+  ON manufacturing_machines(company_id, lower(trim(serial_number)))
+  WHERE serial_number IS NOT NULL AND length(trim(serial_number)) > 0;
 
 CREATE TABLE manufacturing_machine_status_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
