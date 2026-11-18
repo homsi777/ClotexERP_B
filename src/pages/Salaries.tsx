@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { PayrollLineItemsModal } from '../components/hr/PayrollLineItemsModal';
+import { LeaveBalancesModal } from '../components/hr/LeaveBalancesModal';
 import {
   Briefcase,
   BanknoteArrowDown,
@@ -110,6 +111,7 @@ export const Salaries = () => {
   const [printRun, setPrintRun] = useState<PayrollRunDto | null>(null);
   const [printRunLines, setPrintRunLines] = useState<PayrollRunLineDto[]>([]);
   const [itemsEditLine, setItemsEditLine] = useState<PayrollRunLineDto | null>(null);
+  const [leaveBalancesOpen, setLeaveBalancesOpen] = useState(false);
   const [printRunLoading, setPrintRunLoading] = useState(false);
   const [groupByField, setGroupByField] = useState<'department' | 'factory' | 'category'>('department');
   const [compareOpen, setCompareOpen] = useState(false);
@@ -198,6 +200,7 @@ export const Salaries = () => {
       netSalary: Number(line.net_salary),
       currencyCode: run.currency_code,
       detail: line.excel_detail,
+      items: (line.items ?? []).map((it) => ({ kind: it.kind, amount: Number(it.amount), note: it.note })),
     });
     openDocumentPrintWindow(html, `كشف راتب - ${line.employee_name}`);
   }
@@ -636,6 +639,10 @@ export const Salaries = () => {
             {t('buttons.payrollLog')}
           </Link>
           <ExchangeRatePopupButton onRatesChange={setExchangeRates} />
+          <button type="button" onClick={() => setLeaveBalancesOpen(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-50">
+            <Briefcase className="w-4 h-4" />
+            {t('leaveBalances.open')}
+          </button>
           {hasPermission('payroll.manage') && (
             <button type="button" onClick={() => setImportModalOpen(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-50">
               <Upload className="w-4 h-4" />
@@ -1145,6 +1152,8 @@ export const Salaries = () => {
           </div>
         </div>
       )}
+
+      {leaveBalancesOpen && <LeaveBalancesModal onClose={() => setLeaveBalancesOpen(false)} />}
 
       {printRun && itemsEditLine && (
         <PayrollLineItemsModal

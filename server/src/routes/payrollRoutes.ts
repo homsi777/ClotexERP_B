@@ -16,6 +16,7 @@ import {
   payrollItemSchema,
   validatePayrollItems,
 } from '../services/hr/payrollLineItems.js';
+import { computeAnnualLeaveBalance } from '../services/hr/leaveBalance.js';
 
 const employeeBody = z.object({
   employeeCode: z.string().min(1),
@@ -126,6 +127,42 @@ function requirePermission(user: { role: string; permissions: string[] } | undef
 }
 
 export const payrollRoutes: FastifyPluginAsync = async (app) => {
+  // TASK 011: رصيد الإجازات السنوي المحسوب لكل موظف نشط — قراءة فقط، لا يغيّر أي بيانات.
+  // العمر وسنوات التأمينات غير مخزّنة بعد، فيُعلَّم من لا يمكن التحقق من شريحة الـ30 يوماً.
+  app.get('/leave-balances', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'payroll.view')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId } = req.user!;
+    const q = req.query as Record<string, string>;
+    const year = Number.parseInt(q.year ?? '', 10) || new Date().getFullYear();
+    if (year < 2000 || year > 2100) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+
+    const rows = await getPool().query<{ id: string; employee_code: string; full_name: string; department: string | null; hire_date: string | null }>(
+      `SELECT id, employee_code, full_name, department, hire_date::text AS hire_date
+         FROM payroll_employees WHERE company_id=$1 AND is_active = true
+        ORDER BY employee_code`,
+      [companyId],
+    );
+    const data = rows.rows.map((e) => {
+      const hire = e.hire_date?.slice(0, 10) ?? null;
+      const validHire = hire && hire >= '1990-01-01' ? hire : null;
+      const bal = validHire ? computeAnnualLeaveBalance({ hireDate: validHire, year }) : null;
+      return {
+        employeeId: e.id,
+        employeeCode: e.employee_code,
+        fullName: e.full_name,
+        department: e.department,
+        hireDate: validHire,
+        days: bal?.days ?? null,
+        rawDays: bal?.rawDays ?? null,
+        usableFrom: bal?.usableFrom ?? null,
+        missingHireDate: !validHire,
+        // 30 يوماً (عمر>50 أو 10 سنوات تأمين) لا يمكن تقييمها دون هذه البيانات.
+        seniorTierUnverified: true,
+      };
+    });
+    return reply.send({ ok: true, data: { year, rows: data } });
+  });
+
   app.get('/employees', { preHandler: authenticateRequest }, async (req, reply) => {
     if (!requirePermission(req.user, 'payroll.view')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     const { companyId } = req.user!;

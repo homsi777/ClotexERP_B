@@ -358,3 +358,22 @@ export interface PayrollAuditLogEntry {
 export async function listPayrollAuditLog(limit = 100) {
   return apiFetch<{ ok: boolean; data: PayrollAuditLogEntry[] }>(`/api/payroll/audit-log?limit=${limit}`);
 }
+
+export interface LeaveBalanceRow {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  department: string | null;
+  hireDate: string | null;
+  days: number | null;
+  rawDays: number | null;
+  usableFrom: string | null;
+  missingHireDate: boolean;
+  seniorTierUnverified: boolean;
+}
+
+export async function getLeaveBalances(year: number) {
+  return apiFetch<{ ok: boolean; data: { year: number; rows: LeaveBalanceRow[] } }>(
+    `/api/payroll/leave-balances?year=${year}`,
+  );
+}

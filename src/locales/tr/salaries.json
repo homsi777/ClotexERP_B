@@ -240,5 +240,17 @@
     "saveFailed": "Maaş kalemleri kaydedilemedi",
     "draftOnly": "Düzenleme yalnızca taslak bordroda mümkün",
     "empty": "Henüz kalem yok"
+  },
+  "leaveBalances": {
+    "title": "Yıllık izin bakiyeleri",
+    "year": "Yıl",
+    "hint": "İşe giriş tarihinden İK kurallarıyla hesaplanır (15 sonra 21 gün, 1-9-2025 öncesi için 21, yukarı yuvarlama). 30 günlük dilim (yaş>50 veya 10 yıl sigorta) yaş/sigorta verisi tutulmadığından hesaplanmaz.",
+    "missingHire": "{{count}} çalışanın geçerli işe giriş tarihi yok — bakiye hesaplanamaz.",
+    "loadFailed": "Bakiyeler yüklenemedi",
+    "colEmployee": "Çalışan",
+    "colHire": "İşe giriş",
+    "colDays": "Bakiye (gün)",
+    "colUsable": "Kullanım başlangıcı",
+    "open": "İzin bakiyeleri"
   }
 }
