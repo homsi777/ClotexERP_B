@@ -30,7 +30,17 @@ import type { Invoice, Supplier } from '../../types';
 import { useToast } from '../../components/NonBlockingToast';
 import { listCashboxes, type CashboxDto } from '../../lib/api/cashboxesApi';
 import { createVoucher, confirmVoucher } from '../../lib/api/vouchersApi';
-import { getSupplierStatement, type PartyStatementData } from '../../lib/api/partyStatementsApi';
+import {
+  getSupplierStatement,
+  getSupplierStatementByCurrency,
+  type PartyStatementData,
+  type PartyStatementByCurrencyData,
+} from '../../lib/api/partyStatementsApi';
+import { listExchangeRates, type ExchangeRateDto } from '../../lib/api/exchangeRatesApi';
+import { ExchangeRatePopupButton } from '../../components/treasury/ExchangeRatePopupButton';
+import { CurrencyStripsPanel } from '../../components/statements/CurrencyStripsPanel';
+import { buildCurrencyStrips } from '../../lib/statements/currencySummary';
+import { buildCurrencyStripsHtmlForStatement } from '../../lib/printing/currencyStripsForStatement';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface SupplierFabricItem {
@@ -50,6 +60,7 @@ interface SupplierFabricItem {
 
 export const SupplierStatement = () => {
   const { t } = useTranslation('supplierStatement');
+  const { t: tCustomerStmt } = useTranslation('customerStatement');
   const { showToast } = useToast();
   const { suppliers, invoices } = useStore();
   const navigate = useNavigate();
@@ -75,6 +86,12 @@ export const SupplierStatement = () => {
   const [accountStatement, setAccountStatement] = useState<PartyStatementData | null>(null);
   const [accountStatementLoading, setAccountStatementLoading] = useState(false);
   const [accountStatementError, setAccountStatementError] = useState<string | null>(null);
+  // TASK 010 (بشير): ملخص الأرصدة بعملاتها — 'NONE' = شريط مستقل لكل عملة بلا تحويل.
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRateDto[]>([]);
+  const [displayChoice, setDisplayChoice] = useState<string>('NONE');
+  const [statementByCurrency, setStatementByCurrency] = useState<PartyStatementByCurrencyData | null>(null);
+  const [statementByCurrencyLoading, setStatementByCurrencyLoading] = useState(false);
+  const [statementByCurrencyError, setStatementByCurrencyError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,6 +262,65 @@ export const SupplierStatement = () => {
     };
   }, [selectedSupplierId, fromDate, toDate, statementRefreshTick]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rates = await listExchangeRates();
+        if (!cancelled) setExchangeRates(rates.data ?? []);
+      } catch {
+        if (!cancelled) setExchangeRates([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSupplierId || !isUuid(selectedSupplierId)) {
+      setStatementByCurrency(null);
+      setStatementByCurrencyError(null);
+      setStatementByCurrencyLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setStatementByCurrencyLoading(true);
+    setStatementByCurrencyError(null);
+    void (async () => {
+      try {
+        const res = await getSupplierStatementByCurrency(selectedSupplierId, { fromDate, toDate });
+        if (!cancelled) setStatementByCurrency(res.data);
+      } catch (e) {
+        if (cancelled) return;
+        setStatementByCurrency(null);
+        setStatementByCurrencyError(e instanceof Error ? e.message : t('toast.loadStatementFailed'));
+      } finally {
+        if (!cancelled) setStatementByCurrencyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSupplierId, fromDate, toDate, statementRefreshTick]);
+
+  const currencyStrips = useMemo(() => {
+    const rates: Record<string, number> = {};
+    for (const r of exchangeRates) {
+      const n = Number(r.exchange_rate_to_usd);
+      if (r.is_active && Number.isFinite(n) && n > 0) rates[r.currency_code] = n;
+    }
+    return buildCurrencyStrips(
+      statementByCurrency?.byCurrency ?? [],
+      displayChoice === 'NONE' ? null : displayChoice,
+      rates,
+    );
+  }, [statementByCurrency, displayChoice, exchangeRates]);
+  const currencyStripsHtml = useMemo(
+    () => buildCurrencyStripsHtmlForStatement(currencyStrips, true),
+    [currencyStrips],
+  );
+
   const legacyLocalPurchaseInvoices = useMemo(
     () =>
       invoices.filter((i) => {
@@ -351,6 +427,7 @@ export const SupplierStatement = () => {
           openingBalance: accountStatement.openingBalance,
           rows: accountStatement.rows,
           totals: accountStatement.totals,
+          currencyStripsHtml,
         });
         await exportPrintHtmlToPdf(
           pdfHtml,
@@ -393,6 +470,7 @@ export const SupplierStatement = () => {
         openingBalance: accountStatement.openingBalance,
         rows: accountStatement.rows,
         totals: accountStatement.totals,
+        currencyStripsHtml,
       });
     }
     if (!selectedSupplier) return '';
@@ -650,6 +728,7 @@ export const SupplierStatement = () => {
           openingBalance: accountStatement.openingBalance,
           rows: accountStatement.rows,
           totals: accountStatement.totals,
+          currencyStripsHtml,
         });
         await sendTelegramAccountStatementPdf({
           partyType: 'supplier',
@@ -888,6 +967,39 @@ export const SupplierStatement = () => {
                 </p>
               </div>}
             </div>
+
+            {!hideFinancialColumns && (
+              <>
+                <div className="px-6 pt-4 flex items-center gap-2 text-xs text-slate-600">
+                  <span className="font-bold whitespace-nowrap">{tCustomerStmt('statementTable.displayCurrencyLabel')}</span>
+                  <select
+                    value={displayChoice}
+                    onChange={(e) => setDisplayChoice(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
+                  >
+                    <option value="NONE">{tCustomerStmt('statementTable.noConversionOption')}</option>
+                    <option value="USD">USD</option>
+                    {exchangeRates
+                      .filter((r) => r.currency_code !== 'USD' && r.is_active)
+                      .map((r) => (
+                        <option key={r.currency_code} value={r.currency_code}>
+                          {r.currency_code}
+                        </option>
+                      ))}
+                  </select>
+                  <ExchangeRatePopupButton
+                    onRatesChange={setExchangeRates}
+                    buttonClassName="inline-flex items-center gap-1 bg-white border border-slate-300 text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-xs font-medium"
+                  />
+                </div>
+                <CurrencyStripsPanel
+                  strips={currencyStrips}
+                  loading={statementByCurrencyLoading}
+                  error={statementByCurrencyError}
+                  isSupplier
+                />
+              </>
+            )}
 
             {visibleItems.length > 0 && (
               <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-rose-50">

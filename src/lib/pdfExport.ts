@@ -449,6 +449,8 @@ function renderAccountStatementHtml(options: {
   invoiceDetailsBySourceId?: Record<string, AccountStatementInvoiceDetail[]>;
   invoiceDetailsByDocumentNo?: Record<string, AccountStatementInvoiceDetail[]>;
   saleInvoices?: Invoice[];
+  /** TASK 010: HTML جاهز لقسم شرائط العملات — يُدرج بعد بطاقات الملخص. */
+  currencyStripsHtml?: string;
 }) {
   console.log('[pdfRender] renderAccountStatementHtml called:', {
     rows: options.rows.length,
@@ -758,6 +760,8 @@ function renderAccountStatementHtml(options: {
     </div>
   </div>
 
+  ${options.currencyStripsHtml ?? ''}
+
   <!-- ══ TABLE ════════════════════════════════════════════════════ -->
   <table>
     <colgroup>
@@ -862,6 +866,8 @@ export function renderCustomerAccountStatementPdfHtml(data: {
   invoiceDetailsBySourceId?: Record<string, AccountStatementInvoiceDetail[]>;
   invoiceDetailsByDocumentNo?: Record<string, AccountStatementInvoiceDetail[]>;
   saleInvoices?: Invoice[];
+  /** TASK 010: قسم شرائط العملات (HTML جاهز) — يظهر بعد بطاقات الملخص إن وُجد. */
+  currencyStripsHtml?: string;
 }) {
   const closing = data.totals.closingBalance;
   const closingLabel = closing >= 0 ? arAccountingDebitSide() : arAccountingCreditSide();
@@ -882,6 +888,7 @@ export function renderCustomerAccountStatementPdfHtml(data: {
     invoiceDetailsBySourceId: data.invoiceDetailsBySourceId,
     invoiceDetailsByDocumentNo: data.invoiceDetailsByDocumentNo,
     saleInvoices: data.saleInvoices,
+    currencyStripsHtml: data.currencyStripsHtml,
   });
 }
 
@@ -894,6 +901,7 @@ export function renderSupplierAccountStatementPdfHtml(data: {
   openingBalance: number;
   rows: AccountStatementRow[];
   totals: AccountStatementTotals;
+  currencyStripsHtml?: string;
 }) {
   const closing = data.totals.closingBalance;
   const closingLabel = closing >= 0 ? t('accountStatement.creditToSupplier') : t('accountStatement.debitToUs');
@@ -911,6 +919,7 @@ export function renderSupplierAccountStatementPdfHtml(data: {
     closingLabel,
     closingAmount: Math.abs(closing),
     currency: data.rows[0]?.currency ?? 'USD',
+    currencyStripsHtml: data.currencyStripsHtml,
   });
 }
 
