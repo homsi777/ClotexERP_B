@@ -34,6 +34,7 @@ import arCustomStickerPrinting from '../locales/ar/customStickerPrinting.json';
 import arDepreciation from '../locales/ar/depreciation.json';
 import arBulkPricing from '../locales/ar/bulkPricing.json';
 import arCartelaLabels from '../locales/ar/cartelaLabels.json';
+import arRollCut from '../locales/ar/rollCut.json';
 import arMaterialInquiry from '../locales/ar/materialInquiry.json';
 import arIntakeOperations from '../locales/ar/intakeOperations.json';
 import arInventoryMovementsLog from '../locales/ar/inventoryMovementsLog.json';
@@ -100,6 +101,7 @@ import trCustomStickerPrinting from '../locales/tr/customStickerPrinting.json';
 import trDepreciation from '../locales/tr/depreciation.json';
 import trBulkPricing from '../locales/tr/bulkPricing.json';
 import trCartelaLabels from '../locales/tr/cartelaLabels.json';
+import trRollCut from '../locales/tr/rollCut.json';
 import trMaterialInquiry from '../locales/tr/materialInquiry.json';
 import trIntakeOperations from '../locales/tr/intakeOperations.json';
 import trInventoryMovementsLog from '../locales/tr/inventoryMovementsLog.json';
@@ -174,6 +176,7 @@ void i18n.use(initReactI18next).init({
       depreciation: arDepreciation,
       bulkPricing: arBulkPricing,
       cartelaLabels: arCartelaLabels,
+      rollCut: arRollCut,
       materialInquiry: arMaterialInquiry,
       intakeOperations: arIntakeOperations,
       inventoryMovementsLog: arInventoryMovementsLog,
@@ -242,6 +245,7 @@ void i18n.use(initReactI18next).init({
       depreciation: trDepreciation,
       bulkPricing: trBulkPricing,
       cartelaLabels: trCartelaLabels,
+      rollCut: trRollCut,
       materialInquiry: trMaterialInquiry,
       intakeOperations: trIntakeOperations,
       inventoryMovementsLog: trInventoryMovementsLog,
@@ -279,7 +283,7 @@ void i18n.use(initReactI18next).init({
   lng: initialLanguage,
   fallbackLng: DEFAULT_LANGUAGE,
   defaultNS: 'common',
-  ns: ['common', 'dashboard', 'login', 'nav', 'invoices', 'terminology', 'inventory', 'settings', 'customers', 'createItem', 'returns', 'customerStatement', 'supplierStatement', 'purchaseImport', 'stockImport', 'stickerPrinting', 'externalJobs', 'suppliers', 'partiesLog', 'customerStatementImportModal', 'customerLegacyStatement', 'fabricMasterData', 'rollDetails', 'transfers', 'inventorySettings', 'warehouses', 'printJobs', 'yarnManagement', 'categories', 'createRoll', 'customStickerPrinting', 'depreciation', 'bulkPricing', 'cartelaLabels', 'exchangeInvoices', 'invoiceStatement', 'customerOrdersPage', 'orderFormModal', 'treasuryMain', 'treasurySettings', 'paymentBonds', 'collectionBonds', 'safes', 'checksVault', 'treasuryLog', 'bondRecords', 'bondDetails', 'expenses', 'profitDetails', 'payrollSalaryLog', 'salaries', 'hrEmployees', 'hrAttendance', 'reportsMain', 'reportsCenter', 'journal', 'accounting', 'partners', 'manufacturing', 'importBatches', 'documentFileNames', 'labelCard', 'materialInquiry', 'intakeOperations', 'inventoryMovementsLog', 'externalJobMatching'],
+  ns: ['common', 'dashboard', 'login', 'nav', 'invoices', 'terminology', 'inventory', 'settings', 'customers', 'createItem', 'returns', 'customerStatement', 'supplierStatement', 'purchaseImport', 'stockImport', 'stickerPrinting', 'externalJobs', 'suppliers', 'partiesLog', 'customerStatementImportModal', 'customerLegacyStatement', 'fabricMasterData', 'rollDetails', 'transfers', 'inventorySettings', 'warehouses', 'printJobs', 'yarnManagement', 'categories', 'createRoll', 'customStickerPrinting', 'depreciation', 'bulkPricing', 'cartelaLabels', 'exchangeInvoices', 'invoiceStatement', 'customerOrdersPage', 'orderFormModal', 'treasuryMain', 'treasurySettings', 'paymentBonds', 'collectionBonds', 'safes', 'checksVault', 'treasuryLog', 'bondRecords', 'bondDetails', 'expenses', 'profitDetails', 'payrollSalaryLog', 'salaries', 'hrEmployees', 'hrAttendance', 'reportsMain', 'reportsCenter', 'journal', 'accounting', 'partners', 'manufacturing', 'importBatches', 'documentFileNames', 'labelCard', 'materialInquiry', 'intakeOperations', 'inventoryMovementsLog', 'externalJobMatching', 'rollCut'],
   interpolation: {
     escapeValue: false,
   },
