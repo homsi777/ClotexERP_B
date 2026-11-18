@@ -1,0 +1,330 @@
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { getPool } from '../db/pool.js';
+import { authenticateRequest, type JwtPayload } from '../middleware/auth.js';
+import { sendError } from '../middleware/errorHandler.js';
+import {
+  MACHINE_STATUSES,
+  canTransitionMachineStatus,
+  normalizeReferenceCode,
+  validateMachineOwnership,
+  validateMaintenanceCompletion,
+  type MachineStatus,
+} from '../services/manufacturingReferenceRules.js';
+
+const machineTypeSchema = z.enum(['WARPING', 'SIZING', 'LOOM', 'PROCESSING', 'INSPECTION', 'OTHER']);
+const machineStatusSchema = z.enum(MACHINE_STATUSES);
+const ownershipSchema = z.enum(['COMPANY', 'CUSTODY']);
+const stageSchema = z.enum(['ALL', 'WARPING', 'SIZING', 'WEAVING', 'PROCESSING', 'INSPECTION']);
+const inspectionTypeSchema = z.enum(['ALL', 'WARP_BEAM', 'SIZED_BEAM', 'RAW_FABRIC', 'FINISHED_FABRIC']);
+const severitySchema = z.enum(['MINOR', 'MAJOR', 'CRITICAL']);
+
+const nullableText = z.string().trim().max(1000).nullable().optional();
+const codeText = z.string().trim().min(1).max(64);
+const nameText = z.string().trim().min(1).max(160);
+
+const departmentSchema = z.object({
+  code: codeText,
+  name: nameText,
+  description: nullableText,
+  isActive: z.boolean().optional(),
+});
+
+const machineSchema = z.object({
+  departmentId: z.string().uuid().nullable().optional(),
+  code: codeText,
+  name: nameText,
+  machineType: machineTypeSchema,
+  widthCm: z.number().positive().nullable().optional(),
+  fixedLocation: z.string().trim().max(240).nullable().optional(),
+  assetValue: z.number().min(0).nullable().optional(),
+  assetCurrencyCode: z.string().trim().length(3).nullable().optional(),
+  ownershipType: ownershipSchema.default('COMPANY'),
+  ownerName: z.string().trim().max(240).nullable().optional(),
+  notes: nullableText,
+  isActive: z.boolean().optional(),
+  version: z.number().int().positive().optional(),
+});
+
+const downtimeReasonSchema = z.object({
+  code: codeText,
+  name: nameText,
+  stage: stageSchema.default('ALL'),
+  isPlanned: z.boolean().default(false),
+  isActive: z.boolean().optional(),
+});
+
+const defectSchema = z.object({
+  code: codeText,
+  name: nameText,
+  inspectionType: inspectionTypeSchema.default('ALL'),
+  defaultSeverity: severitySchema.nullable().optional(),
+  description: nullableText,
+  isActive: z.boolean().optional(),
+});
+
+const maintenanceSchema = z.object({
+  eventType: z.enum(['BREAKDOWN', 'PREVENTIVE', 'CORRECTIVE', 'INSPECTION']),
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).default('OPEN'),
+  occurredAt: z.coerce.date(),
+  completedAt: z.coerce.date().nullable().optional(),
+  description: z.string().trim().min(1).max(2000),
+  resolution: z.string().trim().max(2000).nullable().optional(),
+  costAmount: z.number().min(0).nullable().optional(),
+  costCurrencyCode: z.string().trim().length(3).nullable().optional(),
+});
+
+function hasPermission(user: JwtPayload | undefined, code: string): boolean {
+  return Boolean(user && (user.role === 'admin' || user.permissions.includes(code)));
+}
+
+function requireAny(user: JwtPayload | undefined, codes: string[]): boolean {
+  return codes.some((code) => hasPermission(user, code));
+}
+
+function handleDbError(reply: FastifyReply, error: unknown) {
+  const code = (error as { code?: string }).code;
+  if (code === '23505') return sendError(reply, 409, 'الكود مستخدم مسبقًا ضمن الشركة', 'DUPLICATE');
+  if (code === '23503') return sendError(reply, 409, 'المرجع المحدد غير موجود أو لا يتبع الشركة', 'CONFLICT');
+  if (code === '23514') return sendError(reply, 400, 'البيانات لا تحقق قواعد التصنيع المعتمدة', 'VALIDATION');
+  throw error;
+}
+
+export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook('preHandler', authenticateRequest);
+
+  app.get('/overview', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.dashboard.view', 'manufacturing.reference.view'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية عرض تعريفات التصنيع', 'FORBIDDEN');
+    }
+    const { companyId } = req.user!;
+    const pool = getPool();
+    const row = await pool.query(
+      `SELECT
+        (SELECT COUNT(*)::int FROM manufacturing_departments WHERE company_id=$1 AND is_active) AS departments,
+        (SELECT COUNT(*)::int FROM manufacturing_machines WHERE company_id=$1 AND is_active) AS machines,
+        (SELECT COUNT(*)::int FROM manufacturing_machines WHERE company_id=$1 AND operational_status='ACTIVE' AND is_active) AS active_machines,
+        (SELECT COUNT(*)::int FROM manufacturing_machines WHERE company_id=$1 AND operational_status IN ('STOPPED','MAINTENANCE')) AS unavailable_machines,
+        (SELECT COUNT(*)::int FROM manufacturing_machine_maintenance_events WHERE company_id=$1 AND status IN ('OPEN','IN_PROGRESS')) AS open_maintenance,
+        (SELECT COUNT(*)::int FROM manufacturing_downtime_reasons WHERE company_id=$1 AND is_active) AS downtime_reasons,
+        (SELECT COUNT(*)::int FROM manufacturing_quality_defect_catalog WHERE company_id=$1 AND is_active) AS quality_defects`,
+      [companyId],
+    );
+    return reply.send({ ok: true, data: row.rows[0] });
+  });
+
+  app.get('/departments', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.reference.view', 'manufacturing.dashboard.view'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية عرض أقسام المصنع', 'FORBIDDEN');
+    }
+    const rows = await getPool().query(
+      `SELECT id,code,name,description,is_active,created_at,updated_at
+       FROM manufacturing_departments WHERE company_id=$1 ORDER BY is_active DESC,name`,
+      [req.user!.companyId],
+    );
+    return reply.send({ ok: true, data: rows.rows });
+  });
+
+  app.post('/departments', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.reference.manage')) return sendError(reply, 403, 'ليست لديك صلاحية إدارة الأقسام', 'FORBIDDEN');
+    const parsed = departmentSchema.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'بيانات غير صالحة', 'VALIDATION');
+    const d = parsed.data;
+    try {
+      const row = await getPool().query(
+        `INSERT INTO manufacturing_departments(company_id,code,name,description,is_active,created_by_user_id,updated_by_user_id)
+         VALUES($1,$2,$3,$4,$5,$6,$6)
+         RETURNING id,code,name,description,is_active,created_at,updated_at`,
+        [req.user!.companyId, normalizeReferenceCode(d.code), d.name, d.description ?? null, d.isActive ?? true, req.user!.sub],
+      );
+      return reply.status(201).send({ ok: true, data: row.rows[0] });
+    } catch (error) { return handleDbError(reply, error); }
+  });
+
+  app.put('/departments/:id', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.reference.manage')) return sendError(reply, 403, 'ليست لديك صلاحية إدارة الأقسام', 'FORBIDDEN');
+    const parsed = departmentSchema.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'بيانات غير صالحة', 'VALIDATION');
+    const { id } = req.params as { id: string };
+    const d = parsed.data;
+    try {
+      const row = await getPool().query(
+        `UPDATE manufacturing_departments SET code=$3,name=$4,description=$5,is_active=$6,
+           updated_by_user_id=$7,updated_at=now()
+         WHERE id=$1 AND company_id=$2
+         RETURNING id,code,name,description,is_active,created_at,updated_at`,
+        [id, req.user!.companyId, normalizeReferenceCode(d.code), d.name, d.description ?? null, d.isActive ?? true, req.user!.sub],
+      );
+      if (!row.rows.length) return sendError(reply, 404, 'القسم غير موجود', 'NOT_FOUND');
+      return reply.send({ ok: true, data: row.rows[0] });
+    } catch (error) { return handleDbError(reply, error); }
+  });
+
+  app.get('/machines', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.reference.view', 'manufacturing.dashboard.view'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية عرض الماكينات', 'FORBIDDEN');
+    }
+    const q = req.query as { search?: string; status?: string; departmentId?: string };
+    const conditions = ['m.company_id=$1'];
+    const params: unknown[] = [req.user!.companyId];
+    if (q.search?.trim()) { params.push(`%${q.search.trim()}%`); conditions.push(`(m.code ILIKE $${params.length} OR m.name ILIKE $${params.length})`); }
+    if (q.status && machineStatusSchema.safeParse(q.status).success) { params.push(q.status); conditions.push(`m.operational_status=$${params.length}`); }
+    if (q.departmentId && z.string().uuid().safeParse(q.departmentId).success) { params.push(q.departmentId); conditions.push(`m.department_id=$${params.length}`); }
+    const rows = await getPool().query(
+      `SELECT m.id,m.department_id,d.name AS department_name,m.code,m.name,m.machine_type,m.width_cm,
+              m.fixed_location,m.asset_value,m.asset_currency_code,m.ownership_type,m.owner_name,
+              m.operational_status,m.notes,m.version,m.is_active,m.created_at,m.updated_at
+       FROM manufacturing_machines m
+       LEFT JOIN manufacturing_departments d ON d.id=m.department_id AND d.company_id=m.company_id
+       WHERE ${conditions.join(' AND ')} ORDER BY m.is_active DESC,m.code`, params,
+    );
+    return reply.send({ ok: true, data: rows.rows });
+  });
+
+  app.post('/machines', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.machines.manage')) return sendError(reply, 403, 'ليست لديك صلاحية إدارة الماكينات', 'FORBIDDEN');
+    const parsed = machineSchema.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'بيانات غير صالحة', 'VALIDATION');
+    const d = parsed.data;
+    const ownershipError = validateMachineOwnership({ ownershipType: d.ownershipType, ownerName: d.ownerName });
+    if (ownershipError) return sendError(reply, 400, ownershipError, 'VALIDATION');
+    try {
+      const row = await getPool().query(
+        `INSERT INTO manufacturing_machines(company_id,department_id,code,name,machine_type,width_cm,fixed_location,
+          asset_value,asset_currency_code,ownership_type,owner_name,notes,is_active,created_by_user_id,updated_by_user_id)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+         RETURNING *`,
+        [req.user!.companyId,d.departmentId ?? null,normalizeReferenceCode(d.code),d.name,d.machineType,d.widthCm ?? null,
+          d.fixedLocation ?? null,d.assetValue ?? null,d.assetCurrencyCode?.toUpperCase() ?? null,d.ownershipType,
+          d.ownershipType === 'CUSTODY' ? d.ownerName?.trim() : null,d.notes ?? null,d.isActive ?? true,req.user!.sub],
+      );
+      return reply.status(201).send({ ok: true, data: row.rows[0] });
+    } catch (error) { return handleDbError(reply, error); }
+  });
+
+  app.put('/machines/:id', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.machines.manage')) return sendError(reply, 403, 'ليست لديك صلاحية إدارة الماكينات', 'FORBIDDEN');
+    const parsed = machineSchema.safeParse(req.body);
+    if (!parsed.success || !parsed.data.version) return sendError(reply, 400, 'بيانات الماكينة ورقم النسخة مطلوبة', 'VALIDATION');
+    const d = parsed.data;
+    const ownershipError = validateMachineOwnership({ ownershipType: d.ownershipType, ownerName: d.ownerName });
+    if (ownershipError) return sendError(reply, 400, ownershipError, 'VALIDATION');
+    const { id } = req.params as { id: string };
+    try {
+      const row = await getPool().query(
+        `UPDATE manufacturing_machines SET department_id=$4,code=$5,name=$6,machine_type=$7,width_cm=$8,
+          fixed_location=$9,asset_value=$10,asset_currency_code=$11,ownership_type=$12,owner_name=$13,
+          notes=$14,is_active=$15,version=version+1,updated_by_user_id=$16,updated_at=now()
+         WHERE id=$1 AND company_id=$2 AND version=$3 RETURNING *`,
+        [id,req.user!.companyId,d.version,d.departmentId ?? null,normalizeReferenceCode(d.code),d.name,d.machineType,
+          d.widthCm ?? null,d.fixedLocation ?? null,d.assetValue ?? null,d.assetCurrencyCode?.toUpperCase() ?? null,
+          d.ownershipType,d.ownershipType === 'CUSTODY' ? d.ownerName?.trim() : null,d.notes ?? null,d.isActive ?? true,req.user!.sub],
+      );
+      if (!row.rows.length) return sendError(reply, 409, 'تم تعديل الماكينة من مستخدم آخر؛ حدّث الصفحة ثم أعد المحاولة', 'VERSION_CONFLICT');
+      return reply.send({ ok: true, data: row.rows[0] });
+    } catch (error) { return handleDbError(reply, error); }
+  });
+
+  app.post('/machines/:id/status', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.machines.manage')) return sendError(reply, 403, 'ليست لديك صلاحية تغيير حالة الماكينة', 'FORBIDDEN');
+    const parsed = z.object({ status: machineStatusSchema, reason: z.string().trim().min(1).max(1000), version: z.number().int().positive() }).safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'بيانات غير صالحة', 'VALIDATION');
+    const { id } = req.params as { id: string };
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query<{ operational_status: MachineStatus; version: number }>(
+        `SELECT operational_status,version FROM manufacturing_machines WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [id,req.user!.companyId],
+      );
+      if (!current.rows.length) { await client.query('ROLLBACK'); return sendError(reply, 404, 'الماكينة غير موجودة', 'NOT_FOUND'); }
+      const from = current.rows[0].operational_status;
+      if (current.rows[0].version !== parsed.data.version) { await client.query('ROLLBACK'); return sendError(reply, 409, 'تم تعديل الماكينة من مستخدم آخر', 'VERSION_CONFLICT'); }
+      if (!canTransitionMachineStatus(from, parsed.data.status)) { await client.query('ROLLBACK'); return sendError(reply, 409, `الانتقال من ${from} إلى ${parsed.data.status} غير مسموح`, 'INVALID_STATE'); }
+      const updated = await client.query(
+        `UPDATE manufacturing_machines SET operational_status=$3,version=version+1,updated_by_user_id=$4,updated_at=now()
+         WHERE id=$1 AND company_id=$2 RETURNING *`,
+        [id,req.user!.companyId,parsed.data.status,req.user!.sub],
+      );
+      await client.query(
+        `INSERT INTO manufacturing_machine_status_events(company_id,machine_id,old_status,new_status,reason,created_by_user_id)
+         VALUES($1,$2,$3,$4,$5,$6)`,
+        [req.user!.companyId,id,from,parsed.data.status,parsed.data.reason,req.user!.sub],
+      );
+      await client.query('COMMIT');
+      return reply.send({ ok: true, data: updated.rows[0] });
+    } catch (error) { await client.query('ROLLBACK').catch(() => undefined); return handleDbError(reply,error); }
+    finally { client.release(); }
+  });
+
+  app.get('/machines/:id/history', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.reference.view', 'manufacturing.dashboard.view'])) return sendError(reply, 403, 'ليست لديك صلاحية العرض', 'FORBIDDEN');
+    const { id } = req.params as { id: string };
+    const [statusRows, maintenanceRows] = await Promise.all([
+      getPool().query(`SELECT e.*,u.full_name AS created_by_name FROM manufacturing_machine_status_events e LEFT JOIN users u ON u.id=e.created_by_user_id WHERE e.company_id=$1 AND e.machine_id=$2 ORDER BY e.created_at DESC`, [req.user!.companyId,id]),
+      getPool().query(`SELECT e.*,u.full_name AS created_by_name FROM manufacturing_machine_maintenance_events e LEFT JOIN users u ON u.id=e.created_by_user_id WHERE e.company_id=$1 AND e.machine_id=$2 ORDER BY e.occurred_at DESC`, [req.user!.companyId,id]),
+    ]);
+    return reply.send({ ok: true, data: { statusEvents: statusRows.rows, maintenanceEvents: maintenanceRows.rows } });
+  });
+
+  app.post('/machines/:id/maintenance', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.maintenance.manage')) return sendError(reply, 403, 'ليست لديك صلاحية إدارة الصيانة', 'FORBIDDEN');
+    const parsed = maintenanceSchema.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'بيانات غير صالحة', 'VALIDATION');
+    const validation = validateMaintenanceCompletion(parsed.data);
+    if (validation) return sendError(reply, 400, validation, 'VALIDATION');
+    const { id } = req.params as { id: string };
+    try {
+      const row = await getPool().query(
+        `INSERT INTO manufacturing_machine_maintenance_events(company_id,machine_id,event_type,status,occurred_at,completed_at,
+          description,resolution,cost_amount,cost_currency_code,created_by_user_id,updated_by_user_id)
+         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11
+         WHERE EXISTS(SELECT 1 FROM manufacturing_machines WHERE id=$2 AND company_id=$1)
+         RETURNING *`,
+        [req.user!.companyId,id,parsed.data.eventType,parsed.data.status,parsed.data.occurredAt,parsed.data.completedAt ?? null,
+          parsed.data.description,parsed.data.resolution ?? null,parsed.data.costAmount ?? null,
+          parsed.data.costCurrencyCode?.toUpperCase() ?? null,req.user!.sub],
+      );
+      if (!row.rows.length) return sendError(reply, 404, 'الماكينة غير موجودة', 'NOT_FOUND');
+      return reply.status(201).send({ ok: true, data: row.rows[0] });
+    } catch (error) { return handleDbError(reply,error); }
+  });
+
+  app.get('/downtime-reasons', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.reference.view','manufacturing.dashboard.view'])) return sendError(reply,403,'ليست لديك صلاحية العرض','FORBIDDEN');
+    const rows = await getPool().query(`SELECT id,code,name,stage,is_planned,is_active,created_at,updated_at FROM manufacturing_downtime_reasons WHERE company_id=$1 ORDER BY is_active DESC,stage,name`,[req.user!.companyId]);
+    return reply.send({ok:true,data:rows.rows});
+  });
+
+  app.post('/downtime-reasons', async (req, reply) => {
+    if (!hasPermission(req.user,'manufacturing.reference.manage')) return sendError(reply,403,'ليست لديك صلاحية إدارة أسباب التوقف','FORBIDDEN');
+    const parsed=downtimeReasonSchema.safeParse(req.body); if(!parsed.success) return sendError(reply,400,parsed.error.issues[0]?.message||'بيانات غير صالحة','VALIDATION');
+    const d=parsed.data;
+    try { const row=await getPool().query(`INSERT INTO manufacturing_downtime_reasons(company_id,code,name,stage,is_planned,is_active,created_by_user_id,updated_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$7) RETURNING *`,[req.user!.companyId,normalizeReferenceCode(d.code),d.name,d.stage,d.isPlanned,d.isActive??true,req.user!.sub]); return reply.status(201).send({ok:true,data:row.rows[0]}); } catch(error){return handleDbError(reply,error);}
+  });
+
+  app.put('/downtime-reasons/:id', async (req, reply) => {
+    if (!hasPermission(req.user,'manufacturing.reference.manage')) return sendError(reply,403,'ليست لديك صلاحية إدارة أسباب التوقف','FORBIDDEN');
+    const parsed=downtimeReasonSchema.safeParse(req.body); if(!parsed.success) return sendError(reply,400,parsed.error.issues[0]?.message||'بيانات غير صالحة','VALIDATION');
+    const {id}=req.params as {id:string}; const d=parsed.data;
+    try { const row=await getPool().query(`UPDATE manufacturing_downtime_reasons SET code=$3,name=$4,stage=$5,is_planned=$6,is_active=$7,updated_by_user_id=$8,updated_at=now() WHERE id=$1 AND company_id=$2 RETURNING *`,[id,req.user!.companyId,normalizeReferenceCode(d.code),d.name,d.stage,d.isPlanned,d.isActive??true,req.user!.sub]); if(!row.rows.length)return sendError(reply,404,'سبب التوقف غير موجود','NOT_FOUND'); return reply.send({ok:true,data:row.rows[0]}); } catch(error){return handleDbError(reply,error);}
+  });
+
+  app.get('/quality-defects', async (req, reply) => {
+    if (!requireAny(req.user,['manufacturing.reference.view','manufacturing.dashboard.view'])) return sendError(reply,403,'ليست لديك صلاحية العرض','FORBIDDEN');
+    const rows=await getPool().query(`SELECT id,code,name,inspection_type,default_severity,description,is_active,created_at,updated_at FROM manufacturing_quality_defect_catalog WHERE company_id=$1 ORDER BY is_active DESC,inspection_type,name`,[req.user!.companyId]);
+    return reply.send({ok:true,data:rows.rows});
+  });
+
+  app.post('/quality-defects', async (req, reply) => {
+    if (!hasPermission(req.user,'manufacturing.quality.catalog.manage')) return sendError(reply,403,'ليست لديك صلاحية إدارة عيوب الجودة','FORBIDDEN');
+    const parsed=defectSchema.safeParse(req.body); if(!parsed.success) return sendError(reply,400,parsed.error.issues[0]?.message||'بيانات غير صالحة','VALIDATION'); const d=parsed.data;
+    try { const row=await getPool().query(`INSERT INTO manufacturing_quality_defect_catalog(company_id,code,name,inspection_type,default_severity,description,is_active,created_by_user_id,updated_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING *`,[req.user!.companyId,normalizeReferenceCode(d.code),d.name,d.inspectionType,d.defaultSeverity??null,d.description??null,d.isActive??true,req.user!.sub]); return reply.status(201).send({ok:true,data:row.rows[0]}); } catch(error){return handleDbError(reply,error);}
+  });
+
+  app.put('/quality-defects/:id', async (req, reply) => {
+    if (!hasPermission(req.user,'manufacturing.quality.catalog.manage')) return sendError(reply,403,'ليست لديك صلاحية إدارة عيوب الجودة','FORBIDDEN');
+    const parsed=defectSchema.safeParse(req.body); if(!parsed.success) return sendError(reply,400,parsed.error.issues[0]?.message||'بيانات غير صالحة','VALIDATION'); const {id}=req.params as {id:string}; const d=parsed.data;
+    try { const row=await getPool().query(`UPDATE manufacturing_quality_defect_catalog SET code=$3,name=$4,inspection_type=$5,default_severity=$6,description=$7,is_active=$8,updated_by_user_id=$9,updated_at=now() WHERE id=$1 AND company_id=$2 RETURNING *`,[id,req.user!.companyId,normalizeReferenceCode(d.code),d.name,d.inspectionType,d.defaultSeverity??null,d.description??null,d.isActive??true,req.user!.sub]); if(!row.rows.length)return sendError(reply,404,'تعريف العيب غير موجود','NOT_FOUND'); return reply.send({ok:true,data:row.rows[0]}); } catch(error){return handleDbError(reply,error);}
+  });
+};

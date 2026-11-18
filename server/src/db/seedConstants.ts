@@ -22,6 +22,12 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'attendance.approve', name: 'اعتماد كشف الانتظام الشهري', category: 'attendance' },
   { code: 'advances.manage', name: 'إدارة السلف', category: 'advances' },
   { code: 'advances.approve', name: 'اعتماد السلف', category: 'advances' },
+  { code: 'manufacturing.dashboard.view', name: 'عرض لوحة التصنيع', category: 'manufacturing' },
+  { code: 'manufacturing.reference.view', name: 'عرض تعريفات التصنيع', category: 'manufacturing' },
+  { code: 'manufacturing.reference.manage', name: 'إدارة تعريفات التصنيع', category: 'manufacturing' },
+  { code: 'manufacturing.machines.manage', name: 'إدارة الماكينات', category: 'manufacturing' },
+  { code: 'manufacturing.maintenance.manage', name: 'إدارة أعطال وصيانة الماكينات', category: 'manufacturing' },
+  { code: 'manufacturing.quality.catalog.manage', name: 'إدارة مكتبة عيوب الجودة', category: 'manufacturing' },
 ];
 
 export const ROLES = [

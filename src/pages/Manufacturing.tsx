@@ -1,133 +1,66 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, Plus, Factory, Settings, Calendar, ClipboardList } from 'lucide-react';
+import { AlertTriangle, Factory, Gauge, Plus, RefreshCw, Wrench } from 'lucide-react';
+import { usePermissions } from '../hooks/usePermissions';
+import {
+  changeManufacturingMachineStatus, createManufacturingMaintenance, getManufacturingMachineHistory,
+  getManufacturingOverview, listDowntimeReasons, listManufacturingDepartments, listManufacturingMachines,
+  listQualityDefects, saveDowntimeReason, saveManufacturingDepartment, saveManufacturingMachine,
+  saveQualityDefect, type DowntimeReason, type ManufacturingDepartment, type ManufacturingMachine,
+  type ManufacturingOverview, type MachineStatus, type QualityDefect,
+} from '../lib/api/manufacturingReferenceApi';
 
-export const Manufacturing = () => {
-  const { t } = useTranslation('manufacturing');
-  const [orders] = useState([
-    { id: 'MO/0001', product: t('sampleOrder1.product'), quantity: 10, uom: t('unit'), date: '2023-11-01', status: 'CONFIRMED' as const, progress: 40 },
-    { id: 'MO/0002', product: t('sampleOrder2.product'), quantity: 5, uom: t('unit'), date: '2023-11-02', status: 'PENDING' as const, progress: 0 },
-    { id: 'MO/0003', product: t('sampleOrder3.product'), quantity: 50, uom: t('unit'), date: '2023-10-25', status: 'COMPLETED' as const, progress: 100 },
-  ]);
+type Tab='machines'|'departments'|'downtime'|'defects';
+const input='w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
+const primary='rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50';
+const statusColor:Record<MachineStatus,string>={ACTIVE:'bg-emerald-100 text-emerald-800',STOPPED:'bg-amber-100 text-amber-800',MAINTENANCE:'bg-blue-100 text-blue-800',OUT_OF_SERVICE:'bg-rose-100 text-rose-800'};
 
-  const statusLabel = (status: 'CONFIRMED' | 'PENDING' | 'COMPLETED') => {
-    if (status === 'CONFIRMED') return t('status.confirmed');
-    if (status === 'COMPLETED') return t('status.completed');
-    return t('status.pending');
-  };
-
-  return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">{t('pageTitle')}</h2>
-          <p className="text-slate-500 mt-1">{t('pageSubtitle')}</p>
-        </div>
-        <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium">
-          <Plus className="w-4 h-4" />
-          <span>{t('newManufacturingOrder')}</span>
-        </button>
-      </div>
-
-      {/* Analytics or Top level Tabs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-           <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
-             <Factory className="w-6 h-6" />
-           </div>
-           <div>
-             <p className="text-sm text-slate-500">{t('manufacturingOrders')}</p>
-             <p className="text-2xl font-bold text-slate-900">124</p>
-           </div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-           <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
-             <ClipboardList className="w-6 h-6" />
-           </div>
-           <div>
-             <p className="text-sm text-slate-500">{t('billOfMaterials')}</p>
-             <p className="text-2xl font-bold text-slate-900">45</p>
-           </div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-           <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center">
-             <Settings className="w-6 h-6" />
-           </div>
-           <div>
-             <p className="text-sm text-slate-500">{t('workCenters')}</p>
-             <p className="text-2xl font-bold text-slate-900">8</p>
-           </div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition">
-           <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center">
-             <Calendar className="w-6 h-6" />
-           </div>
-           <div>
-             <p className="text-sm text-slate-500">{t('scheduledOperations')}</p>
-             <p className="text-2xl font-bold text-slate-900">12</p>
-           </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex flex-wrap gap-4 items-center justify-between bg-slate-50">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-5 h-5 text-slate-400 absolute right-3 top-2.5" />
-            <input
-              type="text"
-              placeholder={t('searchPlaceholder')}
-              className="w-full pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition shadow-sm font-medium">
-              <Filter className="w-4 h-4" />
-              <span>{t('filterAndGroupBy')}</span>
-            </button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-sm">
-            <thead className="bg-slate-800 text-slate-100 font-medium">
-              <tr>
-                <th className="px-6 py-4">{t('colReference')}</th>
-                <th className="px-6 py-4">{t('colProduct')}</th>
-                <th className="px-6 py-4">{t('colQuantityToProduce')}</th>
-                <th className="px-6 py-4">{t('colUnitOfMeasure')}</th>
-                <th className="px-6 py-4">{t('colScheduledDate')}</th>
-                <th className="px-6 py-4">{t('colProgress')}</th>
-                <th className="px-6 py-4">{t('colStatus')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {orders.map((order, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition-colors bg-white">
-                  <td className="px-6 py-4 font-mono font-medium text-slate-600">{order.id}</td>
-                  <td className="px-6 py-4 font-bold text-indigo-700">{order.product}</td>
-                  <td className="px-6 py-4 font-bold text-slate-900">{order.quantity}</td>
-                  <td className="px-6 py-4 text-slate-600">{order.uom}</td>
-                  <td className="px-6 py-4 text-slate-600 font-medium">{order.date}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-full bg-slate-200 rounded-full h-2 max-w-[100px]">
-                           <div className={`h-2 rounded-full ${order.progress === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${order.progress}%` }}></div>
-                        </div>
-                        <span className="text-xs font-bold text-slate-600 w-8">{order.progress}%</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                     <span className={`px-2 py-1 rounded text-xs font-bold
-                        ${order.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
-                          order.status === 'CONFIRMED' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700'}`}>
-                        {statusLabel(order.status)}
-                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
+export const Manufacturing=()=>{
+  const {t}=useTranslation('manufacturing'); const {has}=usePermissions();
+  const [tab,setTab]=useState<Tab>('machines'); const [overview,setOverview]=useState<ManufacturingOverview|null>(null);
+  const [departments,setDepartments]=useState<ManufacturingDepartment[]>([]); const [machines,setMachines]=useState<ManufacturingMachine[]>([]);
+  const [downtime,setDowntime]=useState<DowntimeReason[]>([]); const [defects,setDefects]=useState<QualityDefect[]>([]);
+  const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [formOpen,setFormOpen]=useState(false);
+  const [editing,setEditing]=useState<any>(null); const [selected,setSelected]=useState<ManufacturingMachine|null>(null); const [history,setHistory]=useState<any>(null);
+  const canRef=has('manufacturing.reference.manage'), canMachines=has('manufacturing.machines.manage'), canMaint=has('manufacturing.maintenance.manage'), canQuality=has('manufacturing.quality.catalog.manage');
+  const load=useCallback(async()=>{setLoading(true);setError('');try{const [o,d,m,r,q]=await Promise.all([getManufacturingOverview(),listManufacturingDepartments(),listManufacturingMachines(),listDowntimeReasons(),listQualityDefects()]);setOverview(o);setDepartments(d);setMachines(m);setDowntime(r);setDefects(q);}catch(e){setError(e instanceof Error?e.message:t('error.load'));}finally{setLoading(false);}},[t]);
+  useEffect(()=>{void load();},[load]);
+  const cards=useMemo(()=>[
+    [t('summary.machines'),overview?.machines??0,Factory,'text-indigo-600 bg-indigo-50'],[t('summary.active'),overview?.active_machines??0,Gauge,'text-emerald-600 bg-emerald-50'],
+    [t('summary.unavailable'),overview?.unavailable_machines??0,AlertTriangle,'text-amber-600 bg-amber-50'],[t('summary.openMaintenance'),overview?.open_maintenance??0,Wrench,'text-rose-600 bg-rose-50'],
+  ] as const,[overview,t]);
+  const mayAdd=(tab==='machines'&&canMachines)||(tab==='defects'&&canQuality)||((tab==='departments'||tab==='downtime')&&canRef);
+  const openHistory=async(m:ManufacturingMachine)=>{setSelected(m);setHistory(null);try{setHistory(await getManufacturingMachineHistory(m.id));}catch(e){setError(e instanceof Error?e.message:t('error.load'));}};
+  return <div className="mx-auto max-w-7xl space-y-6" dir="rtl">
+    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold text-slate-900">{t('pageTitle')}</h1><p className="mt-1 text-slate-500">{t('referenceSubtitle')}</p></div><button onClick={()=>void load()} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-bold"><RefreshCw className="h-4 w-4"/>{t('refresh')}</button></header>
+    {error&&<div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{cards.map(([label,value,Icon,color])=><div key={label} className="flex items-center gap-4 rounded-xl border bg-white p-4 shadow-sm"><div className={`rounded-full p-3 ${color}`}><Icon className="h-5 w-5"/></div><div><p className="text-sm text-slate-500">{label}</p><p className="text-2xl font-bold">{value}</p></div></div>)}</div>
+    <section className="overflow-hidden rounded-xl border bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-3"><div className="flex flex-wrap gap-2">{(['machines','departments','downtime','defects'] as Tab[]).map(x=><button key={x} onClick={()=>{setTab(x);setFormOpen(false);}} className={`rounded-lg px-4 py-2 text-sm font-bold ${tab===x?'bg-indigo-600 text-white':'border bg-white text-slate-700'}`}>{t(`tabs.${x}`)}</button>)}</div>{mayAdd&&<button onClick={()=>{setEditing(null);setFormOpen(true);}} className={`${primary} flex items-center gap-2`}><Plus className="h-4 w-4"/>{t('add')}</button>}</div>
+      {formOpen&&<ReferenceForm tab={tab} editing={editing} departments={departments} t={t} onCancel={()=>setFormOpen(false)} onError={setError} onSaved={async()=>{setFormOpen(false);await load();}}/>}
+      <div className="overflow-x-auto">{loading?<div className="p-12 text-center text-slate-500">{t('loading')}</div>:tab==='machines'?<MachinesTable rows={machines} t={t} canEdit={canMachines} onEdit={m=>{setEditing(m);setFormOpen(true);}} onHistory={m=>void openHistory(m)}/>:tab==='departments'?<SimpleTable rows={departments} columns={['code','name','description','is_active']} onEdit={canRef?(x)=>{setEditing(x);setFormOpen(true);}:undefined} t={t}/>:tab==='downtime'?<SimpleTable rows={downtime} columns={['code','name','stage','is_planned','is_active']} onEdit={canRef?(x)=>{setEditing(x);setFormOpen(true);}:undefined} t={t}/>:<SimpleTable rows={defects} columns={['code','name','inspection_type','default_severity','description','is_active']} onEdit={canQuality?(x)=>{setEditing(x);setFormOpen(true);}:undefined} t={t}/>}</div>
+    </section>
+    {selected&&<MachinePanel machine={selected} history={history} t={t} canStatus={canMachines} canMaintenance={canMaint} onError={setError} onClose={()=>setSelected(null)} onChanged={async()=>{setSelected(null);await load();}}/>}
+  </div>;
 };
+
+function MachinesTable({rows,t,canEdit,onEdit,onHistory}:{rows:ManufacturingMachine[];t:any;canEdit:boolean;onEdit:(x:ManufacturingMachine)=>void;onHistory:(x:ManufacturingMachine)=>void}){
+  return <table className="w-full text-right text-sm"><thead className="bg-slate-800 text-white"><tr>{['code','name','type','department','location','ownership','status','actions'].map(x=><th key={x} className="px-4 py-3">{t(`columns.${x}`)}</th>)}</tr></thead><tbody className="divide-y">{rows.map(m=><tr key={m.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-mono">{m.code}</td><td className="px-4 py-3 font-bold">{m.name}</td><td className="px-4 py-3">{t(`machineType.${m.machine_type}`)}</td><td className="px-4 py-3">{m.department_name||'—'}</td><td className="px-4 py-3">{m.fixed_location||'—'}</td><td className="px-4 py-3">{t(`ownership.${m.ownership_type}`)}{m.owner_name?` — ${m.owner_name}`:''}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusColor[m.operational_status]}`}>{t(`machineStatus.${m.operational_status}`)}</span></td><td className="px-4 py-3"><div className="flex gap-3"><button onClick={()=>onHistory(m)} className="text-indigo-700 hover:underline">{t('history')}</button>{canEdit&&<button onClick={()=>onEdit(m)} className="text-slate-700 hover:underline">{t('edit')}</button>}</div></td></tr>)}</tbody></table>;
+}
+
+function SimpleTable({rows,columns,onEdit,t}:{rows:any[];columns:string[];onEdit?: (x:any)=>void;t:any}){const display=(v:unknown)=>typeof v==='boolean'?(v?t('yes'):t('no')):typeof v==='string'?t(`enum.${v}`,{defaultValue:v}):(v??'—');return <table className="w-full text-right text-sm"><thead className="bg-slate-800 text-white"><tr>{columns.map(c=><th key={c} className="px-4 py-3">{t(`columns.${c}`)}</th>)}{onEdit&&<th className="px-4 py-3">{t('columns.actions')}</th>}</tr></thead><tbody className="divide-y">{rows.map(r=><tr key={r.id} className="hover:bg-slate-50">{columns.map(c=><td key={c} className="px-4 py-3">{display(r[c])}</td>)}{onEdit&&<td className="px-4 py-3"><button onClick={()=>onEdit(r)} className="text-indigo-700 hover:underline">{t('edit')}</button></td>}</tr>)}</tbody></table>}
+
+function ReferenceForm({tab,editing,departments,onCancel,onSaved,onError,t}:{tab:Tab;editing:any;departments:ManufacturingDepartment[];onCancel:()=>void;onSaved:()=>void;onError:(x:string)=>void;t:any}){
+  const [data,setData]=useState<any>(()=>editing?{...editing,isActive:editing.is_active,isPlanned:editing.is_planned,departmentId:editing.department_id,machineType:editing.machine_type,widthCm:editing.width_cm,fixedLocation:editing.fixed_location,assetValue:editing.asset_value,assetCurrencyCode:editing.asset_currency_code,ownershipType:editing.ownership_type,ownerName:editing.owner_name,inspectionType:editing.inspection_type,defaultSeverity:editing.default_severity}:{code:'',name:'',isActive:true,isPlanned:false,machineType:'LOOM',ownershipType:'COMPANY',stage:'ALL',inspectionType:'ALL'}); const [saving,setSaving]=useState(false);
+  const field=(key:string,label:string,type='text')=><label className="space-y-1"><span className="text-xs font-bold">{label}</span><input type={type} value={data[key]??''} onChange={e=>setData({...data,[key]:type==='number'?(e.target.value===''?null:Number(e.target.value)):e.target.value})} className={input}/></label>;
+  const submit=async(e:React.FormEvent)=>{e.preventDefault();setSaving(true);onError('');try{const payload={...data,id:editing?.id,version:editing?.version};if(tab==='machines')await saveManufacturingMachine(payload);else if(tab==='departments')await saveManufacturingDepartment(payload);else if(tab==='downtime')await saveDowntimeReason(payload);else await saveQualityDefect(payload);await onSaved();}catch(x){onError(x instanceof Error?x.message:t('error.save'));}finally{setSaving(false);}};
+  return <form onSubmit={submit} className="border-b bg-indigo-50/40 p-4"><div className="grid gap-3 md:grid-cols-3">{field('code',t('form.code'))}{field('name',t('form.name'))}{tab==='departments'&&field('description',t('form.description'))}{tab==='machines'&&<><Select label={t('form.type')} value={data.machineType} values={['WARPING','SIZING','LOOM','PROCESSING','INSPECTION','OTHER']} onChange={v=>setData({...data,machineType:v})} t={x=>t(`machineType.${x}`)}/><label className="space-y-1"><span className="text-xs font-bold">{t('form.department')}</span><select value={data.departmentId??''} onChange={e=>setData({...data,departmentId:e.target.value||null})} className={input}><option value="">—</option>{departments.filter(x=>x.is_active).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>{field('fixedLocation',t('form.location'))}{field('widthCm',t('form.width'),'number')}<Select label={t('form.ownership')} value={data.ownershipType} values={['COMPANY','CUSTODY']} onChange={v=>setData({...data,ownershipType:v})} t={x=>t(`ownership.${x}`)}/>{data.ownershipType==='CUSTODY'&&field('ownerName',t('form.owner'))}{field('assetValue',t('form.assetValue'),'number')}{field('assetCurrencyCode',t('form.currency'))}{field('notes',t('form.notes'))}</>}{tab==='downtime'&&<><Select label={t('form.stage')} value={data.stage} values={['ALL','WARPING','SIZING','WEAVING','PROCESSING','INSPECTION']} onChange={v=>setData({...data,stage:v})}/><label className="flex items-end gap-2 pb-2"><input type="checkbox" checked={data.isPlanned} onChange={e=>setData({...data,isPlanned:e.target.checked})}/>{t('form.planned')}</label></>}{tab==='defects'&&<><Select label={t('form.inspectionType')} value={data.inspectionType} values={['ALL','WARP_BEAM','SIZED_BEAM','RAW_FABRIC','FINISHED_FABRIC']} onChange={v=>setData({...data,inspectionType:v})}/><Select label={t('form.severity')} value={data.defaultSeverity??''} values={['','MINOR','MAJOR','CRITICAL']} onChange={v=>setData({...data,defaultSeverity:v||null})}/>{field('description',t('form.description'))}</>}</div><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={onCancel} className="rounded-lg border px-4 py-2 text-sm">{t('cancel')}</button><button disabled={saving} className={primary}>{saving?t('saving'):t('save')}</button></div></form>;
+}
+
+function Select({label,value,values,onChange,t=(x:string)=>x}:{label:string;value:string;values:string[];onChange:(x:string)=>void;t?:(x:string)=>string}){return <label className="space-y-1"><span className="text-xs font-bold">{label}</span><select value={value} onChange={e=>onChange(e.target.value)} className={input}>{values.map(x=><option key={x||'empty'} value={x}>{x?t(x):'—'}</option>)}</select></label>}
+
+function MachinePanel({machine,history,canStatus,canMaintenance,onClose,onChanged,onError,t}:{machine:ManufacturingMachine;history:any;canStatus:boolean;canMaintenance:boolean;onClose:()=>void;onChanged:()=>void;onError:(x:string)=>void;t:any}){
+  const [status,setStatus]=useState<MachineStatus>(machine.operational_status),[reason,setReason]=useState(''),[description,setDescription]=useState(''),[busy,setBusy]=useState(false);
+  const run=async(fn:()=>Promise<unknown>)=>{setBusy(true);try{await fn();await onChanged();}catch(e){onError(e instanceof Error?e.message:t('error.save'));}finally{setBusy(false);}};
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"><div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white shadow-xl"><div className="flex justify-between border-b p-4"><div><h2 className="font-bold">{machine.code} — {machine.name}</h2><p className="text-sm text-slate-500">{t('history')}</p></div><button onClick={onClose}>✕</button></div><div className="space-y-5 p-4">{canStatus&&<div className="rounded-lg border p-3"><h3 className="mb-3 font-bold">{t('changeStatus')}</h3><div className="grid gap-2 md:grid-cols-3"><select value={status} onChange={e=>setStatus(e.target.value as MachineStatus)} className={input}>{['ACTIVE','STOPPED','MAINTENANCE','OUT_OF_SERVICE'].map(x=><option key={x} value={x}>{t(`machineStatus.${x}`)}</option>)}</select><input value={reason} onChange={e=>setReason(e.target.value)} placeholder={t('form.reason')} className={input}/><button disabled={busy||!reason.trim()||status===machine.operational_status} onClick={()=>void run(()=>changeManufacturingMachineStatus(machine.id,status,reason,machine.version))} className={primary}>{t('apply')}</button></div></div>}{canMaintenance&&<div className="rounded-lg border p-3"><h3 className="mb-3 font-bold">{t('addBreakdown')}</h3><div className="flex gap-2"><input value={description} onChange={e=>setDescription(e.target.value)} placeholder={t('form.description')} className={input}/><button disabled={busy||!description.trim()} onClick={()=>void run(()=>createManufacturingMaintenance(machine.id,{eventType:'BREAKDOWN',status:'OPEN',occurredAt:new Date().toISOString(),description}))} className={primary}>{t('save')}</button></div></div>}<History title={t('statusHistory')} rows={history?.statusEvents} render={(x:any)=>`${t(`machineStatus.${x.old_status}`)} ← ${t(`machineStatus.${x.new_status}`)} — ${x.reason}` } t={t}/><History title={t('maintenanceHistory')} rows={history?.maintenanceEvents} render={(x:any)=>`${x.description} — ${x.status}`} t={t}/></div></div></div>;
+}
+function History({title,rows,render,t}:{title:string;rows:any[]|undefined;render:(x:any)=>string;t:any}){return <div><h3 className="mb-2 font-bold">{title}</h3>{!rows?<p>{t('loading')}</p>:rows.length===0?<p className="text-sm text-slate-500">{t('noData')}</p>:<div className="space-y-2">{rows.map(x=><div key={x.id} className="rounded-lg bg-slate-50 p-2 text-sm">{render(x)}</div>)}</div>}</div>}
