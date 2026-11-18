@@ -11,6 +11,12 @@ import { resolveCashboxOutAmount } from '../services/cashboxCrossCurrencyService
 import { importDepartmentPayrollExcel } from '../services/hrPayrollImportService.js';
 import { applyVoucherConfirmation, insertDraftVoucher } from '../services/voucherCashboxService.js';
 import { insertAuditLog } from '../services/auditLogService.js';
+import {
+  applyItemsChange,
+  payrollItemSchema,
+  validatePayrollItems,
+} from '../services/hr/payrollLineItems.js';
+import { computeAnnualLeaveBalance } from '../services/hr/leaveBalance.js';
 
 const employeeBody = z.object({
   employeeCode: z.string().min(1),
@@ -121,6 +127,42 @@ function requirePermission(user: { role: string; permissions: string[] } | undef
 }
 
 export const payrollRoutes: FastifyPluginAsync = async (app) => {
+  // TASK 011: رصيد الإجازات السنوي المحسوب لكل موظف نشط — قراءة فقط، لا يغيّر أي بيانات.
+  // العمر وسنوات التأمينات غير مخزّنة بعد، فيُعلَّم من لا يمكن التحقق من شريحة الـ30 يوماً.
+  app.get('/leave-balances', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'payroll.view')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId } = req.user!;
+    const q = req.query as Record<string, string>;
+    const year = Number.parseInt(q.year ?? '', 10) || new Date().getFullYear();
+    if (year < 2000 || year > 2100) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+
+    const rows = await getPool().query<{ id: string; employee_code: string; full_name: string; department: string | null; hire_date: string | null }>(
+      `SELECT id, employee_code, full_name, department, hire_date::text AS hire_date
+         FROM payroll_employees WHERE company_id=$1 AND is_active = true
+        ORDER BY employee_code`,
+      [companyId],
+    );
+    const data = rows.rows.map((e) => {
+      const hire = e.hire_date?.slice(0, 10) ?? null;
+      const validHire = hire && hire >= '1990-01-01' ? hire : null;
+      const bal = validHire ? computeAnnualLeaveBalance({ hireDate: validHire, year }) : null;
+      return {
+        employeeId: e.id,
+        employeeCode: e.employee_code,
+        fullName: e.full_name,
+        department: e.department,
+        hireDate: validHire,
+        days: bal?.days ?? null,
+        rawDays: bal?.rawDays ?? null,
+        usableFrom: bal?.usableFrom ?? null,
+        missingHireDate: !validHire,
+        // 30 يوماً (عمر>50 أو 10 سنوات تأمين) لا يمكن تقييمها دون هذه البيانات.
+        seniorTierUnverified: true,
+      };
+    });
+    return reply.send({ ok: true, data: { year, rows: data } });
+  });
+
   app.get('/employees', { preHandler: authenticateRequest }, async (req, reply) => {
     if (!requirePermission(req.user, 'payroll.view')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     const { companyId } = req.user!;
@@ -913,7 +955,123 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
       [id, companyId],
     );
 
-    return reply.send({ ok: true, data: { ...run.rows[0], lines: lines.rows } });
+    // TASK 011: بنود تفصيل كل سطر (مكافأة، مشتريات، تسويات…) — تُرفَق بكل سطر.
+    const lineIds = lines.rows.map((l: { id: string }) => l.id);
+    const itemsByLine = new Map<string, unknown[]>();
+    if (lineIds.length) {
+      const items = await pool.query(
+        `SELECT id, payroll_run_line_id, kind, amount, note, created_at
+           FROM payroll_run_line_items
+          WHERE company_id=$1 AND payroll_run_line_id = ANY($2::uuid[])
+          ORDER BY created_at, id`,
+        [companyId, lineIds],
+      );
+      for (const it of items.rows as Array<{ payroll_run_line_id: string }>) {
+        const arr = itemsByLine.get(it.payroll_run_line_id) ?? [];
+        arr.push(it);
+        itemsByLine.set(it.payroll_run_line_id, arr);
+      }
+    }
+    const linesWithItems = lines.rows.map((l: { id: string }) => ({ ...l, items: itemsByLine.get(l.id) ?? [] }));
+
+    return reply.send({ ok: true, data: { ...run.rows[0], lines: linesWithItems } });
+  });
+
+  // TASK 011 (بشير): استبدال بنود تفصيل سطر راتب في مسير مسودة، وإعادة حساب السطر
+  // والمسير من القيم الحالية بطرح أثر البنود القديمة وإضافة الجديدة (لا تكرار احتساب).
+  // لا يلمس القيود: الترحيل يقرأ allowances/deductions كما هما.
+  app.put('/runs/:id/lines/:lineId/items', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'payroll.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId, sub: userId } = req.user!;
+    const { id, lineId } = req.params as { id: string; lineId: string };
+    const parsed = z.object({ items: z.array(payrollItemSchema).max(50) }).safeParse(req.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, parsed.error.issues[0]?.message || ArabicErrors.validation, 'VALIDATION');
+    }
+    const items = parsed.data.items;
+    const noteError = validatePayrollItems(items);
+    if (noteError) return sendError(reply, 400, noteError, 'VALIDATION');
+
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const run = await client.query<{ status: string }>(
+        `SELECT status FROM payroll_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [id, companyId],
+      );
+      if (!run.rows.length) {
+        await client.query('ROLLBACK');
+        return sendError(reply, 404, 'مسير الرواتب غير موجود', 'NOT_FOUND');
+      }
+      if (run.rows[0].status !== 'DRAFT') {
+        await client.query('ROLLBACK');
+        return sendError(reply, 400, 'لا يمكن تعديل بنود الراتب إلا في مسير مسودة', 'INVALID_STATE');
+      }
+      const line = await client.query<{ base_salary: string; allowances: string; deductions: string }>(
+        `SELECT base_salary, allowances, deductions FROM payroll_run_lines
+          WHERE id=$1 AND payroll_run_id=$2 AND company_id=$3 FOR UPDATE`,
+        [lineId, id, companyId],
+      );
+      if (!line.rows.length) {
+        await client.query('ROLLBACK');
+        return sendError(reply, 404, 'سطر الراتب غير موجود', 'NOT_FOUND');
+      }
+
+      const prevItems = await client.query<{ kind: string; amount: string }>(
+        `SELECT kind, amount FROM payroll_run_line_items WHERE payroll_run_line_id=$1 AND company_id=$2`,
+        [lineId, companyId],
+      );
+      const updated = applyItemsChange(
+        {
+          baseSalary: Number(line.rows[0].base_salary),
+          allowances: Number(line.rows[0].allowances),
+          deductions: Number(line.rows[0].deductions),
+        },
+        prevItems.rows.map((r) => ({ kind: r.kind as never, amount: Number(r.amount) })),
+        items,
+      );
+
+      await client.query(`DELETE FROM payroll_run_line_items WHERE payroll_run_line_id=$1 AND company_id=$2`, [
+        lineId,
+        companyId,
+      ]);
+      for (const it of items) {
+        await client.query(
+          `INSERT INTO payroll_run_line_items (company_id, payroll_run_line_id, kind, amount, note, created_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [companyId, lineId, it.kind, it.amount, it.note?.trim() || null, userId],
+        );
+      }
+      await client.query(
+        `UPDATE payroll_run_lines SET allowances=$4, deductions=$5, net_salary=$6
+          WHERE id=$1 AND payroll_run_id=$2 AND company_id=$3`,
+        [lineId, id, companyId, updated.allowances, updated.deductions, updated.net],
+      );
+      // إجماليات المسير تُعاد من مجموع السطور فعلياً (مصدر واحد، لا فروق تراكمية).
+      await client.query(
+        `UPDATE payroll_runs r SET
+           total_base = s.tb, total_allowances = s.ta, total_deductions = s.td, total_net = s.tn,
+           updated_at = now()
+         FROM (
+           SELECT COALESCE(SUM(base_salary),0) AS tb, COALESCE(SUM(allowances),0) AS ta,
+                  COALESCE(SUM(deductions),0) AS td, COALESCE(SUM(net_salary),0) AS tn
+             FROM payroll_run_lines WHERE payroll_run_id=$1 AND company_id=$2
+         ) s
+         WHERE r.id=$1 AND r.company_id=$2`,
+        [id, companyId],
+      );
+      await client.query('COMMIT');
+      return reply.send({
+        ok: true,
+        data: { lineId, allowances: updated.allowances, deductions: updated.deductions, net: updated.net, items },
+      });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   });
 
   app.post('/runs/import-excel', { preHandler: authenticateRequest }, async (req, reply) => {

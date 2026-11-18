@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { PayrollLineItemsModal } from '../components/hr/PayrollLineItemsModal';
+import { LeaveBalancesModal } from '../components/hr/LeaveBalancesModal';
 import {
   Briefcase,
   BanknoteArrowDown,
@@ -108,6 +110,8 @@ export const Salaries = () => {
   const [payingInstallmentId, setPayingInstallmentId] = useState<string | null>(null);
   const [printRun, setPrintRun] = useState<PayrollRunDto | null>(null);
   const [printRunLines, setPrintRunLines] = useState<PayrollRunLineDto[]>([]);
+  const [itemsEditLine, setItemsEditLine] = useState<PayrollRunLineDto | null>(null);
+  const [leaveBalancesOpen, setLeaveBalancesOpen] = useState(false);
   const [printRunLoading, setPrintRunLoading] = useState(false);
   const [groupByField, setGroupByField] = useState<'department' | 'factory' | 'category'>('department');
   const [compareOpen, setCompareOpen] = useState(false);
@@ -196,6 +200,7 @@ export const Salaries = () => {
       netSalary: Number(line.net_salary),
       currencyCode: run.currency_code,
       detail: line.excel_detail,
+      items: (line.items ?? []).map((it) => ({ kind: it.kind, amount: Number(it.amount), note: it.note })),
     });
     openDocumentPrintWindow(html, `كشف راتب - ${line.employee_name}`);
   }
@@ -634,6 +639,10 @@ export const Salaries = () => {
             {t('buttons.payrollLog')}
           </Link>
           <ExchangeRatePopupButton onRatesChange={setExchangeRates} />
+          <button type="button" onClick={() => setLeaveBalancesOpen(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-50">
+            <Briefcase className="w-4 h-4" />
+            {t('leaveBalances.open')}
+          </button>
           {hasPermission('payroll.manage') && (
             <button type="button" onClick={() => setImportModalOpen(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-50">
               <Upload className="w-4 h-4" />
@@ -1115,6 +1124,18 @@ export const Salaries = () => {
                         <span className="font-mono text-xs text-slate-500">{line.employee_code}</span>{' '}
                         <span className="font-bold text-slate-800">{line.employee_name}</span>
                       </span>
+                      {printRun.status === 'DRAFT' && hasPermission('payroll.manage') && (
+                        <button
+                          type="button"
+                          onClick={() => setItemsEditLine(line)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          {t('lineItems.openButton')}
+                          {(line.items?.length ?? 0) > 0 && (
+                            <span className="rounded-full bg-indigo-600 px-1.5 text-[10px] text-white">{line.items?.length}</span>
+                          )}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => printIndividualPayslip(printRun, line)}
@@ -1130,6 +1151,20 @@ export const Salaries = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {leaveBalancesOpen && <LeaveBalancesModal onClose={() => setLeaveBalancesOpen(false)} />}
+
+      {printRun && itemsEditLine && (
+        <PayrollLineItemsModal
+          runId={printRun.id}
+          line={itemsEditLine}
+          onClose={() => setItemsEditLine(null)}
+          onSaved={() => {
+            void openPrintRunModal(printRun);
+            void load();
+          }}
+        />
       )}
 
       {compareOpen && (
