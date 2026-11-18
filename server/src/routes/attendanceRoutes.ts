@@ -12,7 +12,10 @@ import {
   createShiftType,
   computeMonthlyAttendanceSummaries,
   approveMonthlyAttendanceReview,
+  setAttendanceStatus,
+  computeMonthlyStatusEffects,
 } from '../services/attendanceService.js';
+import { ATTENDANCE_STATUS_CODES } from '../services/hr/attendanceStatus.js';
 import { insertAuditLog } from '../services/auditLogService.js';
 
 function requirePermission(user: { role: string; permissions: string[] } | undefined, code: string): boolean {
@@ -60,7 +63,63 @@ const manualUpdateBody = z.object({
   reason: z.string().min(1, 'سبب التعديل مطلوب'),
 });
 
+const setStatusBody = z.object({
+  employeeId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // null = مسح الحالة
+  statusCode: z.enum(ATTENDANCE_STATUS_CODES as [string, ...string[]]).nullable(),
+  reason: z.string().trim().min(1, 'سبب التعديل مطلوب'),
+});
+
 export const attendanceRoutes: FastifyPluginAsync = async (app) => {
+  // TASK 013: ضبط/مسح حالة يوم (غ، س، ع، م، ز، ج…) — ينشئ سجل اليوم إن لم يوجد. لا يمسّ الرواتب.
+  app.put('/status', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId, sub: userId } = req.user!;
+    const parsed = setStatusBody.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || ArabicErrors.validation, 'VALIDATION');
+    const d = parsed.data;
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const row = await setAttendanceStatus(client, {
+        companyId, userId, employeeId: d.employeeId, date: d.date, statusCode: d.statusCode, reason: d.reason,
+      });
+      await insertAuditLog(client, {
+        companyId,
+        userId,
+        action: 'ATTENDANCE_STATUS_SET',
+        entityType: 'attendance_daily_record',
+        entityId: row.id,
+        details: { employeeId: d.employeeId, date: d.date, statusCode: d.statusCode, reason: d.reason },
+      });
+      await client.query('COMMIT');
+      return reply.send({ ok: true, data: row });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
+      if (err?.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
+      return sendError(reply, 500, ArabicErrors.server, 'SERVER');
+    } finally {
+      client.release();
+    }
+  });
+
+  // TASK 013: معاينة أثر حالات شهر على الراتب ورصيد الإجازات (قراءة فقط).
+  app.get('/monthly-effects', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId } = req.user!;
+    const q = req.query as Record<string, string>;
+    const year = Number.parseInt(q.year ?? '', 10);
+    const month = Number.parseInt(q.month ?? '', 10);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
+      return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    }
+    const rows = await computeMonthlyStatusEffects(companyId, year, month, q.employeeId || undefined);
+    return reply.send({ ok: true, data: { year, month, rows } });
+  });
+
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
     if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     const { companyId } = req.user!;

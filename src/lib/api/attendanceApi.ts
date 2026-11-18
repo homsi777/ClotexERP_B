@@ -13,6 +13,8 @@ export interface AttendanceRecordDto {
   permission_minutes: string;
   total_hours: string;
   day_type: 'WORK' | 'REST' | 'HOLIDAY';
+  /** TASK 013: رمز حالة اليوم (غ، س، ع…) إن سُجّل. */
+  status_code: string | null;
   source: 'IMPORTED' | 'MANUAL';
   source_file: string | null;
   edited_at: string | null;
@@ -107,4 +109,53 @@ export async function updateAttendanceRecord(
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+}
+
+// ─── TASK 013: حالات الحضور وأثرها (معاينة، لا ترحيل للرواتب) ─────────────────
+
+export interface MonthlyStatusSummaryDto {
+  year: number;
+  month: number;
+  dayWage: number;
+  counts: Record<string, number>;
+  leaveDaysUsed: number;
+  halfPayDays: number;
+  halfPayDeduction: number;
+  unauthorizedAbsenceDays: number;
+  absenceRule: 'GRADUATED' | 'LEGACY_FLAT_2';
+  absenceWageDeduction: number;
+  absencePenaltyDeduction: number;
+  absenceDeduction: number;
+  totalPayrollDeduction: number;
+  unknownStatuses: string[];
+}
+
+export interface MonthlyEffectsRowDto {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  salaryPeriod: string;
+  comprehensiveWage: number;
+  moneyComputed: boolean;
+  summary: MonthlyStatusSummaryDto;
+}
+
+export async function setAttendanceStatus(payload: {
+  employeeId: string;
+  date: string;
+  statusCode: string | null;
+  reason: string;
+}) {
+  return apiFetch<{ ok: boolean; data: AttendanceRecordDto }>('/api/attendance/status', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getMonthlyStatusEffects(year: number, month: number, employeeId?: string) {
+  const q = new URLSearchParams({ year: String(year), month: String(month) });
+  if (employeeId) q.set('employeeId', employeeId);
+  return apiFetch<{ ok: boolean; data: { year: number; month: number; rows: MonthlyEffectsRowDto[] } }>(
+    `/api/attendance/monthly-effects?${q}`,
+  );
 }
