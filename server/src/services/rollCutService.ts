@@ -117,7 +117,6 @@ export async function cutAndSellRoll(
     lines: [
       {
         fabricRollId: roll.id,
-        commodityType: 'FABRIC',
         fabricItemId: roll.item_id,
         variantId: roll.variant_id,
         warehouseId: roll.warehouse_id,

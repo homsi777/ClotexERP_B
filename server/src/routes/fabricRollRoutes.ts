@@ -198,6 +198,8 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
       if (err?.constraint === 'uq_roll_cut_per_invoice') {
         return sendError(reply, 409, 'عملية القص مسجّلة مسبقاً لهذه الفاتورة', 'DUPLICATE');
       }
+      // 23505 = تصادم باركود القطعة المقصوصة (سباق نادر بين قصّين متزامنين) — المعاملة تراجعت كاملة.
+      if (err?.code === '23505') return sendError(reply, 409, 'تعارض مؤقت في توليد الباركود — أعد محاولة القص', 'DUPLICATE');
       if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
       if (err?.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
       if (err?.code === 'INVALID_STOCK') return sendError(reply, 409, err.message || 'المخزون غير كافٍ', 'INVALID_STOCK');
