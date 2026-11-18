@@ -20,7 +20,13 @@ export const ADDITION_KINDS = [
   'SALARY_ADJUSTMENT',
   'SETTLEMENT_ADD',
 ] as const;
-export const DEDUCTION_KINDS = ['PURCHASE_DEDUCTION', 'SETTLEMENT_DEDUCT'] as const;
+export const DEDUCTION_KINDS = [
+  'PURCHASE_DEDUCTION',
+  'SETTLEMENT_DEDUCT',
+  // TASK 014: تأتي من حالات الحضور (يعبّئها المحاسب ويحفظها بنفسه).
+  'ATTENDANCE_ABSENCE_DEDUCTION',
+  'ATTENDANCE_HALF_PAY_DEDUCTION',
+] as const;
 
 export const PAYROLL_ITEM_KINDS = [...ADDITION_KINDS, ...DEDUCTION_KINDS] as const;
 export type PayrollItemKind = (typeof PAYROLL_ITEM_KINDS)[number];

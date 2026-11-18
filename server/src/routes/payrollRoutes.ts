@@ -142,6 +142,16 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
         ORDER BY employee_code`,
       [companyId],
     );
+    // TASK 014: الأيام المستخدمة فعلاً من الرصيد في السنة = (س + ع + ج) من حالات الحضور المسجّلة.
+    const used = await getPool().query<{ employee_id: string; used: string }>(
+      `SELECT employee_id, COUNT(*)::text AS used
+         FROM attendance_daily_records
+        WHERE company_id=$1 AND status_code IN ('ANNUAL','CASUAL','PERMITTED_ABSENCE')
+          AND attendance_date >= make_date($2,1,1) AND attendance_date <= make_date($2,12,31)
+        GROUP BY employee_id`,
+      [companyId, year],
+    );
+    const usedByEmp = new Map(used.rows.map((r) => [r.employee_id, Number(r.used)]));
     const data = rows.rows.map((e) => {
       const hire = e.hire_date?.slice(0, 10) ?? null;
       const validHire = hire && hire >= '1990-01-01' ? hire : null;
@@ -153,6 +163,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
         department: e.department,
         hireDate: validHire,
         days: bal?.days ?? null,
+        usedDays: usedByEmp.get(e.id) ?? 0,
+        remainingDays: bal ? bal.days - (usedByEmp.get(e.id) ?? 0) : null,
         rawDays: bal?.rawDays ?? null,
         usableFrom: bal?.usableFrom ?? null,
         missingHireDate: !validHire,

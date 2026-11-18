@@ -221,7 +221,9 @@
       "SALARY_ADJUSTMENT": "تعديل راتب",
       "SETTLEMENT_ADD": "تسوية بالإضافة",
       "PURCHASE_DEDUCTION": "خصم مشتريات",
-      "SETTLEMENT_DEDUCT": "تسوية بالخصم"
+      "SETTLEMENT_DEDUCT": "تسوية بالخصم",
+      "ATTENDANCE_ABSENCE_DEDUCTION": "خصم غياب بدون إذن",
+      "ATTENDANCE_HALF_PAY_DEDUCTION": "خصم نصف أجر (مرضية/زواج)"
     },
     "groupAdditions": "استحقاقات",
     "groupDeductions": "استقطاعات",
@@ -239,7 +241,14 @@
     "saved": "تم حفظ بنود الراتب",
     "saveFailed": "تعذّر حفظ بنود الراتب",
     "draftOnly": "التعديل متاح في المسير المسودة فقط",
-    "empty": "لا بنود بعد"
+    "empty": "لا بنود بعد",
+    "fromAttendance": "جلب الخصم من الحضور",
+    "fromAttendanceDone": "عُبّئت بنود الحضور — راجعها ثم احفظ",
+    "fromAttendanceNone": "لا خصم من الحضور لهذا الموظف في هذا الشهر",
+    "fromAttendanceWeekly": "راتب أسبوعي: لا قاعدة لأجر اليوم",
+    "fromAttendanceFailed": "تعذّر جلب بيانات الحضور",
+    "importedWarning": "هذا السطر مستورد من Excel وقد يتضمن خصم الغياب أصلاً. أضف بنود الحضور فقط إن كان الغياب غير محسوب بالكشف المستورد، وإلا ستُخصم مرتين.",
+    "importedConfirm": "السطر مستورد من Excel وقد يشمل خصم الغياب. هل أنت متأكد أنه غير محسوب ضمنه؟"
   },
   "leaveBalances": {
     "title": "أرصدة الإجازات السنوية",
@@ -251,6 +260,8 @@
     "colHire": "تاريخ التعيين",
     "colDays": "الرصيد (يوم)",
     "colUsable": "يُتاح الاستخدام من",
-    "open": "أرصدة الإجازات"
+    "open": "أرصدة الإجازات",
+    "colUsed": "المستخدم",
+    "colRemaining": "المتبقي"
   }
 }
