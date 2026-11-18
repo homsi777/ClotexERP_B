@@ -118,6 +118,7 @@
   "statementTable.totalDebit": "Toplam Borç ({{currency}}): {{amount}}",
   "statementTable.totalCredit": "Toplam Alacak ({{currency}}): {{amount}}",
   "statementTable.finalBalance": "Nihai Bakiye ({{currency}}): {{amount}}",
+  "statementTable.noConversionOption": "Dönüşümsüz (her para birimi ayrı)",
   "statementTable.displayCurrencyLabel": "Görüntüleme para birimi:",
 
   "byCurrency.title": "Her Para Birimi İçin Bağımsız Bakiye",

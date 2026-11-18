@@ -182,6 +182,35 @@ export interface PayrollRunLineDto {
   net_salary: string;
   excel_detail: Record<string, unknown> | null;
   notes: string | null;
+  /** TASK 011: بنود تفصيل الراتب (مكافأة، مشتريات، تسويات…). */
+  items?: PayrollLineItemDto[];
+}
+
+export type PayrollLineItemKind =
+  | 'BONUS'
+  | 'TRANSPORT'
+  | 'ANNUAL_INCREASE'
+  | 'SALARY_ADJUSTMENT'
+  | 'SETTLEMENT_ADD'
+  | 'PURCHASE_DEDUCTION'
+  | 'SETTLEMENT_DEDUCT';
+
+export interface PayrollLineItemDto {
+  id?: string;
+  kind: PayrollLineItemKind;
+  amount: string | number;
+  note: string | null;
+}
+
+export async function savePayrollLineItems(
+  runId: string,
+  lineId: string,
+  items: Array<{ kind: PayrollLineItemKind; amount: number; note?: string | null }>,
+) {
+  return apiFetch<{ ok: boolean; data: { lineId: string; allowances: number; deductions: number; net: number } }>(
+    `/api/payroll/runs/${runId}/lines/${lineId}/items`,
+    { method: 'PUT', body: JSON.stringify({ items }) },
+  );
 }
 
 export async function getPayrollRunDetail(runId: string) {
@@ -328,4 +357,23 @@ export interface PayrollAuditLogEntry {
 
 export async function listPayrollAuditLog(limit = 100) {
   return apiFetch<{ ok: boolean; data: PayrollAuditLogEntry[] }>(`/api/payroll/audit-log?limit=${limit}`);
+}
+
+export interface LeaveBalanceRow {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  department: string | null;
+  hireDate: string | null;
+  days: number | null;
+  rawDays: number | null;
+  usableFrom: string | null;
+  missingHireDate: boolean;
+  seniorTierUnverified: boolean;
+}
+
+export async function getLeaveBalances(year: number) {
+  return apiFetch<{ ok: boolean; data: { year: number; rows: LeaveBalanceRow[] } }>(
+    `/api/payroll/leave-balances?year=${year}`,
+  );
 }

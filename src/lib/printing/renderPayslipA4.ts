@@ -1,4 +1,5 @@
 import { BRAND } from '../../branding';
+import { payslipItemRows, type PayslipItem } from './payslipItems';
 
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
 const NAVY = '#2C405A';
@@ -20,7 +21,10 @@ export type PayslipData = {
   currencyCode: string;
   /** عناوين عربية → قيم — من excel_detail، يُعرَض كما هو بلا تعديل. */
   detail?: Record<string, unknown> | null;
+  /** TASK 011: بنود تفصيل الراتب (مكافأة، مشتريات، تسويات…) — تُعرض بجدول مستقل إن وُجدت. */
+  items?: PayslipItem[] | null;
 };
+
 
 function esc(s: unknown): string {
   return String(s ?? '')
@@ -50,6 +54,7 @@ function detailRows(detail: Record<string, unknown> | null | undefined): string 
 
 export function renderPayslipA4Html(data: PayslipData): string {
   const detailHtml = detailRows(data.detail);
+  const itemsHtml = payslipItemRows(data.items);
   return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -76,6 +81,7 @@ export function renderPayslipA4Html(data: PayslipData): string {
   .detail-table th { background:#f1f5f9; padding:6px 8px; text-align:${'right'}; font-weight:800; color:#475569; }
   .det-label { padding:4px 8px; border-bottom:1px solid #f1f5f9; color:#64748b; }
   .det-value { padding:4px 8px; border-bottom:1px solid #f1f5f9; text-align:left; direction:ltr; font-weight:700; }
+  .det-note { color:#94a3b8; font-weight:400; }
   .sign-table { width:100%; border-collapse:separate; border-spacing:10px 0; margin-top:20px; }
   .sign-table td { width:50%; border:1px solid #cbd5e1; border-radius:8px; padding:10px; font-size:11px; }
   .sign-line { margin-top:20px; border-bottom:1px solid #94a3b8; }
@@ -112,6 +118,8 @@ export function renderPayslipA4Html(data: PayslipData): string {
     <tr><td class="lbl">إجمالي المستقطع</td><td class="val">-${money(data.deductions)}</td></tr>
     <tr class="net-row"><td class="lbl">الصافي النهائي</td><td class="val">${money(data.netSalary)} ${esc(data.currencyCode)}</td></tr>
   </table>
+
+  ${itemsHtml ? `<table class="detail-table"><tr><th colspan="2">بنود الراتب</th></tr>${itemsHtml}</table>` : ''}
 
   ${detailHtml ? `<table class="detail-table"><tr><th colspan="2">تفاصيل الكشف الأصلي</th></tr>${detailHtml}</table>` : ''}
 

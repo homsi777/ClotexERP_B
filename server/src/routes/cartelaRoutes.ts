@@ -612,33 +612,68 @@ export const cartelaRoutes: FastifyPluginAsync = async (app) => {
     const { cartelaId } = req.params as { cartelaId: string };
     const search = String((req.query as Record<string, string>).search ?? '').trim();
     try {
-      const parent = await getPool().query<{ art_code: string }>(
-        `SELECT art_code FROM cartela_labels WHERE id = $1 AND company_id = $2`,
+      const parent = await getPool().query<{ art_code: string; fabric_item_id: string | null }>(
+        `SELECT art_code, fabric_item_id FROM cartela_labels WHERE id = $1 AND company_id = $2`,
         [cartelaId, companyId],
       );
       if (!parent.rows.length) return sendError(reply, 404, 'الكارتيلا غير موجودة', 'NOT_FOUND');
-      const artCode = parent.rows[0].art_code.trim();
-      if (!artCode) return reply.send({ ok: true, data: [] });
+      const artCode = (parent.rows[0].art_code ?? '').trim();
+      const fabricItemId = parent.rows[0].fabric_item_id;
+      if (!artCode && !fabricItemId) return reply.send({ ok: true, data: [] });
 
-      const params: unknown[] = [companyId, artCode];
-      let searchClause = '';
-      if (search) {
-        params.push(`%${search}%`);
-        searchClause = ` AND (fc.name_ar ILIKE $3 OR fc.name_tr ILIKE $3 OR fc.color_code ILIKE $3)`;
+      const searchLike = search ? `%${search}%` : null;
+      const colorCols = 'fc.id, fc.name_ar, fc.name_tr, fc.color_code, fc.supplier_color_code, fc.hex_color';
+      type CatalogRow = { id: string; name_ar: string | null; name_tr: string | null; color_code: string | null };
+      const merged = new Map<string, CatalogRow>();
+
+      // TASK 010 (بشير): ألوان الخامة المرتبطة بالكارتيلة (متغيّرات الخامة) — المصدر الأول.
+      // قراءة فقط من fabric_item_variants/fabric_colors؛ لا تُنشأ أي بيانات هنا.
+      if (fabricItemId) {
+        const params: unknown[] = [companyId, fabricItemId];
+        let searchClause = '';
+        if (searchLike) {
+          params.push(searchLike);
+          searchClause = ` AND (fc.name_ar ILIKE $3 OR fc.name_tr ILIKE $3 OR fc.color_code ILIKE $3)`;
+        }
+        const byItem = await getPool().query<CatalogRow>(
+          `SELECT DISTINCT ${colorCols}
+             FROM fabric_item_variants v
+             JOIN fabric_colors fc ON fc.id = v.color_id
+            WHERE v.company_id = $1 AND v.item_id = $2${searchClause}
+            ORDER BY fc.name_ar ASC
+            LIMIT 100`,
+          params,
+        );
+        for (const r of byItem.rows) merged.set(r.id, r);
       }
-      const rows = await getPool().query(
-        `SELECT DISTINCT fc.id, fc.name_ar, fc.name_tr, fc.color_code, fc.supplier_color_code, fc.hex_color
-           FROM cartela_label_colors clc
-           JOIN cartela_labels cl ON cl.id = clc.cartela_label_id
-           JOIN fabric_colors fc ON fc.id = clc.fabric_color_id
-          WHERE cl.company_id = $1
-            AND lower(trim(cl.art_code)) = lower($2)
-            AND clc.fabric_color_id IS NOT NULL${searchClause}
-          ORDER BY fc.name_ar ASC
-          LIMIT 30`,
-        params,
-      );
-      return reply.send({ ok: true, data: rows.rows });
+
+      // السلوك السابق يبقى مكمِّلاً: ألوان رُبطت فعلاً بكارتيلة أخرى بنفس كود الدسان.
+      if (artCode) {
+        const params: unknown[] = [companyId, artCode];
+        let searchClause = '';
+        if (searchLike) {
+          params.push(searchLike);
+          searchClause = ` AND (fc.name_ar ILIKE $3 OR fc.name_tr ILIKE $3 OR fc.color_code ILIKE $3)`;
+        }
+        const byArt = await getPool().query<CatalogRow>(
+          `SELECT DISTINCT ${colorCols}
+             FROM cartela_label_colors clc
+             JOIN cartela_labels cl ON cl.id = clc.cartela_label_id
+             JOIN fabric_colors fc ON fc.id = clc.fabric_color_id
+            WHERE cl.company_id = $1
+              AND lower(trim(cl.art_code)) = lower($2)
+              AND clc.fabric_color_id IS NOT NULL${searchClause}
+            ORDER BY fc.name_ar ASC
+            LIMIT 100`,
+          params,
+        );
+        for (const r of byArt.rows) if (!merged.has(r.id)) merged.set(r.id, r);
+      }
+
+      const data = Array.from(merged.values())
+        .sort((a, b) => (a.name_ar ?? a.color_code ?? '').localeCompare(b.name_ar ?? b.color_code ?? '', 'ar'))
+        .slice(0, 100);
+      return reply.send({ ok: true, data });
     } catch (err) {
       if (mapCartelaDbError(reply, err)) return reply;
       throw err;

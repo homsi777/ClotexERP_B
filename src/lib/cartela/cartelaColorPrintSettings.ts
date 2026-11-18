@@ -8,6 +8,22 @@ export type CartelaColorPrintSettings = {
   showColorName: boolean;
 };
 
+/**
+ * TASK 010 (بشير): مقاس ستيكر اللون 2.5×5 سم = خلية 25 مم عرضاً × 50 مم ارتفاعاً،
+ * 3 خلايا بالسطر = 78 مم على رول 80×50 نفسه المستخدم لستيكر الكارتيلة.
+ * يُطبَّق لطباعة واحدة فقط ولا يُحفظ فوق الإعدادات الافتراضية للمستخدم.
+ */
+export const CARTELA_COLOR_PRESET_2_5X5: Pick<
+  CartelaColorPrintSettings,
+  'cellWidthMm' | 'cellHeightMm' | 'gapMm' | 'barcodeHeightMm' | 'codeFontPt'
+> = {
+  cellWidthMm: 25,
+  cellHeightMm: 50,
+  gapMm: 1.5,
+  barcodeHeightMm: 12,
+  codeFontPt: 8,
+};
+
 export const CARTELA_COLOR_PRINT_SETTINGS_KEY = 'clotex.cartelaColorPrintSettings.v1';
 
 export const DEFAULT_CARTELA_COLOR_PRINT_SETTINGS: CartelaColorPrintSettings = {
@@ -31,7 +47,7 @@ export function normalizeCartelaColorPrintSettings(
   const d = DEFAULT_CARTELA_COLOR_PRINT_SETTINGS;
   return {
     cellWidthMm: clamp(Number(raw?.cellWidthMm ?? d.cellWidthMm), 12, 40),
-    cellHeightMm: clamp(Number(raw?.cellHeightMm ?? d.cellHeightMm), 8, 25),
+    cellHeightMm: clamp(Number(raw?.cellHeightMm ?? d.cellHeightMm), 8, 50),
     gapMm: clamp(Number(raw?.gapMm ?? d.gapMm), 0, 6),
     barcodeHeightMm: clamp(Number(raw?.barcodeHeightMm ?? d.barcodeHeightMm), 4, 14),
     codeFontPt: clamp(Number(raw?.codeFontPt ?? d.codeFontPt), 4, 12),

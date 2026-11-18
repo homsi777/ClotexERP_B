@@ -118,6 +118,7 @@
   "statementTable.totalDebit": "إجمالي المدين ({{currency}}): {{amount}}",
   "statementTable.totalCredit": "إجمالي الدائن ({{currency}}): {{amount}}",
   "statementTable.finalBalance": "الرصيد النهائي ({{currency}}): {{amount}}",
+  "statementTable.noConversionOption": "بدون تحويل (كل عملة منفصلة)",
   "statementTable.displayCurrencyLabel": "عملة العرض:",
 
   "byCurrency.title": "الأرصدة المستقلة لكل عملة",

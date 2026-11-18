@@ -511,10 +511,12 @@ export const CartelaColorSwatchesPanel: React.FC<SwatchPanelProps> = ({ cartelaI
   const [colorQuery, setColorQuery] = useState('');
   const [colorSearching, setColorSearching] = useState(false);
   const [colorResults, setColorResults] = useState<ApiFabricColor[]>([]);
+  // TASK 010: تُعرض ألوان الخامة فور التركيز على الحقل (بلا اشتراط كتابة حرفين).
+  const [catalogFocused, setCatalogFocused] = useState(false);
 
   useEffect(() => {
     const q = colorQuery.trim();
-    if (pickedFabricColorId || q.length < 2) {
+    if (pickedFabricColorId || (q.length < 2 && !catalogFocused)) {
       setColorResults([]);
       return;
     }
@@ -528,7 +530,7 @@ export const CartelaColorSwatchesPanel: React.FC<SwatchPanelProps> = ({ cartelaI
         .finally(() => setColorSearching(false));
     }, 280);
     return () => window.clearTimeout(timer);
-  }, [colorQuery, pickedFabricColorId, cartelaId]);
+  }, [colorQuery, pickedFabricColorId, cartelaId, catalogFocused]);
 
   const pickCatalogColor = (color: ApiFabricColor) => {
     setPickedFabricColorId(color.id);
@@ -889,6 +891,7 @@ export const CartelaColorSwatchesPanel: React.FC<SwatchPanelProps> = ({ cartelaI
                     <input
                       value={colorQuery}
                       onChange={(e) => setColorQuery(e.target.value)}
+                      onFocus={() => setCatalogFocused(true)}
                       placeholder={t('colorPanels.swatches.catalogSearchPlaceholder')}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     />
@@ -916,7 +919,7 @@ export const CartelaColorSwatchesPanel: React.FC<SwatchPanelProps> = ({ cartelaI
                         ))}
                       </div>
                     )}
-                    {!colorSearching && colorQuery.trim().length >= 2 && colorResults.length === 0 && (
+                    {!colorSearching && (colorQuery.trim().length >= 2 || catalogFocused) && colorResults.length === 0 && (
                       <p className="mt-1 text-xs text-slate-500">{t('colorPanels.swatches.catalogNoResults')}</p>
                     )}
                   </div>

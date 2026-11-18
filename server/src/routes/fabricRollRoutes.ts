@@ -8,6 +8,7 @@ import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { confirmPurchaseInvoice, createPurchaseInvoice } from '../services/purchaseInvoiceService.js';
 import { repairRollStuckAfterVoidedSale } from '../services/salesInvoiceService.js';
+import { cutAndSellRoll, listRollCuts } from '../services/rollCutService.js';
 import { postPurchaseInvoiceToGl, reversePurchaseInvoiceGl } from '../services/glPostingService.js';
 import {
   VALID_STATUSES,
@@ -181,6 +182,48 @@ const ROLL_JOINS = `
 // ─── Route plugin ────────────────────────────────────────────────────────────
 
 export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
+  // ── TASK 009 (بشير): قص التوب والبيع المباشر ──
+  // يعيد استخدام محرك البيع الجزئي الحالي داخل معاملة واحدة ذرّية؛ لا محرك جديد.
+  app.post('/cut', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId, sub: userId } = req.user!;
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const result = await cutAndSellRoll(client, companyId, userId, req.body);
+      await client.query('COMMIT');
+      return reply.status(201).send({ ok: true, data: result });
+    } catch (e: unknown) {
+      await client.query('ROLLBACK');
+      const err = e as { code?: string; message?: string; constraint?: string };
+      if (err?.constraint === 'uq_roll_cut_per_invoice') {
+        return sendError(reply, 409, 'عملية القص مسجّلة مسبقاً لهذه الفاتورة', 'DUPLICATE');
+      }
+      // 23505 = تصادم باركود القطعة المقصوصة (سباق نادر بين قصّين متزامنين) — المعاملة تراجعت كاملة.
+      if (err?.code === '23505') return sendError(reply, 409, 'تعارض مؤقت في توليد الباركود — أعد محاولة القص', 'DUPLICATE');
+      if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
+      if (err?.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
+      if (err?.code === 'INVALID_STOCK') return sendError(reply, 409, err.message || 'المخزون غير كافٍ', 'INVALID_STOCK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
+  app.get('/cut-log', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const q = req.query as Record<string, string>;
+    const client = await getPool().connect();
+    try {
+      const rows = await listRollCuts(client, companyId, {
+        search: q.search,
+        limit: q.limit ? parseInt(q.limit, 10) : undefined,
+      });
+      return reply.send({ ok: true, data: rows });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── A. List rolls ────────────────────────────────────────────────────────
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
