@@ -193,7 +193,9 @@ export type PayrollLineItemKind =
   | 'SALARY_ADJUSTMENT'
   | 'SETTLEMENT_ADD'
   | 'PURCHASE_DEDUCTION'
-  | 'SETTLEMENT_DEDUCT';
+  | 'SETTLEMENT_DEDUCT'
+  | 'ATTENDANCE_ABSENCE_DEDUCTION'
+  | 'ATTENDANCE_HALF_PAY_DEDUCTION';
 
 export interface PayrollLineItemDto {
   id?: string;
@@ -366,6 +368,8 @@ export interface LeaveBalanceRow {
   department: string | null;
   hireDate: string | null;
   days: number | null;
+  usedDays: number;
+  remainingDays: number | null;
   rawDays: number | null;
   usableFrom: string | null;
   missingHireDate: boolean;

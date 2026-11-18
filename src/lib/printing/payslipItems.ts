@@ -12,6 +12,8 @@ const ITEM_LABELS_AR: Record<string, { label: string; sign: 1 | -1 }> = {
   SETTLEMENT_ADD: { label: 'تسوية بالإضافة', sign: 1 },
   PURCHASE_DEDUCTION: { label: 'خصم مشتريات', sign: -1 },
   SETTLEMENT_DEDUCT: { label: 'تسوية بالخصم', sign: -1 },
+  ATTENDANCE_ABSENCE_DEDUCTION: { label: 'خصم غياب بدون إذن', sign: -1 },
+  ATTENDANCE_HALF_PAY_DEDUCTION: { label: 'خصم نصف أجر (إجازة مرضية/زواج)', sign: -1 },
 };
 
 function esc(s: unknown): string {

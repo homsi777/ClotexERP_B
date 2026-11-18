@@ -68,6 +68,8 @@ export const LeaveBalancesModal: React.FC<Props> = ({ onClose }) => {
                   <th className="p-2 text-right">{t('leaveBalances.colEmployee')}</th>
                   <th className="p-2 text-right">{t('leaveBalances.colHire')}</th>
                   <th className="p-2 text-right">{t('leaveBalances.colDays')}</th>
+                  <th className="p-2 text-right">{t('leaveBalances.colUsed')}</th>
+                  <th className="p-2 text-right">{t('leaveBalances.colRemaining')}</th>
                   <th className="p-2 text-right">{t('leaveBalances.colUsable')}</th>
                 </tr>
               </thead>
@@ -80,6 +82,8 @@ export const LeaveBalancesModal: React.FC<Props> = ({ onClose }) => {
                     </td>
                     <td className="p-2" dir="ltr">{r.hireDate ?? '—'}</td>
                     <td className="p-2 font-bold text-indigo-700">{r.days ?? '—'}</td>
+                    <td className="p-2">{r.usedDays}</td>
+                    <td className={`p-2 font-bold ${r.remainingDays !== null && r.remainingDays < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{r.remainingDays ?? '—'}</td>
                     <td className="p-2" dir="ltr">{r.usableFrom ?? '—'}</td>
                   </tr>
                 ))}

@@ -1158,6 +1158,8 @@ export const Salaries = () => {
       {printRun && itemsEditLine && (
         <PayrollLineItemsModal
           runId={printRun.id}
+          periodMonth={printRun.period_month}
+          periodYear={printRun.period_year}
           line={itemsEditLine}
           onClose={() => setItemsEditLine(null)}
           onSaved={() => {

@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AttendanceStatusPanel } from '../../components/hr/AttendanceStatusPanel';
+import { attendanceStatusLabel } from '../../lib/hr/attendanceStatusLabels';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, Loader2, Pencil, Upload, X } from 'lucide-react';
 import {
@@ -419,6 +421,8 @@ export function Attendance() {
 
       {canManage && <ShiftTypesPanel />}
 
+      {canManage && <AttendanceStatusPanel onChanged={() => void load()} />}
+
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <label className="block text-xs font-bold text-slate-600">{t('filters.employee')}</label>
@@ -459,6 +463,7 @@ export function Attendance() {
                 <th className="p-3 text-end">{t('table.late')}</th>
                 <th className="p-3 text-end">{t('table.permission')}</th>
                 <th className="p-3 text-start">{t('table.dayType')}</th>
+                <th className="p-3 text-start">{t('table.status')}</th>
                 <th className="p-3 text-start">{t('table.source')}</th>
                 <th className="p-3"></th>
               </tr>
@@ -475,6 +480,7 @@ export function Attendance() {
                   <td className="p-3 text-end">{Number(r.late_minutes).toFixed(0)}</td>
                   <td className="p-3 text-end">{Number(r.permission_minutes).toFixed(0)}</td>
                   <td className="p-3">{t(`dayType.${r.day_type}`)}</td>
+                  <td className="p-3 text-xs">{attendanceStatusLabel(r.status_code)}</td>
                   <td className="p-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.source === 'MANUAL' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
                       {t(`source.${r.source}`)}

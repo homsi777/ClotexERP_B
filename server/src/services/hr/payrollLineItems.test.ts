@@ -17,6 +17,19 @@ function testKindSigns() {
   }
 }
 
+function testAttendanceKindsAreDeductionsAndNeedNoNote() {
+  for (const k of ['ATTENDANCE_ABSENCE_DEDUCTION', 'ATTENDANCE_HALF_PAY_DEDUCTION'] as const) {
+    assert.equal(isAdditionKind(k), false, k);
+    assert.equal(payrollItemSchema.safeParse({ kind: k, amount: 100 }).success, true, k);
+    assert.equal(validatePayrollItems([{ kind: k, amount: 100 }]), null, k);
+  }
+  const r = applyItemsChange({ baseSalary: 9000, allowances: 0, deductions: 0 }, [], [
+    { kind: 'ATTENDANCE_ABSENCE_DEDUCTION', amount: 2325 },
+    { kind: 'ATTENDANCE_HALF_PAY_DEDUCTION', amount: 300 },
+  ]);
+  assert.deepEqual(r, { baseSalary: 9000, allowances: 0, deductions: 2625, net: 6375 });
+}
+
 function testSumSeparatesAdditionsAndDeductions() {
   const t = sumPayrollItems([
     { kind: 'BONUS', amount: 300 },
@@ -84,6 +97,7 @@ function testRemovingAllItemsRestoresOriginal() {
 }
 
 testKindSigns();
+testAttendanceKindsAreDeductionsAndNeedNoNote();
 testSumSeparatesAdditionsAndDeductions();
 testSalaryAdjustmentRequiresReason();
 testSettlementsRequireNoteButBonusDoesNot();

@@ -6,6 +6,7 @@ import {
   type PayrollLineItemKind,
   type PayrollRunLineDto,
 } from '../../lib/api/payrollApi';
+import { getMonthlyStatusEffects } from '../../lib/api/attendanceApi';
 import { useToast } from '../NonBlockingToast';
 
 const ADDITION_KINDS: PayrollLineItemKind[] = [
@@ -25,8 +26,13 @@ const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits
 let seq = 0;
 const nextKey = () => `r${++seq}`;
 
+const ATTENDANCE_KINDS: PayrollLineItemKind[] = ['ATTENDANCE_ABSENCE_DEDUCTION', 'ATTENDANCE_HALF_PAY_DEDUCTION'];
+
 type Props = {
   runId: string;
+  /** شهر/سنة المسير — لجلب أثر الحضور لنفس الفترة. */
+  periodMonth: number;
+  periodYear: number;
   line: PayrollRunLineDto;
   onClose: () => void;
   /** يُستدعى بعد حفظ ناجح ليعيد الأب تحميل المسير. */
@@ -37,7 +43,7 @@ type Props = {
  * TASK 011 (بشير): تفصيل بنود راتب موظف داخل مسير مسودة. المبالغ الجديدة تُضاف/تُخصم
  * فوق المستورد؛ والخادم يطرح أثر البنود القديمة قبل إضافة الجديدة فلا تكرار احتساب.
  */
-export const PayrollLineItemsModal: React.FC<Props> = ({ runId, line, onClose, onSaved }) => {
+export const PayrollLineItemsModal: React.FC<Props> = ({ runId, periodMonth, periodYear, line, onClose, onSaved }) => {
   const { t } = useTranslation('salaries');
   const { showToast } = useToast();
   const [rows, setRows] = useState<Row[]>(() =>
@@ -49,6 +55,55 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, line, onClose, o
     })),
   );
   const [saving, setSaving] = useState(false);
+  const [fetchingAttendance, setFetchingAttendance] = useState(false);
+  const importedFromExcel = Boolean(line.excel_detail && Object.keys(line.excel_detail).length > 0);
+
+  // يعبّئ بندَي الحضور (غياب بدون إذن + نصف أجر) من معاينة الحضور لهذا الموظف والشهر.
+  // يستبدل أي بنود حضور سابقة بدل أن يكرّرها، ولا يحفظ شيئاً — الحفظ بزر المحاسب فقط.
+  const fillFromAttendance = async () => {
+    if (importedFromExcel && !window.confirm(t('lineItems.importedConfirm'))) return;
+    setFetchingAttendance(true);
+    try {
+      const res = await getMonthlyStatusEffects(periodYear, periodMonth, line.employee_id);
+      const row = res.data.rows[0];
+      if (!row) {
+        showToast({ type: 'warning', message: t('lineItems.fromAttendanceNone') });
+        return;
+      }
+      if (!row.moneyComputed) {
+        showToast({ type: 'warning', message: t('lineItems.fromAttendanceWeekly') });
+        return;
+      }
+      const s = row.summary;
+      const fresh: Row[] = [];
+      if (s.absenceDeduction > 0) {
+        fresh.push({
+          key: nextKey(),
+          kind: 'ATTENDANCE_ABSENCE_DEDUCTION',
+          amount: String(s.absenceDeduction),
+          note: `${s.unauthorizedAbsenceDays} يوم غياب — أجر اليوم ${s.dayWage} — ${s.absenceRule === 'GRADUATED' ? 'متدرّج' : 'يومان ثابتان'}`,
+        });
+      }
+      if (s.halfPayDeduction > 0) {
+        fresh.push({
+          key: nextKey(),
+          kind: 'ATTENDANCE_HALF_PAY_DEDUCTION',
+          amount: String(s.halfPayDeduction),
+          note: `${s.halfPayDays} يوم بنصف أجر — أجر اليوم ${s.dayWage}`,
+        });
+      }
+      if (!fresh.length) {
+        showToast({ type: 'warning', message: t('lineItems.fromAttendanceNone') });
+        return;
+      }
+      setRows((cur) => [...cur.filter((r) => !ATTENDANCE_KINDS.includes(r.kind)), ...fresh]);
+      showToast({ type: 'success', message: t('lineItems.fromAttendanceDone') });
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('lineItems.fromAttendanceFailed') });
+    } finally {
+      setFetchingAttendance(false);
+    }
+  };
 
   const totals = useMemo(() => {
     let add = 0;
@@ -115,6 +170,20 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, line, onClose, o
 
         <div className="space-y-4 p-5">
           <p className="text-xs text-slate-500">{t('lineItems.hint')}</p>
+          {importedFromExcel && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-bold text-amber-800">
+              {t('lineItems.importedWarning')}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void fillFromAttendance()}
+            disabled={fetchingAttendance}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {fetchingAttendance && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {t('lineItems.fromAttendance')}
+          </button>
 
           <div className="flex flex-wrap gap-2">
             {[...ADDITION_KINDS, ...DEDUCTION_KINDS].map((k) => (

@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { summarizeMonthlyStatuses, type MonthlyStatusSummary } from './hr/attendanceStatus.js';
 import { getPool } from '../db/pool.js';
 
 type ServiceErrorCode = 'VALIDATION' | 'NOT_FOUND';
@@ -118,7 +119,7 @@ export async function listAttendanceRecords(
   const res = await pool.query(
     `SELECT ar.id, ar.employee_id, e.employee_code, e.full_name, ar.attendance_date,
             ar.check_in_time, ar.check_out_time, ar.late_minutes, ar.permission_minutes,
-            ar.total_hours, ar.day_type, ar.source, ar.source_file, ar.edited_at, ar.edit_reason,
+            ar.total_hours, ar.day_type, ar.status_code, ar.source, ar.source_file, ar.edited_at, ar.edit_reason,
             u.username AS edited_by
      FROM attendance_daily_records ar
      JOIN payroll_employees e ON e.id = ar.employee_id
@@ -394,4 +395,114 @@ export async function approveMonthlyAttendanceReview(
     ],
   );
   return row.rows[0];
+}
+
+// ─── TASK 013: رموز حالات الحضور وأثرها (معاينة) ─────────────────────────────
+
+/**
+ * يضبط (أو يمسح) حالة يوم لموظف؛ وينشئ سجل اليوم إن لم يوجد (الغائب لا سجل بصمة له).
+ * يرفض التعديل إن كان شهر هذا الموظف معتمداً بالمراجعة الشهرية حتى لا يتقادم ما اعتُمد.
+ * لا يمسّ الرواتب إطلاقاً.
+ */
+export async function setAttendanceStatus(
+  client: PoolClient,
+  input: {
+    companyId: string;
+    userId: string | null;
+    employeeId: string;
+    date: string;
+    statusCode: string | null;
+    reason: string;
+  },
+) {
+  if (!input.reason?.trim()) fail('سبب التعديل مطلوب', 'VALIDATION');
+  const emp = await client.query(`SELECT 1 FROM payroll_employees WHERE id=$1 AND company_id=$2`, [
+    input.employeeId,
+    input.companyId,
+  ]);
+  if (!emp.rows.length) fail('الموظف غير موجود', 'NOT_FOUND');
+
+  const d = new Date(`${input.date}T00:00:00Z`);
+  const month = d.getUTCMonth() + 1;
+  const year = d.getUTCFullYear();
+  const approved = await client.query(
+    `SELECT 1 FROM monthly_attendance_reviews
+      WHERE company_id=$1 AND employee_id=$2 AND period_month=$3 AND period_year=$4 AND status='APPROVED'`,
+    [input.companyId, input.employeeId, month, year],
+  );
+  if (approved.rows.length) fail('هذا الشهر معتمد بالمراجعة الشهرية — لا يمكن تعديل الحالة', 'VALIDATION');
+
+  const row = await client.query(
+    `INSERT INTO attendance_daily_records
+       (company_id, employee_id, attendance_date, status_code, source, edited_by_user_id, edited_at, edit_reason)
+     VALUES ($1,$2,$3::date,$4,'MANUAL',$5,now(),$6)
+     ON CONFLICT (company_id, employee_id, attendance_date) DO UPDATE SET
+       status_code = EXCLUDED.status_code,
+       source = 'MANUAL',
+       edited_by_user_id = EXCLUDED.edited_by_user_id,
+       edited_at = now(),
+       edit_reason = EXCLUDED.edit_reason,
+       updated_at = now()
+     RETURNING *`,
+    [input.companyId, input.employeeId, input.date, input.statusCode, input.userId, input.reason.trim()],
+  );
+  return row.rows[0];
+}
+
+export type MonthlyEffectsRow = {
+  employeeId: string;
+  employeeCode: string;
+  fullName: string;
+  salaryPeriod: string;
+  /** الأجر الشامل المُدخل للموظف (أجر اليوم = ÷30 للشهري فقط). */
+  comprehensiveWage: number;
+  /** أسبوعي: لا قاعدة HR لأجر اليوم له — تُعرض العدّادات دون مبالغ. */
+  moneyComputed: boolean;
+  summary: MonthlyStatusSummary;
+};
+
+/** معاينة أثر حالات شهر على الراتب والرصيد لكل موظف نشط (قراءة فقط، لا ترحيل). */
+export async function computeMonthlyStatusEffects(
+  companyId: string,
+  year: number,
+  month: number,
+  employeeId?: string,
+): Promise<MonthlyEffectsRow[]> {
+  const pool = getPool();
+  const emps = await pool.query<{ id: string; employee_code: string; full_name: string; salary_period: string; base_salary: string }>(
+    `SELECT id, employee_code, full_name, salary_period, base_salary
+       FROM payroll_employees
+      WHERE company_id=$1 AND is_active = true ${employeeId ? 'AND id=$2' : ''}
+      ORDER BY employee_code`,
+    employeeId ? [companyId, employeeId] : [companyId],
+  );
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  const recs = await pool.query<{ employee_id: string; attendance_date: string; status_code: string | null }>(
+    `SELECT employee_id, attendance_date::text AS attendance_date, status_code
+       FROM attendance_daily_records
+      WHERE company_id=$1 AND status_code IS NOT NULL
+        AND attendance_date BETWEEN $2::date AND $3::date
+      ORDER BY attendance_date`,
+    [companyId, from, to],
+  );
+  const byEmp = new Map<string, { date: string; status: string | null }[]>();
+  for (const r of recs.rows) {
+    const arr = byEmp.get(r.employee_id) ?? [];
+    arr.push({ date: r.attendance_date.slice(0, 10), status: r.status_code });
+    byEmp.set(r.employee_id, arr);
+  }
+  return emps.rows.map((e) => {
+    const monthly = e.salary_period === 'monthly';
+    const wage = Number(e.base_salary);
+    return {
+      employeeId: e.id,
+      employeeCode: e.employee_code,
+      fullName: e.full_name,
+      salaryPeriod: e.salary_period,
+      comprehensiveWage: wage,
+      moneyComputed: monthly,
+      summary: summarizeMonthlyStatuses(byEmp.get(e.id) ?? [], monthly ? wage : 0, year, month),
+    };
+  });
 }

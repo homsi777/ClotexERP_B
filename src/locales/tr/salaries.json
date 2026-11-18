@@ -221,7 +221,9 @@
       "SALARY_ADJUSTMENT": "Maaş düzeltmesi",
       "SETTLEMENT_ADD": "Mahsup (ekleme)",
       "PURCHASE_DEDUCTION": "Alışveriş kesintisi",
-      "SETTLEMENT_DEDUCT": "Mahsup (kesinti)"
+      "SETTLEMENT_DEDUCT": "Mahsup (kesinti)",
+      "ATTENDANCE_ABSENCE_DEDUCTION": "İzinsiz devamsızlık kesintisi",
+      "ATTENDANCE_HALF_PAY_DEDUCTION": "Yarım ücret kesintisi (hastalık/evlilik)"
     },
     "groupAdditions": "Hak edişler",
     "groupDeductions": "Kesintiler",
@@ -239,7 +241,14 @@
     "saved": "Maaş kalemleri kaydedildi",
     "saveFailed": "Maaş kalemleri kaydedilemedi",
     "draftOnly": "Düzenleme yalnızca taslak bordroda mümkün",
-    "empty": "Henüz kalem yok"
+    "empty": "Henüz kalem yok",
+    "fromAttendance": "Kesintiyi devamdan getir",
+    "fromAttendanceDone": "Devam kalemleri dolduruldu — gözden geçirip kaydedin",
+    "fromAttendanceNone": "Bu ay için devam kaynaklı kesinti yok",
+    "fromAttendanceWeekly": "Haftalık maaş: günlük ücret kuralı yok",
+    "fromAttendanceFailed": "Devam verisi alınamadı",
+    "importedWarning": "Bu satır Excel'den içe aktarıldı ve devamsızlık kesintisini zaten içerebilir. Devam kalemlerini yalnızca içe aktarılan tabloda hesaplanmadıysa ekleyin, aksi halde iki kez kesilir.",
+    "importedConfirm": "Satır Excel'den içe aktarıldı ve devamsızlık kesintisini içerebilir. Dahil olmadığından emin misiniz?"
   },
   "leaveBalances": {
     "title": "Yıllık izin bakiyeleri",
@@ -251,6 +260,8 @@
     "colHire": "İşe giriş",
     "colDays": "Bakiye (gün)",
     "colUsable": "Kullanım başlangıcı",
-    "open": "İzin bakiyeleri"
+    "open": "İzin bakiyeleri",
+    "colUsed": "Kullanılan",
+    "colRemaining": "Kalan"
   }
 }
