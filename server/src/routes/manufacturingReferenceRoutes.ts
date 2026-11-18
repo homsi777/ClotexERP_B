@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest, type JwtPayload } from '../middleware/auth.js';
@@ -31,6 +32,25 @@ const workbookPreviewSchema = z.object({
   documentType: z.enum(['SPECIFICATION', 'WARP_CARD']).default('SPECIFICATION'),
   base64: z.string().min(1).max(5_600_000),
 });
+const workbookImportSchema = workbookPreviewSchema.extend({
+  documentType: z.literal('SPECIFICATION').default('SPECIFICATION'),
+  code: codeText,
+  name: nameText,
+  description: z.string().trim().max(2000).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+function decodeWorkbookUpload(data: z.infer<typeof workbookPreviewSchema>): { buffer: Buffer } | { error: string; code: string } {
+  const buffer = Buffer.from(data.base64, 'base64');
+  if (buffer.length === 0 || buffer.length > 4 * 1024 * 1024) {
+    return { error: 'حجم ملف Excel يجب ألا يتجاوز 4 ميغابايت', code: 'FILE_TOO_LARGE' };
+  }
+  const isZipWorkbook = buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b;
+  const isLegacyWorkbook = buffer.length >= 8
+    && buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
+  if (!isZipWorkbook && !isLegacyWorkbook) return { error: 'محتوى الملف لا يطابق صيغة Excel', code: 'INVALID_FILE' };
+  return { buffer };
+}
 
 const departmentSchema = z.object({
   code: codeText,
@@ -117,25 +137,213 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
     const parsed = workbookPreviewSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'ملف غير صالح', 'VALIDATION');
 
-    const buffer = Buffer.from(parsed.data.base64, 'base64');
-    if (buffer.length === 0 || buffer.length > 4 * 1024 * 1024) {
-      return sendError(reply, 400, 'حجم ملف Excel يجب ألا يتجاوز 4 ميغابايت', 'FILE_TOO_LARGE');
-    }
-    const isZipWorkbook = buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b;
-    const isLegacyWorkbook = buffer.length >= 8
-      && buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
-    if (!isZipWorkbook && !isLegacyWorkbook) {
-      return sendError(reply, 400, 'محتوى الملف لا يطابق صيغة Excel', 'INVALID_FILE');
-    }
+    const decoded = decodeWorkbookUpload(parsed.data);
+    if ('error' in decoded) return sendError(reply, 400, decoded.error, decoded.code);
 
     try {
       const data = parsed.data.documentType === 'WARP_CARD'
-        ? previewWarpCardTemplate(buffer)
-        : previewManufacturingSpecificationWorkbook(buffer);
+        ? previewWarpCardTemplate(decoded.buffer)
+        : previewManufacturingSpecificationWorkbook(decoded.buffer);
       return reply.send({ ok: true, data });
     } catch {
       return sendError(reply, 400, 'تعذر قراءة ملف Excel؛ تحقق من أن الملف غير تالف أو محمي بكلمة مرور', 'INVALID_WORKBOOK');
     }
+  });
+
+  app.get('/specifications', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.specifications.view', 'manufacturing.reference.view'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية عرض مكتبة المواصفات', 'FORBIDDEN');
+    }
+    const query = req.query as { search?: string; active?: string };
+    const params: unknown[] = [req.user!.companyId];
+    const conditions = ['s.company_id=$1'];
+    if (query.search?.trim()) {
+      params.push(`%${query.search.trim()}%`);
+      conditions.push(`(s.code ILIKE $${params.length} OR s.name ILIKE $${params.length})`);
+    }
+    if (query.active === 'true' || query.active === 'false') {
+      params.push(query.active === 'true');
+      conditions.push(`s.is_active=$${params.length}`);
+    }
+    const rows = await getPool().query(
+      `SELECT s.id,s.code,s.name,s.description,s.version,s.is_active,s.created_at,s.updated_at,
+              latest.id AS latest_version_id,latest.version_no AS latest_version_no,latest.status AS latest_status,
+              latest.source_file_name AS latest_source_file_name,latest.source_file_size AS latest_source_file_size,
+              latest.created_at AS latest_version_created_at,
+              approved.id AS approved_version_id,approved.version_no AS approved_version_no,approved.approved_at
+       FROM manufacturing_specifications s
+       LEFT JOIN LATERAL (
+         SELECT v.id,v.version_no,v.status,v.source_file_name,v.source_file_size,v.created_at
+         FROM manufacturing_specification_versions v
+         WHERE v.company_id=s.company_id AND v.specification_id=s.id
+         ORDER BY v.version_no DESC LIMIT 1
+       ) latest ON true
+       LEFT JOIN LATERAL (
+         SELECT v.id,v.version_no,v.approved_at
+         FROM manufacturing_specification_versions v
+         WHERE v.company_id=s.company_id AND v.specification_id=s.id AND v.status='APPROVED'
+         LIMIT 1
+       ) approved ON true
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY s.is_active DESC,s.code`,
+      params,
+    );
+    return reply.send({ ok: true, data: rows.rows });
+  });
+
+  app.get('/specifications/:id/versions', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.specifications.view', 'manufacturing.reference.view'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية عرض إصدارات المواصفات', 'FORBIDDEN');
+    }
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return sendError(reply, 400, 'معرف البطاقة غير صالح', 'VALIDATION');
+    const rows = await getPool().query(
+      `SELECT v.id,v.version_no,v.status,v.source_file_name,v.source_file_size,v.source_file_sha256,
+              v.parsed_data,v.validation_warnings,v.notes,v.approved_at,v.archived_at,v.created_at,
+              creator.full_name AS created_by_name,approver.full_name AS approved_by_name
+       FROM manufacturing_specification_versions v
+       JOIN manufacturing_specifications s ON s.id=v.specification_id AND s.company_id=v.company_id
+       LEFT JOIN users creator ON creator.id=v.created_by_user_id
+       LEFT JOIN users approver ON approver.id=v.approved_by_user_id
+       WHERE v.company_id=$1 AND v.specification_id=$2
+       ORDER BY v.version_no DESC`,
+      [req.user!.companyId, id],
+    );
+    return reply.send({ ok: true, data: rows.rows });
+  });
+
+  app.post('/specifications/import', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.specifications.import')) {
+      return sendError(reply, 403, 'ليست لديك صلاحية استيراد المواصفات', 'FORBIDDEN');
+    }
+    const parsed = workbookImportSchema.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || 'بيانات الاستيراد غير صالحة', 'VALIDATION');
+    const decoded = decodeWorkbookUpload(parsed.data);
+    if ('error' in decoded) return sendError(reply, 400, decoded.error, decoded.code);
+
+    let preview: ReturnType<typeof previewManufacturingSpecificationWorkbook>;
+    try {
+      preview = previewManufacturingSpecificationWorkbook(decoded.buffer);
+    } catch {
+      return sendError(reply, 400, 'تعذر قراءة ملف المواصفات', 'INVALID_WORKBOOK');
+    }
+
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const specification = await client.query<{ id: string }>(
+        `INSERT INTO manufacturing_specifications(company_id,code,name,description,created_by_user_id,updated_by_user_id)
+         VALUES($1,$2,$3,$4,$5,$5)
+         ON CONFLICT(company_id,code) DO UPDATE SET
+           name=EXCLUDED.name,description=COALESCE(EXCLUDED.description,manufacturing_specifications.description),
+           version=manufacturing_specifications.version+1,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
+         RETURNING id`,
+        [req.user!.companyId, normalizeReferenceCode(parsed.data.code), parsed.data.name, parsed.data.description ?? null, req.user!.sub],
+      );
+      const specificationId = specification.rows[0].id;
+      await client.query(
+        `SELECT id FROM manufacturing_specifications WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [specificationId, req.user!.companyId],
+      );
+      const sha256 = createHash('sha256').update(decoded.buffer).digest('hex');
+      const duplicate = await client.query(
+        `SELECT id FROM manufacturing_specification_versions
+         WHERE company_id=$1 AND specification_id=$2 AND source_file_sha256=$3 LIMIT 1`,
+        [req.user!.companyId, specificationId, sha256],
+      );
+      if (duplicate.rows.length) {
+        await client.query('ROLLBACK');
+        return sendError(reply, 409, 'هذا الملف مستورد مسبقاً ضمن البطاقة نفسها', 'DUPLICATE_VERSION_FILE');
+      }
+      const next = await client.query<{ next_version: number }>(
+        `SELECT COALESCE(MAX(version_no),0)::int+1 AS next_version
+         FROM manufacturing_specification_versions WHERE company_id=$1 AND specification_id=$2`,
+        [req.user!.companyId, specificationId],
+      );
+      const version = await client.query(
+        `INSERT INTO manufacturing_specification_versions(
+           company_id,specification_id,version_no,status,source_file_name,source_file_content,source_file_size,
+           source_file_sha256,parsed_data,validation_warnings,notes,created_by_user_id
+         ) VALUES($1,$2,$3,'DRAFT',$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11)
+         RETURNING id,version_no,status,source_file_name,source_file_size,source_file_sha256,parsed_data,validation_warnings,notes,created_at`,
+        [req.user!.companyId,specificationId,next.rows[0].next_version,parsed.data.fileName,decoded.buffer,decoded.buffer.length,
+          sha256,JSON.stringify(preview),JSON.stringify(preview.warnings),parsed.data.notes ?? null,req.user!.sub],
+      );
+      await client.query('COMMIT');
+      return reply.status(201).send({ ok: true, data: { specificationId, code: normalizeReferenceCode(parsed.data.code), version: version.rows[0] } });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return handleDbError(reply, error);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/specifications/:id/versions/:versionId/approve', async (req, reply) => {
+    if (!hasPermission(req.user, 'manufacturing.specifications.approve')) {
+      return sendError(reply, 403, 'ليست لديك صلاحية اعتماد المواصفات', 'FORBIDDEN');
+    }
+    const { id, versionId } = req.params as { id: string; versionId: string };
+    if (!z.string().uuid().safeParse(id).success || !z.string().uuid().safeParse(versionId).success) {
+      return sendError(reply, 400, 'معرف البطاقة أو الإصدار غير صالح', 'VALIDATION');
+    }
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const target = await client.query<{ status: 'DRAFT' | 'APPROVED' | 'ARCHIVED' }>(
+        `SELECT v.status FROM manufacturing_specification_versions v
+         JOIN manufacturing_specifications s ON s.id=v.specification_id AND s.company_id=v.company_id
+         WHERE v.id=$1 AND v.specification_id=$2 AND v.company_id=$3 FOR UPDATE`,
+        [versionId,id,req.user!.companyId],
+      );
+      if (!target.rows.length) {
+        await client.query('ROLLBACK');
+        return sendError(reply, 404, 'إصدار المواصفة غير موجود', 'NOT_FOUND');
+      }
+      if (target.rows[0].status !== 'APPROVED') {
+        await client.query(
+          `UPDATE manufacturing_specification_versions
+           SET status='ARCHIVED',archived_at=now()
+           WHERE company_id=$1 AND specification_id=$2 AND status='APPROVED' AND id<>$3`,
+          [req.user!.companyId,id,versionId],
+        );
+        await client.query(
+          `UPDATE manufacturing_specification_versions
+           SET status='APPROVED',approved_by_user_id=$4,approved_at=now(),archived_at=NULL
+           WHERE id=$1 AND specification_id=$2 AND company_id=$3`,
+          [versionId,id,req.user!.companyId,req.user!.sub],
+        );
+      }
+      await client.query('COMMIT');
+      return reply.send({ ok: true, data: { specificationId: id, versionId, status: 'APPROVED' } });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return handleDbError(reply,error);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.get('/specifications/:id/versions/:versionId/source', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.specifications.view', 'manufacturing.reference.view'])) {
+      return sendError(reply, 403, 'ليست لديك صلاحية تنزيل ملف المواصفة', 'FORBIDDEN');
+    }
+    const { id, versionId } = req.params as { id: string; versionId: string };
+    if (!z.string().uuid().safeParse(id).success || !z.string().uuid().safeParse(versionId).success) {
+      return sendError(reply, 400, 'معرف البطاقة أو الإصدار غير صالح', 'VALIDATION');
+    }
+    const row = await getPool().query<{ source_file_name: string; source_file_content: Buffer }>(
+      `SELECT v.source_file_name,v.source_file_content
+       FROM manufacturing_specification_versions v
+       JOIN manufacturing_specifications s ON s.id=v.specification_id AND s.company_id=v.company_id
+       WHERE v.id=$1 AND v.specification_id=$2 AND v.company_id=$3`,
+      [versionId,id,req.user!.companyId],
+    );
+    if (!row.rows.length) return sendError(reply, 404, 'ملف إصدار المواصفة غير موجود', 'NOT_FOUND');
+    const fileName = row.rows[0].source_file_name.replace(/[\r\n"]/g, '_');
+    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    reply.type(/\.xls$/i.test(fileName) ? 'application/vnd.ms-excel' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return reply.send(row.rows[0].source_file_content);
   });
 
   app.get('/overview', async (req, reply) => {

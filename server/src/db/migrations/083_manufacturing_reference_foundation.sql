@@ -5,6 +5,9 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.dashboard.view', 'عرض لوحة التصنيع', 'manufacturing'),
   ('manufacturing.reference.view', 'عرض تعريفات التصنيع', 'manufacturing'),
   ('manufacturing.reference.manage', 'إدارة تعريفات التصنيع', 'manufacturing'),
+  ('manufacturing.specifications.view', 'عرض مكتبة مواصفات التصنيع', 'manufacturing'),
+  ('manufacturing.specifications.import', 'استيراد إصدارات مواصفات التصنيع', 'manufacturing'),
+  ('manufacturing.specifications.approve', 'اعتماد إصدارات مواصفات التصنيع', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -17,12 +20,72 @@ JOIN permissions p ON p.code IN (
   'manufacturing.dashboard.view',
   'manufacturing.reference.view',
   'manufacturing.reference.manage',
+  'manufacturing.specifications.view',
+  'manufacturing.specifications.import',
+  'manufacturing.specifications.approve',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
 )
 WHERE r.code='admin'
 ON CONFLICT DO NOTHING;
+
+CREATE TABLE manufacturing_specifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  code text NOT NULL,
+  name text NOT NULL,
+  description text,
+  version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+  is_active boolean NOT NULL DEFAULT true,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_specifications_code_not_blank CHECK (length(trim(code)) > 0),
+  CONSTRAINT manufacturing_specifications_name_not_blank CHECK (length(trim(name)) > 0),
+  CONSTRAINT manufacturing_specifications_company_code_unique UNIQUE (company_id, code),
+  CONSTRAINT manufacturing_specifications_company_identity UNIQUE (company_id, id)
+);
+
+CREATE INDEX manufacturing_specifications_company_active
+  ON manufacturing_specifications(company_id, is_active, code);
+
+CREATE TABLE manufacturing_specification_versions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  specification_id uuid NOT NULL,
+  version_no integer NOT NULL CHECK (version_no > 0),
+  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','APPROVED','ARCHIVED')),
+  source_file_name text NOT NULL,
+  source_file_content bytea NOT NULL,
+  source_file_size integer NOT NULL CHECK (source_file_size > 0 AND source_file_size <= 4194304),
+  source_file_sha256 text NOT NULL CHECK (source_file_sha256 ~ '^[0-9a-f]{64}$'),
+  parsed_data jsonb NOT NULL CHECK (jsonb_typeof(parsed_data) = 'object'),
+  validation_warnings jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(validation_warnings) = 'array'),
+  notes text,
+  approved_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  approved_at timestamptz,
+  archived_at timestamptz,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_specification_versions_specification_fk
+    FOREIGN KEY (company_id, specification_id)
+    REFERENCES manufacturing_specifications(company_id, id) ON DELETE CASCADE,
+  CONSTRAINT manufacturing_specification_versions_number_unique UNIQUE (company_id, specification_id, version_no),
+  CONSTRAINT manufacturing_specification_versions_approval_consistency CHECK (
+    (status = 'APPROVED' AND approved_at IS NOT NULL)
+    OR (status <> 'APPROVED')
+  )
+);
+
+CREATE UNIQUE INDEX manufacturing_specification_versions_one_approved
+  ON manufacturing_specification_versions(company_id, specification_id)
+  WHERE status = 'APPROVED';
+CREATE INDEX manufacturing_specification_versions_history
+  ON manufacturing_specification_versions(company_id, specification_id, version_no DESC);
+CREATE INDEX manufacturing_specification_versions_sha
+  ON manufacturing_specification_versions(company_id, source_file_sha256);
 
 CREATE TABLE manufacturing_departments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

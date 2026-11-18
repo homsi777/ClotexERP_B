@@ -23,6 +23,18 @@ export type WarpCardTemplatePreview = {
   sheetName:string; range:string|null; logicalRecordCount:1; printCopiesInTemplate:number;
   fields:Array<{label:string;occurrences:string[]}>; missingFields:string[];
 };
+export type ManufacturingSpecificationSummary = {
+  id:string; code:string; name:string; description:string|null; version:number; is_active:boolean;
+  latest_version_id:string|null; latest_version_no:number|null; latest_status:'DRAFT'|'APPROVED'|'ARCHIVED'|null;
+  latest_source_file_name:string|null; latest_source_file_size:number|null; latest_version_created_at:string|null;
+  approved_version_id:string|null; approved_version_no:number|null; approved_at:string|null;
+};
+export type ManufacturingSpecificationVersion = {
+  id:string; version_no:number; status:'DRAFT'|'APPROVED'|'ARCHIVED'; source_file_name:string;
+  source_file_size:number; source_file_sha256:string; parsed_data:ManufacturingWorkbookPreview;
+  validation_warnings:WorkbookWarning[]; notes:string|null; approved_at:string|null; archived_at:string|null;
+  created_at:string; created_by_name:string|null; approved_by_name:string|null;
+};
 
 const base='/api/manufacturing/reference';
 export const getManufacturingOverview=()=>apiFetch<{ok:true;data:ManufacturingOverview}>(`${base}/overview`).then(r=>r.data);
@@ -54,3 +66,15 @@ export async function previewManufacturingWorkbook(file:File,documentType:'SPECI
     method:'POST', body:JSON.stringify({fileName:file.name,documentType,base64}), timeoutMs:60_000,
   }).then(r=>r.data);
 }
+
+export const listManufacturingSpecifications=(search='')=>apiFetch<{ok:true;data:ManufacturingSpecificationSummary[]}>(`${base}/specifications${search?`?search=${encodeURIComponent(search)}`:''}`).then(r=>r.data);
+export const listManufacturingSpecificationVersions=(id:string)=>apiFetch<{ok:true;data:ManufacturingSpecificationVersion[]}>(`${base}/specifications/${id}/versions`).then(r=>r.data);
+export async function importManufacturingSpecification(file:File,input:{code:string;name:string;description?:string|null;notes?:string|null}) {
+  const maxBytes=4*1024*1024;
+  if(file.size===0||file.size>maxBytes) throw new Error('حجم ملف Excel غير صالح أو يتجاوز 4 ميغابايت');
+  const base64=arrayBufferToBase64(await file.arrayBuffer());
+  return apiFetch<{ok:true;data:{specificationId:string;code:string;version:ManufacturingSpecificationVersion}}>(`${base}/specifications/import`,{
+    method:'POST',body:JSON.stringify({...input,fileName:file.name,documentType:'SPECIFICATION',base64}),timeoutMs:60_000,
+  }).then(r=>r.data);
+}
+export const approveManufacturingSpecificationVersion=(specificationId:string,versionId:string)=>apiFetch<{ok:true;data:{specificationId:string;versionId:string;status:'APPROVED'}}>(`${base}/specifications/${specificationId}/versions/${versionId}/approve`,{method:'POST',body:'{}'}).then(r=>r.data);
