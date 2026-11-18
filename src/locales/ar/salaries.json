@@ -209,5 +209,36 @@
     "colStatus": "الحالة",
     "noData": "لا توجد بيانات",
     "printDate": "تاريخ الطباعة: {{date}}"
+  },
+  "lineItems": {
+    "title": "بنود الراتب — {{name}}",
+    "openButton": "بنود الراتب",
+    "hint": "تُضاف الاستحقاقات وتُخصم الاستقطاعات على المبالغ المستوردة دون تكرار احتسابها.",
+    "kind": {
+      "BONUS": "مكافأة",
+      "TRANSPORT": "بدل مواصلات",
+      "ANNUAL_INCREASE": "زيادة سنوية",
+      "SALARY_ADJUSTMENT": "تعديل راتب",
+      "SETTLEMENT_ADD": "تسوية بالإضافة",
+      "PURCHASE_DEDUCTION": "خصم مشتريات",
+      "SETTLEMENT_DEDUCT": "تسوية بالخصم"
+    },
+    "groupAdditions": "استحقاقات",
+    "groupDeductions": "استقطاعات",
+    "amount": "المبلغ",
+    "note": "ملاحظة / السبب",
+    "noteRequired": "السبب إلزامي لهذا البند",
+    "notePlaceholder": "مثال: ترقية إلى مشرف",
+    "add": "إضافة بند",
+    "remove": "حذف",
+    "save": "حفظ البنود",
+    "cancel": "إلغاء",
+    "totalAdditions": "إجمالي البنود المُضافة",
+    "totalDeductions": "إجمالي البنود المخصومة",
+    "net": "صافي الراتب بعد البنود",
+    "saved": "تم حفظ بنود الراتب",
+    "saveFailed": "تعذّر حفظ بنود الراتب",
+    "draftOnly": "التعديل متاح في المسير المسودة فقط",
+    "empty": "لا بنود بعد"
   }
 }

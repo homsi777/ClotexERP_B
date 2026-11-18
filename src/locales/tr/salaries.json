@@ -209,5 +209,36 @@
     "colStatus": "Durum",
     "noData": "Veri bulunamadı",
     "printDate": "Yazdırma Tarihi: {{date}}"
+  },
+  "lineItems": {
+    "title": "Maaş kalemleri — {{name}}",
+    "openButton": "Maaş kalemleri",
+    "hint": "Hak edişler eklenir, kesintiler düşülür; içe aktarılan tutarlar tekrar hesaplanmaz.",
+    "kind": {
+      "BONUS": "İkramiye",
+      "TRANSPORT": "Ulaşım yardımı",
+      "ANNUAL_INCREASE": "Yıllık zam",
+      "SALARY_ADJUSTMENT": "Maaş düzeltmesi",
+      "SETTLEMENT_ADD": "Mahsup (ekleme)",
+      "PURCHASE_DEDUCTION": "Alışveriş kesintisi",
+      "SETTLEMENT_DEDUCT": "Mahsup (kesinti)"
+    },
+    "groupAdditions": "Hak edişler",
+    "groupDeductions": "Kesintiler",
+    "amount": "Tutar",
+    "note": "Not / neden",
+    "noteRequired": "Bu kalem için neden zorunlu",
+    "notePlaceholder": "Örn: kıdemli pozisyona terfi",
+    "add": "Kalem ekle",
+    "remove": "Sil",
+    "save": "Kalemleri kaydet",
+    "cancel": "İptal",
+    "totalAdditions": "Eklenen kalemler toplamı",
+    "totalDeductions": "Kesilen kalemler toplamı",
+    "net": "Kalemlerden sonra net maaş",
+    "saved": "Maaş kalemleri kaydedildi",
+    "saveFailed": "Maaş kalemleri kaydedilemedi",
+    "draftOnly": "Düzenleme yalnızca taslak bordroda mümkün",
+    "empty": "Henüz kalem yok"
   }
 }

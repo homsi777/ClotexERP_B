@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { PayrollLineItemsModal } from '../components/hr/PayrollLineItemsModal';
 import {
   Briefcase,
   BanknoteArrowDown,
@@ -108,6 +109,7 @@ export const Salaries = () => {
   const [payingInstallmentId, setPayingInstallmentId] = useState<string | null>(null);
   const [printRun, setPrintRun] = useState<PayrollRunDto | null>(null);
   const [printRunLines, setPrintRunLines] = useState<PayrollRunLineDto[]>([]);
+  const [itemsEditLine, setItemsEditLine] = useState<PayrollRunLineDto | null>(null);
   const [printRunLoading, setPrintRunLoading] = useState(false);
   const [groupByField, setGroupByField] = useState<'department' | 'factory' | 'category'>('department');
   const [compareOpen, setCompareOpen] = useState(false);
@@ -1115,6 +1117,18 @@ export const Salaries = () => {
                         <span className="font-mono text-xs text-slate-500">{line.employee_code}</span>{' '}
                         <span className="font-bold text-slate-800">{line.employee_name}</span>
                       </span>
+                      {printRun.status === 'DRAFT' && hasPermission('payroll.manage') && (
+                        <button
+                          type="button"
+                          onClick={() => setItemsEditLine(line)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          {t('lineItems.openButton')}
+                          {(line.items?.length ?? 0) > 0 && (
+                            <span className="rounded-full bg-indigo-600 px-1.5 text-[10px] text-white">{line.items?.length}</span>
+                          )}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => printIndividualPayslip(printRun, line)}
@@ -1130,6 +1144,18 @@ export const Salaries = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {printRun && itemsEditLine && (
+        <PayrollLineItemsModal
+          runId={printRun.id}
+          line={itemsEditLine}
+          onClose={() => setItemsEditLine(null)}
+          onSaved={() => {
+            void openPrintRunModal(printRun);
+            void load();
+          }}
+        />
       )}
 
       {compareOpen && (

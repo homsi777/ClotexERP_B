@@ -182,6 +182,35 @@ export interface PayrollRunLineDto {
   net_salary: string;
   excel_detail: Record<string, unknown> | null;
   notes: string | null;
+  /** TASK 011: بنود تفصيل الراتب (مكافأة، مشتريات، تسويات…). */
+  items?: PayrollLineItemDto[];
+}
+
+export type PayrollLineItemKind =
+  | 'BONUS'
+  | 'TRANSPORT'
+  | 'ANNUAL_INCREASE'
+  | 'SALARY_ADJUSTMENT'
+  | 'SETTLEMENT_ADD'
+  | 'PURCHASE_DEDUCTION'
+  | 'SETTLEMENT_DEDUCT';
+
+export interface PayrollLineItemDto {
+  id?: string;
+  kind: PayrollLineItemKind;
+  amount: string | number;
+  note: string | null;
+}
+
+export async function savePayrollLineItems(
+  runId: string,
+  lineId: string,
+  items: Array<{ kind: PayrollLineItemKind; amount: number; note?: string | null }>,
+) {
+  return apiFetch<{ ok: boolean; data: { lineId: string; allowances: number; deductions: number; net: number } }>(
+    `/api/payroll/runs/${runId}/lines/${lineId}/items`,
+    { method: 'PUT', body: JSON.stringify({ items }) },
+  );
 }
 
 export async function getPayrollRunDetail(runId: string) {
