@@ -253,7 +253,7 @@
   "leaveBalances": {
     "title": "Yıllık izin bakiyeleri",
     "year": "Yıl",
-    "hint": "İşe giriş tarihinden İK kurallarıyla hesaplanır (15 sonra 21 gün, 1-9-2025 öncesi için 21, yukarı yuvarlama). 30 günlük dilim (yaş>50 veya 10 yıl sigorta) yaş/sigorta verisi tutulmadığından hesaplanmaz.",
+    "hint": "İşe giriş tarihinden İK kurallarıyla hesaplanır (15 sonra 21 gün, 1-9-2025 öncesi için 21, 50 yaş üstü veya 10 yıl sigortalı için 30, yukarı yuvarlama). 30 günlük dilim yalnızca çalışan kaydında doğum tarihi veya sigorta başlangıcı girilenler için etkinleşir.",
     "missingHire": "{{count}} çalışanın geçerli işe giriş tarihi yok — bakiye hesaplanamaz.",
     "loadFailed": "Bakiyeler yüklenemedi",
     "colEmployee": "Çalışan",

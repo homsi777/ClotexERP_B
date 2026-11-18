@@ -12,6 +12,9 @@ export interface PayrollEmployeeDto {
   currency_code: string;
   salary_period: 'weekly' | 'monthly';
   hire_date: string | null;
+  /** TASK 015: لتفعيل شريحة الإجازة 30 يوماً. */
+  birth_date?: string | null;
+  insurance_start_date?: string | null;
   is_active: boolean;
   notes: string | null;
   fingerprint_code: string | null;
@@ -76,6 +79,8 @@ export interface PayrollEmployeeUpsertPayload {
   currencyCode?: string;
   salaryPeriod?: 'weekly' | 'monthly';
   hireDate?: string | null;
+  birthDate?: string | null;
+  insuranceStartDate?: string | null;
   notes?: string | null;
   fingerprintCode?: string | null;
   factory?: string | null;

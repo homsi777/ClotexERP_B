@@ -53,5 +53,7 @@
   "modal.close": "إغلاق",
   "errors.fullNameRequired": "الاسم الكامل مطلوب",
   "errors.saveFailed": "فشل حفظ بيانات الموظف",
-  "errors.duplicateCode": "رمز الموظف أو رقم البصمة مستخدم مسبقاً"
+  "errors.duplicateCode": "رمز الموظف أو رقم البصمة مستخدم مسبقاً",
+  "modal.fields.birthDate": "تاريخ الميلاد (لشريحة الإجازة 30 يوماً)",
+  "modal.fields.insuranceStartDate": "بداية التأمينات (لشريحة الإجازة 30 يوماً)"
 }

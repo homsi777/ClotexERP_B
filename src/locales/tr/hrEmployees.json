@@ -53,5 +53,7 @@
   "modal.close": "Kapat",
   "errors.fullNameRequired": "Ad Soyad gereklidir",
   "errors.saveFailed": "Çalışan bilgileri kaydedilemedi",
-  "errors.duplicateCode": "Çalışan kodu veya parmak izi numarası zaten kullanılıyor"
+  "errors.duplicateCode": "Çalışan kodu veya parmak izi numarası zaten kullanılıyor",
+  "modal.fields.birthDate": "Doğum tarihi (30 gün izin dilimi için)",
+  "modal.fields.insuranceStartDate": "Sigorta başlangıcı (30 gün izin dilimi için)"
 }

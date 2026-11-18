@@ -26,6 +26,8 @@ type EmployeeFormState = {
   address: string;
   paymentMethod: string;
   hireDate: string;
+  birthDate: string;
+  insuranceStartDate: string;
   terminationDate: string;
   status: 'ACTIVE' | 'TERMINATED' | 'SUSPENDED';
   baseSalary: string;
@@ -53,6 +55,8 @@ function emptyForm(): EmployeeFormState {
     address: '',
     paymentMethod: '',
     hireDate: '',
+    birthDate: '',
+    insuranceStartDate: '',
     terminationDate: '',
     status: 'ACTIVE',
     baseSalary: '',
@@ -77,6 +81,8 @@ function formFromEmployee(emp: PayrollEmployeeDto): EmployeeFormState {
     address: emp.address || '',
     paymentMethod: emp.payment_method || '',
     hireDate: emp.hire_date ? emp.hire_date.slice(0, 10) : '',
+    birthDate: emp.birth_date ? emp.birth_date.slice(0, 10) : '',
+    insuranceStartDate: emp.insurance_start_date ? emp.insurance_start_date.slice(0, 10) : '',
     terminationDate: emp.termination_date ? emp.termination_date.slice(0, 10) : '',
     status: emp.status,
     baseSalary: String(emp.base_salary ?? ''),
@@ -185,6 +191,8 @@ export function Employees() {
       address: form.address.trim() || null,
       paymentMethod: form.paymentMethod.trim() || null,
       hireDate: form.hireDate || null,
+      birthDate: form.birthDate || null,
+      insuranceStartDate: form.insuranceStartDate || null,
       terminationDate: form.terminationDate || null,
       status: form.status,
       baseSalary: Number(form.baseSalary) || 0,
@@ -350,6 +358,12 @@ export function Employees() {
                 </Field>
                 <Field label={t('modal.fields.hireDate')}>
                   <input type="date" value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label={t('modal.fields.birthDate')}>
+                  <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label={t('modal.fields.insuranceStartDate')}>
+                  <input type="date" value={form.insuranceStartDate} onChange={(e) => setForm({ ...form, insuranceStartDate: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label={t('modal.fields.terminationDate')}>
                   <input type="date" value={form.terminationDate} onChange={(e) => setForm({ ...form, terminationDate: e.target.value })} className={inputCls} />

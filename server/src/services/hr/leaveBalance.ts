@@ -84,6 +84,17 @@ export function leaveRateOnDate(date: Date, input: LeaveBalanceInput): number {
   return date.getTime() < firstAnniversary.getTime() ? RATE_FIRST_YEAR : RATE_STANDARD;
 }
 
+/**
+ * تاريخ إكمال 10 سنوات تأمينات = بداية التأمين + 10 سنوات (29 شباط يُقصّ لآخر شباط صالح).
+ * يرجع null إن لم تُسجَّل بداية التأمين.
+ */
+export function tenYearsInsuranceDateFrom(insuranceStartDate: string | null | undefined): string | null {
+  if (!insuranceStartDate) return null;
+  const start = parseDate(insuranceStartDate);
+  if (Number.isNaN(start.getTime())) return null;
+  return iso(addMonths(start, 120));
+}
+
 export function computeAnnualLeaveBalance(input: LeaveBalanceInput): LeaveBalanceResult {
   const hire = parseDate(input.hireDate);
   const usableFrom = iso(addMonths(hire, 3));
