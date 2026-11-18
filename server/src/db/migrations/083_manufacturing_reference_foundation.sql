@@ -8,6 +8,9 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.specifications.view', 'عرض مكتبة مواصفات التصنيع', 'manufacturing'),
   ('manufacturing.specifications.import', 'استيراد إصدارات مواصفات التصنيع', 'manufacturing'),
   ('manufacturing.specifications.approve', 'اعتماد إصدارات مواصفات التصنيع', 'manufacturing'),
+  ('manufacturing.work_orders.view', 'عرض أوامر إنتاج التصنيع', 'manufacturing'),
+  ('manufacturing.work_orders.manage', 'إنشاء وتعديل أوامر إنتاج التصنيع', 'manufacturing'),
+  ('manufacturing.work_orders.release', 'إصدار أوامر إنتاج التصنيع', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -23,6 +26,9 @@ JOIN permissions p ON p.code IN (
   'manufacturing.specifications.view',
   'manufacturing.specifications.import',
   'manufacturing.specifications.approve',
+  'manufacturing.work_orders.view',
+  'manufacturing.work_orders.manage',
+  'manufacturing.work_orders.release',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
@@ -73,6 +79,7 @@ CREATE TABLE manufacturing_specification_versions (
     FOREIGN KEY (company_id, specification_id)
     REFERENCES manufacturing_specifications(company_id, id) ON DELETE CASCADE,
   CONSTRAINT manufacturing_specification_versions_number_unique UNIQUE (company_id, specification_id, version_no),
+  CONSTRAINT manufacturing_specification_versions_company_identity UNIQUE (company_id, specification_id, id),
   CONSTRAINT manufacturing_specification_versions_approval_consistency CHECK (
     (status = 'APPROVED' AND approved_at IS NOT NULL)
     OR (status <> 'APPROVED')
@@ -86,6 +93,100 @@ CREATE INDEX manufacturing_specification_versions_history
   ON manufacturing_specification_versions(company_id, specification_id, version_no DESC);
 CREATE INDEX manufacturing_specification_versions_sha
   ON manufacturing_specification_versions(company_id, source_file_sha256);
+
+ALTER TABLE customer_orders
+  ADD CONSTRAINT customer_orders_company_identity UNIQUE (company_id, id);
+ALTER TABLE customer_order_lines
+  ADD CONSTRAINT customer_order_lines_company_order_identity UNIQUE (company_id, order_id, id);
+
+CREATE TABLE manufacturing_work_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  work_order_no text NOT NULL,
+  specification_id uuid NOT NULL,
+  specification_version_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','RELEASED','IN_PROGRESS','COMPLETED','CANCELLED')),
+  priority text NOT NULL DEFAULT 'NORMAL' CHECK (priority IN ('LOW','NORMAL','HIGH','URGENT')),
+  target_length_m numeric(14,3) NOT NULL CHECK (target_length_m > 0),
+  planned_start_date date,
+  planned_end_date date,
+  specification_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(specification_snapshot) = 'object'),
+  notes text,
+  version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+  released_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  released_at timestamptz,
+  completed_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  completed_at timestamptz,
+  cancelled_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  cancelled_at timestamptz,
+  cancellation_reason text,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_work_orders_company_no_unique UNIQUE (company_id, work_order_no),
+  CONSTRAINT manufacturing_work_orders_company_identity UNIQUE (company_id, id),
+  CONSTRAINT manufacturing_work_orders_specification_version_fk
+    FOREIGN KEY (company_id, specification_id, specification_version_id)
+    REFERENCES manufacturing_specification_versions(company_id, specification_id, id) ON DELETE RESTRICT,
+  CONSTRAINT manufacturing_work_orders_dates_check CHECK (
+    planned_start_date IS NULL OR planned_end_date IS NULL OR planned_end_date >= planned_start_date
+  ),
+  CONSTRAINT manufacturing_work_orders_release_consistency CHECK (
+    status = 'DRAFT' OR status = 'CANCELLED' OR released_at IS NOT NULL
+  ),
+  CONSTRAINT manufacturing_work_orders_cancel_consistency CHECK (
+    status <> 'CANCELLED' OR (cancelled_at IS NOT NULL AND length(trim(COALESCE(cancellation_reason,''))) > 0)
+  )
+);
+
+CREATE INDEX manufacturing_work_orders_company_status
+  ON manufacturing_work_orders(company_id, status, planned_start_date);
+CREATE INDEX manufacturing_work_orders_specification
+  ON manufacturing_work_orders(company_id, specification_id, specification_version_id);
+
+CREATE TABLE manufacturing_work_order_allocations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  work_order_id uuid NOT NULL,
+  customer_order_id uuid NOT NULL,
+  customer_order_line_id uuid NOT NULL,
+  allocated_length_m numeric(14,3) NOT NULL CHECK (allocated_length_m > 0),
+  notes text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_work_order_allocations_work_order_fk
+    FOREIGN KEY (company_id, work_order_id)
+    REFERENCES manufacturing_work_orders(company_id, id) ON DELETE CASCADE,
+  CONSTRAINT manufacturing_work_order_allocations_customer_line_fk
+    FOREIGN KEY (company_id, customer_order_id, customer_order_line_id)
+    REFERENCES customer_order_lines(company_id, order_id, id) ON DELETE RESTRICT
+);
+
+CREATE INDEX manufacturing_work_order_allocations_customer_order
+  ON manufacturing_work_order_allocations(company_id, customer_order_id, customer_order_line_id);
+CREATE UNIQUE INDEX manufacturing_work_order_allocations_active_line_unique
+  ON manufacturing_work_order_allocations(company_id, work_order_id, customer_order_line_id)
+  WHERE is_active;
+
+CREATE TABLE manufacturing_work_order_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  work_order_id uuid NOT NULL,
+  event_type text NOT NULL CHECK (event_type IN ('CREATED','UPDATED','RELEASED','STARTED','COMPLETED','CANCELLED')),
+  old_status text CHECK (old_status IS NULL OR old_status IN ('DRAFT','RELEASED','IN_PROGRESS','COMPLETED','CANCELLED')),
+  new_status text NOT NULL CHECK (new_status IN ('DRAFT','RELEASED','IN_PROGRESS','COMPLETED','CANCELLED')),
+  details jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(details) = 'object'),
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_work_order_events_order_fk
+    FOREIGN KEY (company_id, work_order_id)
+    REFERENCES manufacturing_work_orders(company_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX manufacturing_work_order_events_history
+  ON manufacturing_work_order_events(company_id, work_order_id, created_at DESC);
 
 CREATE TABLE manufacturing_departments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

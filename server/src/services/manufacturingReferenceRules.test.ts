@@ -4,6 +4,8 @@ import {
   normalizeReferenceCode,
   validateMachineOwnership,
   validateMaintenanceCompletion,
+  canTransitionManufacturingWorkOrder,
+  validateWorkOrderAllocations,
 } from './manufacturingReferenceRules.js';
 
 assert.equal(canTransitionMachineStatus('ACTIVE', 'MAINTENANCE'), true);
@@ -24,5 +26,23 @@ assert.equal(
   validateMaintenanceCompletion({ status: 'COMPLETED', occurredAt: started, completedAt: new Date('2026-01-01T11:00:00Z') }),
   null,
 );
+
+assert.equal(canTransitionManufacturingWorkOrder('DRAFT', 'RELEASED'), true);
+assert.equal(canTransitionManufacturingWorkOrder('RELEASED', 'IN_PROGRESS'), true);
+assert.equal(canTransitionManufacturingWorkOrder('IN_PROGRESS', 'COMPLETED'), true);
+assert.equal(canTransitionManufacturingWorkOrder('COMPLETED', 'DRAFT'), false);
+assert.equal(canTransitionManufacturingWorkOrder('CANCELLED', 'RELEASED'), false);
+assert.equal(validateWorkOrderAllocations({ targetLengthM: 1000, allocations: [] }), null);
+assert.equal(validateWorkOrderAllocations({ targetLengthM: 1000, allocations: [
+  { customerOrderId: 'o1', customerOrderLineId: 'l1', allocatedLengthM: 400 },
+  { customerOrderId: 'o2', customerOrderLineId: 'l2', allocatedLengthM: 600 },
+] }), null);
+assert.equal(validateWorkOrderAllocations({ targetLengthM: 1000, allocations: [
+  { customerOrderId: 'o1', customerOrderLineId: 'l1', allocatedLengthM: 1001 },
+] }), 'إجمالي الأطوال المخصصة لأوردرات العملاء يتجاوز طول أمر الإنتاج');
+assert.equal(validateWorkOrderAllocations({ targetLengthM: 1000, allocations: [
+  { customerOrderId: 'o1', customerOrderLineId: 'l1', allocatedLengthM: 200 },
+  { customerOrderId: 'o1', customerOrderLineId: 'l1', allocatedLengthM: 200 },
+] }), 'لا يمكن تكرار سطر أوردر العميل في أمر الإنتاج نفسه');
 
 console.log('manufacturingReferenceRules tests passed');

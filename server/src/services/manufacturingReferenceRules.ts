@@ -32,3 +32,36 @@ export function validateMaintenanceCompletion(input: {
   if (input.completedAt && input.completedAt < input.occurredAt) return 'وقت الإكمال لا يمكن أن يسبق وقت بداية الحدث';
   return null;
 }
+
+export const MANUFACTURING_WORK_ORDER_STATUSES = ['DRAFT', 'RELEASED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
+export type ManufacturingWorkOrderStatus = (typeof MANUFACTURING_WORK_ORDER_STATUSES)[number];
+
+const WORK_ORDER_TRANSITIONS: Record<ManufacturingWorkOrderStatus, readonly ManufacturingWorkOrderStatus[]> = {
+  DRAFT: ['RELEASED', 'CANCELLED'],
+  RELEASED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+
+export function canTransitionManufacturingWorkOrder(from: ManufacturingWorkOrderStatus, to: ManufacturingWorkOrderStatus): boolean {
+  return from !== to && WORK_ORDER_TRANSITIONS[from].includes(to);
+}
+
+export function validateWorkOrderAllocations(input: {
+  targetLengthM: number;
+  allocations: Array<{ customerOrderId: string; customerOrderLineId: string; allocatedLengthM: number }>;
+}): string | null {
+  if (!Number.isFinite(input.targetLengthM) || input.targetLengthM <= 0) return 'الطول المستهدف يجب أن يكون أكبر من صفر';
+  const seen = new Set<string>();
+  let total = 0;
+  for (const allocation of input.allocations) {
+    if (!allocation.customerOrderId || !allocation.customerOrderLineId) return 'مرجع أوردر العميل وسطره مطلوبان';
+    if (!Number.isFinite(allocation.allocatedLengthM) || allocation.allocatedLengthM <= 0) return 'طول تخصيص الأوردر يجب أن يكون أكبر من صفر';
+    if (seen.has(allocation.customerOrderLineId)) return 'لا يمكن تكرار سطر أوردر العميل في أمر الإنتاج نفسه';
+    seen.add(allocation.customerOrderLineId);
+    total += allocation.allocatedLengthM;
+  }
+  if (total - input.targetLengthM > 0.0005) return 'إجمالي الأطوال المخصصة لأوردرات العملاء يتجاوز طول أمر الإنتاج';
+  return null;
+}
