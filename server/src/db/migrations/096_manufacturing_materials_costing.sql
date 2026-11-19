@@ -1,4 +1,11 @@
 -- Extend the existing weight-stock ledger rather than introduce parallel stock.
+-- Migration 093 (warehouse zones) replaces this check after manufacturing 083.
+-- Retain the union of both modules' movement types.
+ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_movement_type_check;
+ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_movement_type_check CHECK(movement_type IN (
+ 'OPENING','PURCHASE_RECEIPT','MANUAL_CREATE','TRANSFER_OUT','TRANSFER_IN','RESERVE','RELEASE_RESERVATION',
+ 'SALE','RETURN','ADJUSTMENT','DAMAGE','STATUS_CHANGE','EXTERNAL_JOB_SENT','EXTERNAL_JOB_RETURNED','CUT','LOCATION_MOVE','INTERNAL_PRODUCTION'
+));
 ALTER TABLE manufacturing_warping_yarn_issue_lines
  ADD COLUMN issued_unit_cost numeric(14,4), ADD COLUMN issued_currency_code text,
  ADD COLUMN issued_exchange_rate numeric(18,8);

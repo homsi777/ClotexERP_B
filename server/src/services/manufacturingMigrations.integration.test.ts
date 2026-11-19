@@ -43,6 +43,7 @@ test('manufacturing migrations install and enforce company-scoped downtime refer
       WHERE conrelid='inventory_movements'::regclass AND conname='inventory_movements_movement_type_check'`);
     assert.match(constraint.rows[0].definition, /'CUT'/);
     assert.match(constraint.rows[0].definition, /'INTERNAL_PRODUCTION'/);
+    assert.match(constraint.rows[0].definition, /'LOCATION_MOVE'/);
     console.log(`Installed ${files.length} migrations; company isolation and movement types verified`);
   } finally {
     await client.query('ROLLBACK').catch(() => undefined);

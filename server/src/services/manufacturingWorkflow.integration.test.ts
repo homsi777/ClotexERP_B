@@ -49,6 +49,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
     const spec = randomUUID(), version = randomUUID();
     const warpMachine = randomUUID(), loom = randomUUID(), sizingMachine = randomUUID();
     await admin.query("INSERT INTO companies(id,code,name) VALUES ($1,'FLOW','Test factory')", [company]);
+    await admin.query("INSERT INTO exchange_rates(company_id,currency_code,currency_name_ar,exchange_rate_to_usd) VALUES($1,'EGP','EGP',50)",[company]);
     await admin.query("INSERT INTO users(id,company_id,username,password_hash) VALUES ($1,$2,'flow-user','unused')", [user, company]);
     await admin.query("INSERT INTO warehouses(id,company_id,code,name) VALUES ($1,$2,'RAW','Raw')", [warehouse, company]);
     await admin.query("INSERT INTO fabric_items(id,company_id,internal_code,name) VALUES ($1,$2,'TEST-FABRIC','Test fabric')", [item, company]);
@@ -74,6 +75,9 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
     await call('POST', '/orders/', {}, 403, readonly);
     const otherCompany = randomUUID();
     await admin.query("INSERT INTO companies(id,code,name) VALUES ($1,'OTHER','Other')", [otherCompany]);
+    const otherUser=randomUUID();await admin.query("INSERT INTO users(id,company_id,username,password_hash) VALUES($1,$2,'other-flow','unused')",[otherUser,otherCompany]);
+    const tenantToken=signAuthToken({sub:otherUser,companyId:otherCompany,username:'other-flow',role:'admin',permissions:[],isPlatformAdmin:false});
+    const stockToken=signAuthToken({sub:user,companyId:company,username:'flow-user',role:'user',permissions:['inventory.manage'],isPlatformAdmin:false});
     const otherToken = signAuthToken({ sub: user, companyId: otherCompany, username: 'flow-user', role: 'admin', permissions: [], isPlatformAdmin: false });
     await call('GET', '/orders/', undefined, 403, otherToken);
     // Exercise both optional-stage paths through the real handlers and transactions.
@@ -81,6 +85,8 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       await admin.query('UPDATE yarn_lots SET unit_cost=10 WHERE id=$1',[yarn]);
       if(!withSizing)await admin.query('UPDATE yarn_lots SET unit_cost=NULL WHERE id=$1',[weft]);
       const order = await call('POST', '/orders/', { specificationVersionId: version, targetLengthM: 100 }, 201);
+      await call('GET',`/cost/${order.id}`,undefined,404,tenantToken);
+      assert.equal('totalUsd' in await call('GET',`/cost/${order.id}`,undefined,200,stockToken),false);
       await call('POST', `/orders/${order.id}/release`, { version: 1 });
       const warp = await call('POST', '/warping/', { workOrderId: order.id, plannedLengthM: 100, warpingMachineId: warpMachine, targetLoomId: loom }, 201);
       await call('POST', `/warping/${warp.id}/release`, { version: 1 });
@@ -120,7 +126,9 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       }
       await call('POST',`/cost/${order.id}/materials`,{requestId:randomUUID(),stage:'WEAVING',stageId:run.id,lotId:weft,kind:'RETURN',sourceEntryId:concurrentMaterials[0].id,weightKg:8,notes:'Excess return'},400);
       await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'LABOR',amount:20,currencyCode:'USD',notes:'Labor allocation, not payroll payment'});
-      await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'ENERGY',amount:10,currencyCode:'USD',notes:'Energy allocation'});
+      await admin.query("UPDATE exchange_rates SET exchange_rate_to_usd=50 WHERE company_id=$1 AND currency_code='EGP'",[company]);
+      await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'ENERGY',amount:500,currencyCode:'EGP',notes:'Energy allocation'});
+      await admin.query("UPDATE exchange_rates SET exchange_rate_to_usd=100 WHERE company_id=$1 AND currency_code='EGP'",[company]);
       await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'LABOR',amount:1,currencyCode:'USD',notes:'Not authorized'},403,readonly);
       const shifts = await Promise.all([1, 2].map(() => app.inject({ method: 'POST', url: `/weaving/${run.id}/shift-logs`,
         payload: { productionDate: '2026-11-19', counterStart: 0, counterEnd: 100 }, headers: { authorization: `Bearer ${token}` } })));

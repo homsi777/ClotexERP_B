@@ -16,7 +16,7 @@ try{
  await writeFile(fixture,html,'utf8');
  server=await createServer({root,server:{host:'127.0.0.1',port:51784,strictPort:true}});await server.listen();
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH??'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
- const page=await browser.newPage();page.setDefaultTimeout(10000);page.on('requestfailed',r=>console.error('Failed:',r.url()));page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
+ const page=await browser.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>{errors.push(e.message);console.error('Page error:',e.message);});
  page.on('console',m=>{if(m.type()==='error')console.error('Browser:',m.text());});
  await page.evaluateOnNewDocument(()=>{localStorage.setItem('fabric_erp_api_token','isolated-ui-test');localStorage.setItem('fabric_erp_api_base_url','http://127.0.0.1:51784');});
  await page.setRequestInterception(true);
@@ -31,7 +31,8 @@ try{
    }else data=report;
    return req.respond({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'},body:JSON.stringify({ok:true,data})});
   }
-  if(url.hostname!=='127.0.0.1'&&url.protocol!=='data:')return req.abort();
+  if(url.pathname==='/favicon.ico')return req.respond({status:204});
+  if(url.hostname!=='127.0.0.1'&&url.protocol!=='data:')return req.respond({status:200,contentType:'text/css',body:''});
   return req.continue();
  });
  await page.setViewport({width:1440,height:1100});
@@ -45,7 +46,7 @@ try{
  await page.type('input[aria-label="ملاحظات الحركة"]','استهلاك لحمة للوردية');
  await page.evaluate(()=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='تسجيل الحركة').click());
  await page.waitForFunction(()=>document.body.innerText.includes('استهلاك لحمة للوردية')&&document.querySelector('tbody tr'));
- assert.equal(posted,1);assert.deepEqual(errors,[]);console.log('Layout',await page.evaluate(()=>({viewport:innerWidth,scroll:document.documentElement.scrollWidth,root:document.getElementById('root').getBoundingClientRect().toJSON(),fieldset:document.querySelector('fieldset').getBoundingClientRect().toJSON()})));
+ assert.equal(posted,1);assert.deepEqual(errors,[]);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Desktop must not overflow horizontally');
  await page.screenshot({path:path.join(root,'..','clotex-manufacturing-cost-desktop.png'),fullPage:true});
  await page.setViewport({width:390,height:844});
  await page.screenshot({path:path.join(root,'..','clotex-manufacturing-cost-mobile.png'),fullPage:true});
