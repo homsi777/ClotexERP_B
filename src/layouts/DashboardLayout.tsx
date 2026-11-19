@@ -110,6 +110,7 @@ const Topbar = () => {
         { labelKey: 'inventory.settings', to: '/inventory/settings' },
         { labelKey: 'inventory.bulkPricing', to: '/inventory/bulk-pricing' },
         { labelKey: 'inventory.warehouses', to: '/inventory/warehouses' },
+        { labelKey: 'inventory.zones', to: '/inventory/zones' },
         { labelKey: 'inventory.transfers', to: '/inventory/transfers' },
         { labelKey: 'inventory.depreciation', to: '/inventory/depreciation' },
       ],
@@ -119,6 +120,8 @@ const Topbar = () => {
       icon: Tags,
       subItems: [
         { labelKey: 'stickers.cartela', to: '/cartela' },
+        { labelKey: 'stickers.cartelaDelivery', to: '/cartela/delivery' },
+        { labelKey: 'stickers.cartelaCustody', to: '/cartela/custody' },
         { labelKey: 'stickers.labels', to: '/inventory/labels' },
         { labelKey: 'stickers.customLabel', to: '/inventory/custom-label' },
         { labelKey: 'stickers.printJobs', to: '/inventory/print-jobs' },
