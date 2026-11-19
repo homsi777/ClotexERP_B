@@ -151,7 +151,9 @@ export async function cutAndSellRoll(
       roll.variant_id,
       roll.warehouse_id,
       roll.location_id,
-      d.cutLengthM,
+      // قاعدة المحرك: التوب المباع (SOLD) طوله 0 — فلا تُحسب أمتاره بتقارير تجمع length_m بلا فلتر حالة.
+      // طول القطعة الحقيقي محفوظ بسجل القص (fabric_roll_cuts.cut_length_m) ويُقرأ منه للستيكر.
+      0,
       roll.width_cm,
       roll.gsm,
       roll.unit_cost,
@@ -171,10 +173,12 @@ export async function cutAndSellRoll(
     [
       companyId,
       cutRoll.id,
-      d.cutLengthM,
+      // حركة تتبّع فقط (delta = 0): الخصم الفعلي سُجّل مرة واحدة بحركة SALE على التوب الأصلي، وأي delta
+      // موجب هنا كان سيُقرأ بتقرير الأمتار المستلمة (positive_length_m) كإدخال مخزون وهمي.
+      0,
       invoice.id,
       invoice.invoiceNo,
-      `قطعة مقصوصة من ${roll.barcode}`,
+      `قطعة مقصوصة من ${roll.barcode} بطول ${d.cutLengthM} م`,
       userId,
     ],
   );
