@@ -8,7 +8,9 @@ export type ProductionBatch = {
   produced_length_m: number; clean_length_m: number; rework_length_m: number; rejected_length_m: number;
   pending_length_m: number; received_roll_length_m: number; inspection_notes: string | null;
 };
+export type ProductionQualityReport = { batch: ProductionBatch & Record<string, unknown>; defects: Array<Record<string, unknown>>; rolls: Array<Record<string, unknown>> };
 export const listProductionBatches = () => apiFetch<{ ok: true; data: ProductionBatch[] }>(`${base}/batches`).then((r) => r.data);
+export const getProductionQualityReport = (id: string) => apiFetch<{ ok: true; data: ProductionQualityReport }>(`${base}/batches/${id}/report`).then((r) => r.data);
 export const saveBatchInspection = (id: string, body: Record<string, unknown>) => apiFetch(`${base}/batches/${id}/inspection`, { method: "PUT", body: JSON.stringify(body) });
 export const approveBatchInspection = (id: string) => apiFetch(`${base}/batches/${id}/approve`, { method: "POST", body: "{}" });
 export const receiveBatchRolls = (id: string, body: Record<string, unknown>) => apiFetch(`${base}/batches/${id}/rolls`, { method: "POST", body: JSON.stringify(body) });

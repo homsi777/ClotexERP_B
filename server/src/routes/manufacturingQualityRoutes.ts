@@ -38,6 +38,39 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: rows.rows });
   });
 
+  app.get("/batches/:batchId/report", async (req, reply) => {
+    if (!has(req.user, "manufacturing.weaving.view") && !has(req.user, "manufacturing.raw_inspection.manage"))
+      return sendError(reply, 403, "ليست لديك صلاحية عرض تقرير الجودة", "FORBIDDEN");
+    const { batchId } = req.params as { batchId: string };
+    const [batch, defects, rolls] = await Promise.all([
+      getPool().query(
+        `SELECT b.*,r.run_no,w.work_order_no,m.code AS loom_code,m.name AS loom_name,s.production_date,s.counter_start,s.counter_end,s.downtime_minutes,
+          e.full_name AS operator_name,st.name AS shift_name,inspector.full_name AS inspector_name,approver.full_name AS approver_name
+         FROM manufacturing_production_batches b
+         JOIN manufacturing_weaving_runs r ON r.id=b.weaving_run_id AND r.company_id=b.company_id
+         JOIN manufacturing_work_orders w ON w.id=r.work_order_id AND w.company_id=r.company_id
+         JOIN manufacturing_machines m ON m.id=r.loom_id AND m.company_id=r.company_id
+         JOIN manufacturing_weaving_shift_logs s ON s.id=b.shift_log_id AND s.company_id=b.company_id
+         LEFT JOIN payroll_employees e ON e.id=s.operator_employee_id AND e.company_id=s.company_id
+         LEFT JOIN attendance_shift_types st ON st.id=s.shift_type_id AND st.company_id=s.company_id
+         LEFT JOIN users inspector ON inspector.id=b.inspected_by_user_id
+         LEFT JOIN users approver ON approver.id=b.approved_by_user_id
+         WHERE b.id=$1 AND b.company_id=$2`, [batchId, req.user!.companyId],
+      ),
+      getPool().query(
+        `SELECT x.position_m,x.quantity,x.severity,x.notes,d.code,d.name FROM manufacturing_production_batch_defects x
+         JOIN manufacturing_quality_defect_catalog d ON d.id=x.defect_id AND d.company_id=x.company_id WHERE x.production_batch_id=$1 AND x.company_id=$2 ORDER BY x.created_at`,
+        [batchId, req.user!.companyId],
+      ),
+      getPool().query(
+        `SELECT roll_no,production_barcode,length_m,width_cm,actual_weight_kg,gsm FROM manufacturing_raw_roll_outputs WHERE production_batch_id=$1 AND company_id=$2 ORDER BY created_at`,
+        [batchId, req.user!.companyId],
+      ),
+    ]);
+    if (!batch.rows.length) return sendError(reply, 404, "دفعة الإنتاج غير موجودة", "NOT_FOUND");
+    return reply.send({ ok: true, data: { batch: batch.rows[0], defects: defects.rows, rolls: rolls.rows } });
+  });
+
   app.put("/batches/:batchId/inspection", async (req, reply) => {
     if (!has(req.user, "manufacturing.raw_inspection.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية تسجيل فحص الجودة", "FORBIDDEN");
