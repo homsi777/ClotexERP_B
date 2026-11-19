@@ -249,6 +249,7 @@ export interface ImportPayrollExcelResult {
   payrollNo: string | null;
   employeesCreated: number;
   employeesMatched: number;
+  wagesFilled?: number;
   totalNet: number;
   employeesOnly?: boolean;
   wageMismatches?: ImportWageMismatch[];

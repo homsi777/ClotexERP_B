@@ -8,12 +8,15 @@ import { listExchangeRates, type ExchangeRateDto } from '../../lib/api/exchangeR
 import {
   cutAndSellRoll,
   listRollCuts,
+  priceRollCut,
   type RollCutLogItem,
   type RollCutResult,
 } from '../../lib/api/rollCutApi';
 import { previewCutLabels, type RollLabelPreviewDto, type LabelTemplateDto } from '../../lib/api/labelsApi';
 import { printRollLabels, repeatRollLabel } from '../../lib/printing/printRollLabels';
 import { useToast } from '../../components/NonBlockingToast';
+import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
+import { usePermissions } from '../../hooks/usePermissions';
 
 const num = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -21,6 +24,13 @@ export const RollCut: React.FC = () => {
   const { t } = useTranslation('rollCut');
   const { showToast } = useToast();
   const scanRef = useRef<HTMLInputElement>(null);
+  // التسعير صلاحية (invoices.price): من لا يملكها يحفظ القص فقط وتبقى الفاتورة معلّقة للمحاسب. الخادم يفرض ذلك أيضاً.
+  const { has } = usePermissions();
+  const canPrice = has('invoices.price');
+  const [deferPricing, setDeferPricing] = useState(false);
+  const priceNow = canPrice && !deferPricing;
+  const [pricingId, setPricingId] = useState<string | null>(null);
+  const [pricingValue, setPricingValue] = useState('');
 
   const [scan, setScan] = useState('');
   const [looking, setLooking] = useState(false);
@@ -30,7 +40,8 @@ export const RollCut: React.FC = () => {
   const [customers, setCustomers] = useState<ApiCustomer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  // عملة البيع = العملة الافتراضية للفرع (مصر=الجنيه)، لا عملة تكلفة التوب؛ تُغيَّر يدوياً.
+  const [currency, setCurrency] = useCurrencyWithBranchDefault();
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);
   const [cashboxes, setCashboxes] = useState<CashboxDto[]>([]);
   const [cashboxId, setCashboxId] = useState('');
@@ -117,7 +128,6 @@ export const RollCut: React.FC = () => {
         showToast({ type: 'warning', message: t('notAvailable') });
       }
       setRoll(exact);
-      if (exact.currency_code) setCurrency(exact.currency_code);
     } catch (e) {
       showToast({ type: 'error', message: e instanceof Error ? e.message : t('lookupFailed') });
     } finally {
@@ -129,7 +139,7 @@ export const RollCut: React.FC = () => {
     roll &&
     Number.isFinite(cutNum) && cutNum > 0 && cutNum <= currentLength + 1e-6 &&
     customerId &&
-    Number(unitPrice) > 0 &&
+    (!priceNow || Number(unitPrice) > 0) &&
     !saving;
 
   const submit = async () => {
@@ -140,14 +150,14 @@ export const RollCut: React.FC = () => {
         originalRollId: roll.id,
         cutLengthM: cutNum,
         customerId,
-        unitPrice: Number(unitPrice),
+        ...(priceNow ? { unitPrice: Number(unitPrice) } : { deferPricing: true }),
         currencyCode: currency,
-        paidAmount: paidAmount ? Number(paidAmount) : 0,
-        cashboxId: cashboxId || null,
+        paidAmount: priceNow && paidAmount ? Number(paidAmount) : 0,
+        cashboxId: priceNow ? cashboxId || null : null,
         notes: notes || null,
       });
       setResult(res);
-      showToast({ type: 'success', message: t('cutDone', { invoice: res.invoice.invoiceNo }) });
+      showToast({ type: 'success', message: res.invoice ? t('cutDone', { invoice: res.invoice.invoiceNo }) : t('cutSavedPending') });
       void refreshLog(logSearch);
       await loadLabels(res.originalRoll.id, res.cutPiece.id);
     } catch (e) {
@@ -189,10 +199,25 @@ export const RollCut: React.FC = () => {
     }
   };
 
+  const submitPricing = async (item: RollCutLogItem) => {
+    const p = Number(pricingValue);
+    if (!(p > 0)) return;
+    try {
+      const r = await priceRollCut(item.id, { unitPrice: p, currencyCode: currency });
+      showToast({ type: 'success', message: t('priced', { invoice: r.invoice.invoiceNo }) });
+      setPricingId(null);
+      setPricingValue('');
+      void refreshLog(logSearch);
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('cutFailed') });
+    }
+  };
+
   const reprint = async (item: RollCutLogItem) => {
     await loadLabels(item.original_roll_id, item.cut_piece_roll_id);
     setResult({
-      invoice: { id: item.sales_invoice_id, invoiceNo: item.sales_invoice_no },
+      pricingStatus: item.pricing_status,
+      invoice: item.sales_invoice_id && item.sales_invoice_no ? { id: item.sales_invoice_id, invoiceNo: item.sales_invoice_no } : null,
       originalRoll: { id: item.original_roll_id, barcode: item.original_barcode, remainingLengthM: Number(item.original_length_after_m) },
       cutPiece: { id: item.cut_piece_roll_id, barcode: item.cut_barcode, lengthM: Number(item.cut_length_m) },
       cutLogId: item.id,
@@ -266,11 +291,13 @@ export const RollCut: React.FC = () => {
                     {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </label>
+                {priceNow && (<>
                 <label className="block">
                   <span className="text-xs font-bold text-slate-600">{t('unitPrice')}</span>
                   <input type="number" min={0} step={0.01} value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" dir="ltr" />
                 </label>
+                </>)}
                 <label className="block">
                   <span className="text-xs font-bold text-slate-600">{t('currency')}</span>
                   <select value={currency} onChange={(e) => setCurrency(e.target.value)}
@@ -281,6 +308,7 @@ export const RollCut: React.FC = () => {
                     ))}
                   </select>
                 </label>
+                {priceNow && (<>
                 <label className="block">
                   <span className="text-xs font-bold text-slate-600">{t('paidAmount')}</span>
                   <input type="number" min={0} step={0.01} value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)}
@@ -294,15 +322,26 @@ export const RollCut: React.FC = () => {
                     {cashboxes.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.currency_code})</option>)}
                   </select>
                 </label>
+                </>)}
               </div>
-              <div className="flex items-center justify-between rounded-lg bg-indigo-50 px-3 py-2 text-sm">
-                <span className="font-bold text-slate-700">{t('invoiceTotal')}</span>
-                <b className="text-indigo-700">{num(lineTotal)} {currency}</b>
-              </div>
+              {canPrice && (
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                  <input type="checkbox" checked={deferPricing} onChange={(e) => setDeferPricing(e.target.checked)} />
+                  {t('deferPricing')}
+                </label>
+              )}
+              {priceNow ? (
+                <div className="flex items-center justify-between rounded-lg bg-indigo-50 px-3 py-2 text-sm">
+                  <span className="font-bold text-slate-700">{t('invoiceTotal')}</span>
+                  <b className="text-indigo-700">{num(lineTotal)} {currency}</b>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{t('pendingNotice')}</div>
+              )}
               <button type="button" onClick={() => void submit()} disabled={!canSubmit}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
-                {t('cutAndSell')}
+                {priceNow ? t('cutAndSell') : t('cutSave')}
               </button>
             </div>
           </div>
@@ -311,7 +350,7 @@ export const RollCut: React.FC = () => {
 
       {result && (
         <section className="bg-white rounded-xl border border-emerald-200 shadow-sm p-5 space-y-4">
-          <h2 className="font-bold text-slate-900">{t('resultTitle', { invoice: result.invoice.invoiceNo })}</h2>
+          <h2 className="font-bold text-slate-900">{result.invoice ? t('resultTitle', { invoice: result.invoice.invoiceNo }) : t('resultPendingTitle')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="rounded-lg border border-violet-200 bg-violet-50 p-4">
               <p className="text-xs font-bold text-violet-700">{t('cutPiece')}</p>
@@ -381,7 +420,7 @@ export const RollCut: React.FC = () => {
               )}
               {log.map((item) => (
                 <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50/70">
-                  <td className="p-3 font-mono font-bold" dir="ltr">{item.sales_invoice_no}</td>
+                  <td className="p-3 font-mono font-bold" dir="ltr">{item.sales_invoice_no ?? <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-sans text-amber-800">{t('pendingBadge')}</span>}</td>
                   <td className="p-3">{item.item_name || '—'}</td>
                   <td className="p-3 font-mono" dir="ltr">{item.original_barcode}</td>
                   <td className="p-3 font-mono text-violet-700" dir="ltr">{item.cut_barcode}</td>
@@ -393,6 +432,18 @@ export const RollCut: React.FC = () => {
                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-white">
                       <Printer className="w-3.5 h-3.5" />{t('reprint')}
                     </button>
+                    {item.pricing_status === 'PENDING' && canPrice && (
+                      pricingId === item.id ? (
+                        <span className="ms-2 inline-flex items-center gap-1">
+                          <input type="number" min={0} step={0.01} value={pricingValue} onChange={(e) => setPricingValue(e.target.value)}
+                            placeholder={`${t('unitPrice')} (${currency})`} className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-xs" dir="ltr" />
+                          <button type="button" onClick={() => void submitPricing(item)} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white">{t('confirmPrice')}</button>
+                        </span>
+                      ) : (
+                        <button type="button" onClick={() => { setPricingId(item.id); setPricingValue(''); }}
+                          className="ms-2 rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white">{t('priceNow')}</button>
+                      )
+                    )}
                   </td>
                 </tr>
               ))}

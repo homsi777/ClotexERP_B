@@ -479,6 +479,8 @@ function renderAccountStatementHtml(options: {
   const [phonePart = '', addressPart = ''] = options.detailLine.split(' | ');
 
   let totalFabricAmount = 0;
+  // إجمالي بنود الفواتير لكل عملة أصلية على حدة — لا يُجمع الجنيه مع الدولار.
+  const fabricTotalsByCurrency = new Map<string, number>();
   let totalFabricLength = 0;
   let totalFabricRolls = 0;
 
@@ -493,6 +495,8 @@ function renderAccountStatementHtml(options: {
       typeLabel: string;
       detailText?: string;
       fabric: AccountStatementInvoiceDetail | null;
+      /** عملة الفاتورة الأصلية للسعر والإجمالي (لا عملة عرض الكشف). */
+      currency?: string;
       debit: number | null;
       credit: number | null;
       balance: number | null;
@@ -512,8 +516,8 @@ function renderAccountStatementHtml(options: {
     ${td(detailCell, rowEmphasis)}
     ${td(cols.fabric ? cols.fabric.rollsCount.toLocaleString(arLocale()) : DASH, rowEmphasis)}
     ${td(cols.fabric ? fmt(cols.fabric.totalQuantity) : DASH, rowEmphasis)}
-    ${td(cols.fabric ? fmt(cols.fabric.unitPrice) : DASH, rowEmphasis)}
-    ${td(cols.fabric ? `${safeText(options.currency)} ${fmt(cols.fabric.totalAmount)}` : DASH, `font-weight:600;${rowEmphasis}`)}
+    ${td(cols.fabric ? `${fmt(cols.fabric.unitPrice)} <span style="font-size:8px;color:#64748b;">${safeText(cols.currency || options.currency)}</span>` : DASH, rowEmphasis)}
+    ${td(cols.fabric ? `${safeText(cols.currency || options.currency)} ${fmt(cols.fabric.totalAmount)}` : DASH, `font-weight:600;${rowEmphasis}`)}
     ${td(cols.debit != null && cols.debit > 0 ? fmt(cols.debit) : DASH, emphasize ? rowEmphasis : `color:${GREEN};font-weight:700;`)}
     ${td(cols.credit != null && cols.credit > 0 ? fmt(cols.credit) : DASH, emphasize ? rowEmphasis : `color:${RED};font-weight:700;`)}
     ${td(cols.balance != null ? fmt(Math.abs(cols.balance)) : DASH, emphasize ? rowEmphasis : `color:${BLUE};font-weight:700;`)}
@@ -541,6 +545,8 @@ function renderAccountStatementHtml(options: {
     displayRows.forEach((row, displayIdx) => {
       if (row.fabric) {
         totalFabricAmount += row.fabric.totalAmount;
+        const rowCur = (row.currency || options.currency || 'USD').trim().toUpperCase();
+        fabricTotalsByCurrency.set(rowCur, (fabricTotalsByCurrency.get(rowCur) ?? 0) + row.fabric.totalAmount);
         totalFabricLength += row.fabric.totalQuantity;
         totalFabricRolls += row.fabric.rollsCount;
       }
@@ -556,6 +562,7 @@ function renderAccountStatementHtml(options: {
           typeLabel: safeText(row.typeLabel),
           detailText: row.detailText ? safeText(row.detailText) : undefined,
           fabric: row.fabric,
+          currency: row.currency,
           debit: row.debit,
           credit: row.credit,
           balance: row.balance,
@@ -801,7 +808,13 @@ function renderAccountStatementHtml(options: {
         <td>${totalFabricRolls > 0 ? totalFabricRolls.toLocaleString(arLocale()) : DASH}</td>
         <td class="tf-green">${fmt(totalFabricLength)}</td>
         <td></td>
-        <td class="tf-green">${safeText(options.currency)} ${fmt(totalFabricAmount)}</td>
+        <td class="tf-green">${
+          fabricTotalsByCurrency.size === 0
+            ? DASH
+            : Array.from(fabricTotalsByCurrency.entries())
+                .map(([cur, total]) => `${safeText(cur)} ${fmt(total)}`)
+                .join('<br/>')
+        }</td>
         <td class="tf-green">${fmt(options.totals.debit)}</td>
         <td class="tf-red">${fmt(options.totals.credit)}</td>
         <td class="tf-blue">${fmt(options.closingAmount)}</td>

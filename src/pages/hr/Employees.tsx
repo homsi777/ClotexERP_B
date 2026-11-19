@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { previewWageSplit } from '../../lib/hr/wageSplitPreview';
+import {
+  distinctValues,
+  filterAndSortEmployees,
+  type EmployeeFilters,
+} from '../../lib/hr/employeeFilters';
 import { useTranslation } from 'react-i18next';
 import { History, Loader2, Pencil, Plus, Search, X } from 'lucide-react';
 import {
@@ -119,6 +124,8 @@ export function Employees() {
   const [employees, setEmployees] = useState<PayrollEmployeeDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // ملاحظة مدير بشير: فلترة متقدمة (موظفو النسيج فقط، الأقدم/الأجدد…) على القائمة المحمَّلة.
+  const [filters, setFilters] = useState<EmployeeFilters>({ sort: 'NAME' });
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormState>(() => emptyForm());
@@ -151,7 +158,12 @@ export function Employees() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const filtered = useMemo(() => employees, [employees]);
+  const filtered = useMemo(() => filterAndSortEmployees(employees, filters), [employees, filters]);
+  const factoryOptions = useMemo(() => distinctValues(employees, 'factory'), [employees]);
+  const departmentOptions = useMemo(() => distinctValues(employees, 'department'), [employees]);
+  const jobTitleOptions = useMemo(() => distinctValues(employees, 'job_title'), [employees]);
+  const categoryOptions = useMemo(() => distinctValues(employees, 'category'), [employees]);
+  const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'sort' && Boolean(v));
 
   function openCreate() {
     setEditingId(null);
@@ -260,6 +272,83 @@ export function Employees() {
         />
       </div>
 
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {([
+            ['factory', 'filters.factory', factoryOptions],
+            ['department', 'filters.department', departmentOptions],
+            ['jobTitle', 'filters.jobTitle', jobTitleOptions],
+            ['category', 'filters.category', categoryOptions],
+          ] as const).map(([field, label, options]) => (
+            <label key={field} className="block text-xs font-bold text-slate-600">
+              {t(label)}
+              <select
+                value={(filters[field] as string | undefined) ?? ''}
+                onChange={(e) => setFilters((f) => ({ ...f, [field]: e.target.value }))}
+                className={`mt-1 ${inputCls} bg-white`}
+              >
+                <option value="">{t('filters.all')}</option>
+                {options.map((o) => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <label className="block text-xs font-bold text-slate-600">
+            {t('filters.status')}
+            <select value={filters.status ?? ''} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))} className={`mt-1 ${inputCls} bg-white`}>
+              <option value="">{t('filters.all')}</option>
+              <option value="ACTIVE">{t('status.ACTIVE')}</option>
+              <option value="SUSPENDED">{t('status.SUSPENDED')}</option>
+              <option value="TERMINATED">{t('status.TERMINATED')}</option>
+            </select>
+          </label>
+          <label className="block text-xs font-bold text-slate-600">
+            {t('filters.fingerprint')}
+            <select value={filters.fingerprint ?? ''} onChange={(e) => setFilters((f) => ({ ...f, fingerprint: e.target.value as EmployeeFilters['fingerprint'] }))} className={`mt-1 ${inputCls} bg-white`}>
+              <option value="">{t('filters.all')}</option>
+              <option value="with">{t('filters.fpWith')}</option>
+              <option value="without">{t('filters.fpWithout')}</option>
+            </select>
+          </label>
+          <label className="block text-xs font-bold text-slate-600">
+            {t('filters.wage')}
+            <select value={filters.wage ?? ''} onChange={(e) => setFilters((f) => ({ ...f, wage: e.target.value as EmployeeFilters['wage'] }))} className={`mt-1 ${inputCls} bg-white`}>
+              <option value="">{t('filters.all')}</option>
+              <option value="zero">{t('filters.wageZero')}</option>
+              <option value="set">{t('filters.wageSet')}</option>
+            </select>
+          </label>
+          <label className="block text-xs font-bold text-slate-600">
+            {t('filters.sort')}
+            <select value={filters.sort ?? 'NAME'} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as EmployeeFilters['sort'] }))} className={`mt-1 ${inputCls} bg-white`}>
+              <option value="NAME">{t('filters.sortName')}</option>
+              <option value="CODE">{t('filters.sortCode')}</option>
+              <option value="HIRE_OLDEST">{t('filters.sortOldest')}</option>
+              <option value="HIRE_NEWEST">{t('filters.sortNewest')}</option>
+              <option value="WAGE_HIGH">{t('filters.sortWageHigh')}</option>
+              <option value="WAGE_LOW">{t('filters.sortWageLow')}</option>
+            </select>
+          </label>
+          <label className="block text-xs font-bold text-slate-600">
+            {t('filters.hiredFrom')}
+            <input type="date" value={filters.hiredFrom ?? ''} onChange={(e) => setFilters((f) => ({ ...f, hiredFrom: e.target.value }))} className={`mt-1 ${inputCls}`} />
+          </label>
+          <label className="block text-xs font-bold text-slate-600">
+            {t('filters.hiredTo')}
+            <input type="date" value={filters.hiredTo ?? ''} onChange={(e) => setFilters((f) => ({ ...f, hiredTo: e.target.value }))} className={`mt-1 ${inputCls}`} />
+          </label>
+        </div>
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>{t('filters.count', { shown: filtered.length, total: employees.length })}</span>
+          {hasActiveFilters && (
+            <button type="button" onClick={() => setFilters((f) => ({ sort: f.sort }))} className="font-bold text-indigo-700 hover:underline">
+              {t('filters.reset')}
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
           <div className="flex items-center gap-2 p-6 text-sm text-slate-500">
@@ -275,6 +364,7 @@ export function Employees() {
                 <th className="p-3 text-start">{t('table.department')}</th>
                 <th className="p-3 text-start">{t('table.jobTitle')}</th>
                 <th className="p-3 text-start">{t('table.category')}</th>
+                <th className="p-3 text-start">{t('table.hireDate')}</th>
                 <th className="p-3 text-start">{t('table.fingerprintCode')}</th>
                 <th className="p-3 text-start">{t('table.baseSalary')}</th>
                 <th className="p-3 text-start">{t('table.status')}</th>
@@ -290,6 +380,7 @@ export function Employees() {
                   <td className="p-3">{emp.department || '—'}</td>
                   <td className="p-3">{emp.job_title || '—'}</td>
                   <td className="p-3">{emp.category || '—'}</td>
+                  <td className="p-3 text-xs" dir="ltr">{emp.hire_date ? emp.hire_date.slice(0, 10) : '—'}</td>
                   <td className="p-3 font-mono text-xs">{emp.fingerprint_code || '—'}</td>
                   <td className="p-3">{Number(emp.base_salary).toLocaleString()} {emp.currency_code}</td>
                   <td className="p-3">

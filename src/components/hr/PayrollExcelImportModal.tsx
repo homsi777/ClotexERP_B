@@ -145,6 +145,7 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
                 {result.employeesOnly ? t('payrollImport.employeesOnlySuccess') : t('payrollImport.importSuccess', { payrollNo: result.payrollNo })}
               </div>
               <div>{t('payrollImport.employeesCreated')}: {result.employeesCreated} — {t('payrollImport.employeesMatched')}: {result.employeesMatched}</div>
+              {(result.wagesFilled ?? 0) > 0 && <div>{t('payrollImport.wagesFilled', { count: result.wagesFilled })}</div>}
               {!result.employeesOnly && <div>{t('payrollImport.totalNet')}: {result.totalNet.toLocaleString()} {currencyCode}</div>}
               {(result.wageMismatches?.length ?? 0) > 0 && (
                 <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-normal text-amber-800">

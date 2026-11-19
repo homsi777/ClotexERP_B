@@ -10,7 +10,6 @@
   "nav.backup": "Veritabanı (Yedekleme)",
   "nav.themes": "Temalar ve Görünüm",
   "nav.activation": "Sistemi Etkinleştir",
-
   "activation.title": "Sistemi Etkinleştir",
   "activation.description": "Etkinleştirme yalnızca sunucu tarafından yönetilir: oluşturma aşağıdaki yönetici panelinden yapılır, veritabanında hash olarak saklanır ve activation-keys.txt gibi yerel bir dosya kullanılmaz. Tablo yalnızca anahtarın son karakterlerini ve durumunu gösterir.",
   "activation.refresh": "Yenile",
@@ -42,7 +41,6 @@
   "activation.keyFormatError": "Anahtar biçimi XXXX.XXXX.XXXX.XXXX olmalıdır",
   "activation.activationSuccess": "Sistem başarıyla etkinleştirildi.",
   "activation.activationFailed": "Sistem etkinleştirilemedi. Anahtarı kontrol edip tekrar deneyin.",
-
   "toast.exchangeRatesLoadFailed": "Döviz kurları yüklenemedi",
   "toast.purgeAdminOnly": "Bu işlem yalnızca sistem yöneticisi içindir.",
   "toast.purgeNeedsAck": "Önce uyarıyı anladığınızı onaylamalısınız.",
@@ -60,19 +58,15 @@
   "toast.userCreateFailed": "Kullanıcı eklenemedi.",
   "toast.userUpdated": "Kullanıcı güncellendi.",
   "toast.userUpdateFailed": "Kullanıcı güncellenemedi.",
-
   "status.loadSettingsFailed": "Sunucu ayarları yüklenemedi. Arayüz yerel olarak ayarlanmaya devam edilebilir.",
   "status.saving": "Ayarlar kaydediliyor...",
   "status.saved": "Ayarlar veritabanına kaydedildi.",
   "status.saveFailedLocal": "Veritabanına kaydedilemedi, geçici yerel bir kopya tutuldu.",
-
   "page.title": "Sistem Ayarları",
   "page.subtitle": "Genel ayarları, tercihleri ve yetkileri yönetin",
   "page.saveAll": "Tüm Değişiklikleri Kaydet",
-
   "stub.title": "Hazırlanıyor",
   "stub.body": "Bu bölüm geliştirme planı kapsamında daha sonra etkinleştirilecektir. Görünümü şimdi özelleştirmek için «{{themesLabel}}» bölümünü kullanın.",
-
   "general.title": "Genel Ayarlar",
   "general.description": "Günlük sistem çalışması, dil, stok ve kaydetme davranışı.",
   "general.defaultLanguage": "Varsayılan Dil",
@@ -81,7 +75,6 @@
   "general.lowStockThreshold": "Düşük Stok Uyarı Sınırı",
   "general.autoSaveDrafts": "Taslakları Otomatik Kaydet",
   "general.requireWarehouseOnSale": "Satışta Depo Seçimini Zorunlu Kıl",
-
   "invoice.title": "Faturalama ve Vergiler",
   "invoice.description": "Fatura numaraları, vergi, QR ve faturalama sırasındaki stok politikaları.",
   "invoice.salesPrefix": "Satış Faturası Öneki",
@@ -89,7 +82,6 @@
   "invoice.taxRate": "Vergi Oranı %",
   "invoice.showQr": "Faturada QR Göster",
   "invoice.allowNegativeStock": "Negatif Stokta Satışa İzin Ver",
-
   "backup.title": "Veritabanı ve Yedekleme",
   "backup.description": "Şifre veya bağlantı anahtarı göstermeden yedekleme ve saklama politikası.",
   "backup.autoBackup": "Otomatik Yedeklemeyi Etkinleştir",
@@ -100,7 +92,6 @@
   "backup.manualBody": "Veritabanının bir kopyasını oluşturup telefonunuza veya cihazınıza (mobil tarayıcı veya bilgisayar) indirir. Telefonda «Dosyalara Kaydet»i seçin veya dosyayı güvenli saklamak için WhatsApp/e-postanıza gönderin.",
   "backup.downloading": "Yedek oluşturuluyor ve indiriliyor...",
   "backup.downloadNow": "Şimdi Yedek İndir",
-
   "purge.title": "Tehlikeli Bölge — İş Verilerini Sil",
   "purge.explanation": "Bu işlem kumaşları, stoku, faturaları, müşterileri, tedarikçileri, makbuzları, kasa hareketlerini ve bunlarla ilişkili muhasebe kayıtlarını, ayrıca kartela kayıtlarını (etiketler ve elyaf türleri) siler. Kullanıcılar, boş depolar, sistem ayarları, maaşlar ve etiket şablonu korunur.",
   "purge.irreversible": "Bu işlem geri alınamaz — önce bir yedek alın.",
@@ -110,7 +101,6 @@
   "purge.passwordLabel": "Mevcut Hesap Şifreniz",
   "purge.purging": "Siliniyor...",
   "purge.purgeButton": "İş Verilerini Kalıcı Olarak Sil",
-
   "users.title": "Kullanıcılar ve Yetkiler",
   "users.description": "Veritabanında kayıtlı rol ve yetkilerle kullanıcı oluşturun ve ilişkilendirin.",
   "users.refresh": "Yenile",
@@ -141,7 +131,6 @@
   "users.rolePermissionsTitle": "Rol Yetkileri",
   "users.rolePermissionsHelp": "Kutulara tıklayarak yetkileri düzenleyin — değişiklik anında kaydedilir. Rol düzenleme tüm hesaplar için geneldir, bu nedenle yalnızca platform yöneticisi kullanabilir.",
   "users.noPermissionsLoaded": "Sunucudan yüklenen yetki yok.",
-
   "company.basicInfoTitle": "Şirketin Temel Bilgileri",
   "company.mockNameAr": "Altın Terzi Kurumu",
   "company.mockAddress": "Al-Malaz, Jarir Caddesi, Bina No. 45, Riyad, Suudi Arabistan",
@@ -188,7 +177,6 @@
   "company.labelPreviewLengthValue": "150 metre",
   "company.labelPreviewWeightField": "Ağırlık:",
   "company.labelPreviewBarcodeCaption": "Barkod: ABC-123456",
-
   "editUserModal.title": "Kullanıcıyı Düzenle",
   "editUserModal.usernamePlaceholder": "Kullanıcı Adı",
   "editUserModal.fullNamePlaceholder": "Ad Soyad",
@@ -198,7 +186,6 @@
   "editUserModal.cancel": "İptal",
   "editUserModal.saving": "Kaydediliyor...",
   "editUserModal.save": "Değişikliği Kaydet",
-
   "mail.title": "Mesajlaşma Ayarları",
   "mail.description": "Sırları arayüz dışında tutarak e-posta ve dış gönderim bilgileri.",
   "mail.senderNameLabel": "Gönderen Adı",
@@ -224,7 +211,6 @@
   "mail.telegramRecentChatsTitle": "Bota Gelen Son Sohbetler",
   "mail.telegramColName": "Ad",
   "mail.telegramColLastMessage": "Son Mesaj",
-
   "desktop.header.title": "Masaüstü Uygulaması",
   "desktop.header.subtitle": "Bağlantı, yazıcılar ve sessiz yazdırma yapılandırması",
   "desktop.browserNotice.label": "Not:",
@@ -282,7 +268,6 @@
   "desktop.security.sshVpnCreds": "SSH veya VPS Kimlik Bilgileri",
   "desktop.security.telegramToken": "Telegram Token",
   "desktop.security.serverSideOnly": "PostgreSQL bağlantısı yalnızca sunucu tarafında (Backend API) gerçekleşir.",
-
   "companyManagement.title": "Hesaplar",
   "companyManagement.description": "Her hesap diğer hesaplardan tamamen bağımsızdır (depolar, faturalar, müşteriler, kasa...). Bu bölüm yalnızca platform yöneticisine görünür.",
   "companyManagement.addBranch": "Yeni Şube Ekle",
@@ -322,7 +307,6 @@
   "companyManagement.createSuccess": "Hesap başarıyla oluşturuldu.",
   "companyManagement.createFailed": "Hesap oluşturulamadı.",
   "companyManagement.editSaveFailed": "Değişiklik kaydedilemedi.",
-
   "telegramBot.targetUser": "Kullanıcı",
   "telegramBot.targetCustomer": "Müşteri",
   "telegramBot.targetSupplier": "Tedarikçi",
@@ -394,7 +378,6 @@
   "telegramBot.notesLabel": "Notlar",
   "telegramBot.cancelButton": "İptal",
   "telegramBot.saveLinkButton": "Bağlantıyı Kaydet",
-
   "activeDevices.loadFailed": "Aktif cihazlar yüklenemedi",
   "activeDevices.currentSessionLabel": "Mevcut oturumunuz",
   "activeDevices.accountLabel": "{{username}} hesabı",
@@ -422,7 +405,6 @@
   "activeDevices.loggingOut": "İşleniyor...",
   "activeDevices.logoutButton": "Çıkış Yap",
   "activeDevices.footerNote": "Etkinlik, sistemdeki her kullanıcı için otomatik olarak her 45 saniyede bir güncellenir. Oturum, 5 dakika hareketsizlik sonrası kaldırılır.",
-
   "themeDisplay.title": "Temalar ve Görünüm",
   "themeDisplay.subtitle": "Sistemdeki mevcut tablo ve kart tutarlılığını koruyarak arayüz renklerini ve Arapça yazı tipini özelleştirin.",
   "themeDisplay.autoSaveBadge": "Bu tarayıcıda otomatik olarak kaydedilir",
@@ -443,5 +425,8 @@
   "themeDisplay.letterSpacingLabel": "Harf Aralığı ({{sign}}{{value}} em)",
   "themeDisplay.letterSpacingNarrow": "En dar −0.04",
   "themeDisplay.letterSpacingWide": "En geniş +0.09",
-  "themeDisplay.letterSpacingHelp": "Arapça harflerin yatay boşluğunu kontrol eder; tablolarda okumanın bozulmasını önlemek için küçük değerler kullanın."
+  "themeDisplay.letterSpacingHelp": "Arapça harflerin yatay boşluğunu kontrol eder; tablolarda okumanın bozulmasını önlemek için küçük değerler kullanın.",
+  "companyManagement.defaultCurrencyForBranchLabel": "Bu şubenin mali işlemleri için varsayılan para birimi",
+  "companyManagement.defaultCurrencyUnset": "Ayarlanmadı (önceki gibi USD)",
+  "companyManagement.defaultCurrencyHelp": "Fatura ve gider formlarında başlangıç değeridir; her işlemde elle değiştirilebilir. Muhasebe esas para birimini (USD) değiştirmez."
 }

@@ -1,6 +1,6 @@
 # PRODUCTION SAFETY RULES — NON-NEGOTIABLE
 
-**Note:** this repository is deployed on the VPS under the folder name `ab-amal-erp` (remote `A.B-Amal-ERP.git`) — these rules apply to it under either name.
+**Note:** this repository is deployed on the VPS under the folder name `clotexerp` (`/home/ubuntu/clotexerp`; it was previously named `ab-amal-erp`, remote `A.B-Amal-ERP.git`, and was renamed on 2026-11-19) — these rules apply to it under either name.
 
 **Incident (2026-09-23):** during a clotex deployment, a command meant to copy build files into the nginx directory read its target path from a variable that came back empty. The command silently expanded to `rm -rf /*` and ran against the root of the live production server. System binaries were destroyed, SSH access was lost, and four production systems on that server (clotex, abooerp, ERPSystem, hameed-hliwi) went down with real financial data at risk. Recovery only worked because the hosting provider happened to have a same-day backup — no safeguard in this project prevented or limited the damage. The rules below exist to make sure this class of failure cannot happen again, on this project or any other.
 

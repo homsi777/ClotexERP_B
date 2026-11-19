@@ -5,6 +5,7 @@
  * تُستدعى مرات متعددة، مرة لكل حساب جديد.
  */
 import bcrypt from 'bcryptjs';
+import { normalizeTransactionCurrency } from '../utils/defaultCurrency.js';
 import { getPool } from '../db/pool.js';
 import { ensureCompanyGlCoa } from './glCoaService.js';
 import { seedRbacWarehouseTemplate } from './postActivationBootstrap.js';
@@ -22,12 +23,24 @@ export class CompanyProvisioningError extends Error {
   }
 }
 
+/** يتحقق من العملة الافتراضية: غائبة ⇒ null (لا تغيير)، مدعومة ⇒ بحروف كبيرة، غير ذلك ⇒ خطأ 400. */
+function assertDefaultCurrency(value: string | undefined): string | null {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const normalized = normalizeTransactionCurrency(value);
+  if (!normalized) {
+    throw new CompanyProvisioningError('عملة افتراضية غير مدعومة (المدعوم: USD, EGP, TRY, SYP)', 400, 'VALIDATION');
+  }
+  return normalized;
+}
+
 export type NewCompanyInput = {
   code: string;
   name: string;
   baseCurrencyCode?: string;
   /** لغة الواجهة الافتراضية لهذا الفرع (سوريا=ar، تركيا=tr) — تُطبَّق تلقائياً عند الدخول ما لم يبدّل المستخدم يدوياً. */
   defaultLanguage?: 'ar' | 'tr';
+  /** العملة الافتراضية للمعاملات المالية بهذا الفرع (مثل مصر=EGP)؛ تُهيّئ النماذج ويظل تغييرها يدوياً مسموحاً. */
+  defaultCurrencyCode?: string;
 };
 
 export type NewCompanyAdminInput = {
@@ -42,6 +55,7 @@ export type ProvisionedCompany = {
   name: string;
   base_currency_code: string;
   default_language: 'ar' | 'tr';
+  default_currency_code: string | null;
   is_active: boolean;
   created_at: string;
 };
@@ -65,14 +79,15 @@ export async function provisionCompany(
     let companyRow;
     try {
       companyRow = await client.query<ProvisionedCompany>(
-        `INSERT INTO companies (code, name, base_currency_code, default_language)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, code, name, base_currency_code, default_language, is_active, created_at`,
+        `INSERT INTO companies (code, name, base_currency_code, default_language, default_currency_code)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, code, name, base_currency_code, default_language, default_currency_code, is_active, created_at`,
         [
           company.code.trim(),
           company.name.trim(),
           company.baseCurrencyCode?.trim() || 'USD',
           company.defaultLanguage === 'tr' ? 'tr' : 'ar',
+          assertDefaultCurrency(company.defaultCurrencyCode),
         ],
       );
     } catch (e: unknown) {
@@ -134,7 +149,7 @@ export async function provisionCompany(
 
 export async function updateCompany(
   companyId: string,
-  patch: { name?: string; code?: string; isActive?: boolean; defaultLanguage?: 'ar' | 'tr' },
+  patch: { name?: string; code?: string; isActive?: boolean; defaultLanguage?: 'ar' | 'tr'; defaultCurrencyCode?: string },
   actor: ProvisioningActor,
 ): Promise<ProvisionedCompany> {
   const pool = getPool();
@@ -145,15 +160,17 @@ export async function updateCompany(
            code = COALESCE($3, code),
            is_active = COALESCE($4, is_active),
            default_language = COALESCE($5, default_language),
+           default_currency_code = COALESCE($6, default_currency_code),
            updated_at = now()
        WHERE id = $1
-       RETURNING id, code, name, base_currency_code, default_language, is_active, created_at`,
+       RETURNING id, code, name, base_currency_code, default_language, default_currency_code, is_active, created_at`,
       [
         companyId,
         patch.name?.trim() || null,
         patch.code?.trim() || null,
         patch.isActive ?? null,
         patch.defaultLanguage ?? null,
+        assertDefaultCurrency(patch.defaultCurrencyCode),
       ],
     );
     if (!row.rows.length) {
@@ -181,7 +198,7 @@ export async function updateCompany(
 
 export async function listCompanies(): Promise<ProvisionedCompany[]> {
   const res = await getPool().query<ProvisionedCompany>(
-    `SELECT id, code, name, base_currency_code, default_language, is_active, created_at
+    `SELECT id, code, name, base_currency_code, default_language, default_currency_code, is_active, created_at
      FROM companies ORDER BY created_at ASC`,
   );
   return res.rows;

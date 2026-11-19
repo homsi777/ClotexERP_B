@@ -13,6 +13,7 @@ const emptyForm = {
   code: '',
   name: '',
   defaultLanguage: 'ar' as 'ar' | 'tr',
+  defaultCurrencyCode: '',
   adminUsername: '',
   adminPassword: '',
   adminFullName: '',
@@ -27,7 +28,7 @@ export function CompanyManagementPanel({ onCompaniesChanged }: CompanyManagement
   const [form, setForm] = useState(emptyForm);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCompany, setEditingCompany] = useState<ApiCompany | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', code: '', isActive: true, defaultLanguage: 'ar' as 'ar' | 'tr' });
+  const [editForm, setEditForm] = useState({ name: '', code: '', isActive: true, defaultLanguage: 'ar' as 'ar' | 'tr', defaultCurrencyCode: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -62,6 +63,7 @@ export function CompanyManagementPanel({ onCompaniesChanged }: CompanyManagement
         code: form.code.trim(),
         name: form.name.trim(),
         defaultLanguage: form.defaultLanguage,
+        defaultCurrencyCode: form.defaultCurrencyCode || undefined,
         adminUsername: form.adminUsername.trim(),
         adminPassword: form.adminPassword,
         adminFullName: form.adminFullName.trim() || undefined,
@@ -79,7 +81,7 @@ export function CompanyManagementPanel({ onCompaniesChanged }: CompanyManagement
 
   const openEdit = (company: ApiCompany) => {
     setEditingCompany(company);
-    setEditForm({ name: company.name, code: company.code, isActive: company.is_active, defaultLanguage: company.default_language });
+    setEditForm({ name: company.name, code: company.code, isActive: company.is_active, defaultLanguage: company.default_language, defaultCurrencyCode: company.default_currency_code ?? '' });
     setEditError('');
   };
 
@@ -98,6 +100,7 @@ export function CompanyManagementPanel({ onCompaniesChanged }: CompanyManagement
         code: editForm.code.trim(),
         isActive: editForm.isActive,
         defaultLanguage: editForm.defaultLanguage,
+        defaultCurrencyCode: editForm.defaultCurrencyCode || undefined,
       });
       closeEdit();
       await load();
@@ -174,6 +177,21 @@ export function CompanyManagementPanel({ onCompaniesChanged }: CompanyManagement
               <option value="ar">{t('companyManagement.languageArabic')}</option>
               <option value="tr">{t('companyManagement.languageTurkish')}</option>
             </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[var(--text-muted)]">{t('companyManagement.defaultCurrencyForBranchLabel')}</label>
+            <select
+              className="w-full p-2.5 bg-[var(--surface-header)] border border-[var(--border-default)] rounded-lg"
+              value={form.defaultCurrencyCode}
+              onChange={(e) => setForm({ ...form, defaultCurrencyCode: e.target.value })}
+            >
+              <option value="">{t('companyManagement.defaultCurrencyUnset')}</option>
+              <option value="USD">USD</option>
+              <option value="EGP">EGP</option>
+              <option value="TRY">TRY</option>
+              <option value="SYP">SYP</option>
+            </select>
+            <p className="text-[11px] text-[var(--text-muted)]">{t('companyManagement.defaultCurrencyHelp')}</p>
           </div>
           <div className="pt-2 border-t border-[var(--border-subtle)] text-xs font-bold text-[var(--text-muted)]">
             {t('companyManagement.firstAdminSectionTitle')}
@@ -294,6 +312,21 @@ export function CompanyManagementPanel({ onCompaniesChanged }: CompanyManagement
                   <option value="ar">{t('companyManagement.languageArabic')}</option>
                   <option value="tr">{t('companyManagement.languageTurkish')}</option>
                 </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-[var(--text-muted)]">{t('companyManagement.defaultCurrencyForBranchLabel')}</label>
+                <select
+                  className="w-full p-2.5 bg-[var(--surface-header)] border border-[var(--border-default)] rounded-lg"
+                  value={editForm.defaultCurrencyCode}
+                  onChange={(e) => setEditForm({ ...editForm, defaultCurrencyCode: e.target.value })}
+                >
+                  <option value="">{t('companyManagement.defaultCurrencyUnset')}</option>
+                  <option value="USD">USD</option>
+                  <option value="EGP">EGP</option>
+                  <option value="TRY">TRY</option>
+                  <option value="SYP">SYP</option>
+                </select>
+                <p className="text-[11px] text-[var(--text-muted)]">{t('companyManagement.defaultCurrencyHelp')}</p>
               </div>
               <label className="flex items-center gap-2 text-sm font-bold text-[var(--text-heading)]">
                 <input

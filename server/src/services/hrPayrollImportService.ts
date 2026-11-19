@@ -60,6 +60,8 @@ export type ImportDepartmentPayrollResult = {
   payrollNo: string | null;
   employeesCreated: number;
   employeesMatched: number;
+  /** موظفون قائمون كان أجرهم 0 فمُلئ من الأجر الشامل بالملف. */
+  wagesFilled: number;
   totalNet: number;
   employeesOnly: boolean;
   /** موظفون قائمون أجرهم المسجّل لا يطابق الأجر الشامل بالملف — للتنبيه، لا يُعدَّل شيء. */
@@ -72,7 +74,7 @@ async function resolveOrCreateEmployee(
   row: PayrollExcelRowInput,
   currencyCode: string,
   workdayHours: number | null,
-): Promise<{ id: string; created: boolean; mismatch: WageMismatch | null }> {
+): Promise<{ id: string; created: boolean; mismatch: WageMismatch | null; wageFilled: boolean }> {
   const derived = deriveEmployeeWage({ comprehensive: row.comprehensiveWage, base: row.baseSalary });
   const existing = await client.query<{ id: string; base_salary: string; full_name: string }>(
     `SELECT id, base_salary, full_name FROM payroll_employees WHERE company_id = $1 AND fingerprint_code = $2`,
@@ -80,16 +82,48 @@ async function resolveOrCreateEmployee(
   );
   if (existing.rows.length) {
     const e = existing.rows[0];
-    // يملأ الحقول الجديدة الفارغة فقط (نسبة الأساسي، ساعات اليوم) — لا يغيّر أي أجر أو بيان قائم.
+    const storedWage = Number(e.base_salary);
+    // أجر 0 = «غير معروف» (موظف أُنشئ من استيراد بصمة بلا أجر) فيُملأ من الأجر الشامل بالملف؛ أي أجر أكبر
+    // من صفر لا يُمسّ أبداً (قد يكون مضبوطاً أو معدَّلاً يدوياً) ويُنبَّه فقط إن اختلف.
+    const fillWage = derived.source === 'COMPREHENSIVE' && derived.employeeWage > 0 && !(storedWage > 0);
+    // يملأ الحقول الفارغة فقط (نسبة الأساسي، ساعات اليوم، وبيانات الهوية الناقصة) — لا يغيّر أي قيمة موجودة.
     await client.query(
       `UPDATE payroll_employees SET
          base_share_percent = COALESCE(base_share_percent, $3::numeric),
-         workday_hours = COALESCE(workday_hours, $4::numeric)
+         workday_hours = COALESCE(workday_hours, $4::numeric),
+         base_salary = CASE WHEN $5::boolean THEN $6::numeric ELSE base_salary END,
+         hire_date = COALESCE(hire_date, $7::date),
+         factory = COALESCE(factory, $8),
+         department = COALESCE(department, $9),
+         job_title = COALESCE(job_title, $10),
+         category = COALESCE(category, $11),
+         payment_method = COALESCE(payment_method, $12),
+         updated_at = now()
        WHERE id = $1 AND company_id = $2`,
-      [e.id, companyId, derived.baseSharePercent, workdayHours],
+      [
+        e.id,
+        companyId,
+        derived.baseSharePercent,
+        workdayHours,
+        fillWage,
+        derived.employeeWage,
+        row.hireDate ?? null,
+        row.factory ?? null,
+        row.department ?? null,
+        row.jobTitle ?? null,
+        row.category ?? null,
+        row.paymentMethod ?? null,
+      ],
     );
+    if (fillWage) {
+      await client.query(
+        `INSERT INTO employee_wage_rule_history (company_id, employee_id, effective_from, base_salary, notes, created_by_user_id)
+         VALUES ($1,$2,COALESCE($3::date, current_date),$4,'تعبئة أجر كان صفراً من ملف مرتبات Excel (الأجر الشامل)',$5)`,
+        [companyId, e.id, row.hireDate ?? null, derived.employeeWage, null],
+      );
+    }
     let mismatch: WageMismatch | null = null;
-    if (derived.source === 'COMPREHENSIVE') {
+    if (derived.source === 'COMPREHENSIVE' && !fillWage) {
       const check = checkStoredWage(Number(e.base_salary), derived.employeeWage, row.baseSalary);
       if (check !== 'MATCHES_COMPREHENSIVE') {
         mismatch = {
@@ -101,7 +135,7 @@ async function resolveOrCreateEmployee(
         };
       }
     }
-    return { id: e.id, created: false, mismatch };
+    return { id: e.id, created: false, mismatch, wageFilled: fillWage };
   }
 
   const employeeCode = `EMP-${row.employeeCode}`;
@@ -135,7 +169,7 @@ async function resolveOrCreateEmployee(
      VALUES ($1,$2,COALESCE($3::date, current_date),$4,'مستورد تلقائياً من كشف رواتب Excel',$5)`,
     [companyId, employeeId, row.hireDate ?? null, derived.employeeWage, null],
   );
-  return { id: employeeId, created: true, mismatch: null };
+  return { id: employeeId, created: true, mismatch: null, wageFilled: false };
 }
 
 /** يستورد شيت "الاجر" المحسوب فعلاً (أرقام نهائية حقيقية، لا إعادة حساب) كمسير
@@ -155,11 +189,13 @@ export async function importDepartmentPayrollExcel(
   if (input.employeesOnly) {
     let created = 0;
     let matched = 0;
+    let filled = 0;
     const mismatches: WageMismatch[] = [];
     for (const row of input.rows) {
       const emp = await resolveOrCreateEmployee(client, input.companyId, row, input.currencyCode, workdayHours);
       if (emp.created) created++;
       else matched++;
+      if (emp.wageFilled) filled++;
       if (emp.mismatch) mismatches.push(emp.mismatch);
     }
     return {
@@ -167,6 +203,7 @@ export async function importDepartmentPayrollExcel(
       payrollNo: null,
       employeesCreated: created,
       employeesMatched: matched,
+      wagesFilled: filled,
       totalNet: 0,
       employeesOnly: true,
       wageMismatches: mismatches,
@@ -218,11 +255,13 @@ export async function importDepartmentPayrollExcel(
 
   let employeesCreated = 0;
   let employeesMatched = 0;
+  let wagesFilled = 0;
   const wageMismatches: WageMismatch[] = [];
   for (const row of input.rows) {
     const employee = await resolveOrCreateEmployee(client, input.companyId, row, input.currencyCode, workdayHours);
     if (employee.created) employeesCreated++;
     else employeesMatched++;
+    if (employee.wageFilled) wagesFilled++;
     if (employee.mismatch) wageMismatches.push(employee.mismatch);
 
     await client.query(
@@ -250,6 +289,7 @@ export async function importDepartmentPayrollExcel(
     payrollNo: run.rows[0].payroll_no,
     employeesCreated,
     employeesMatched,
+    wagesFilled,
     totalNet: round2(totalNet),
     employeesOnly: false,
     wageMismatches,

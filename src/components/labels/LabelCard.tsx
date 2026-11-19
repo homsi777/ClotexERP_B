@@ -36,7 +36,7 @@ import type { RollLabelPreviewDto } from '../../lib/api/labelsApi';
 import { BRAND } from '../../branding';
 import { displayLabelMaterialCode } from '../../lib/importDisplay';
 import { thermalBrandLogoHtml, thermalLogoImgReactStyle } from '../../lib/printing/thermalBrandLogo';
-import i18n from '../../i18n/config';
+import { labelT } from '../../lib/labelCardI18n';
 
 // ─── Code128 SVG generator ───────────────────────────────────────────────────
 
@@ -470,7 +470,7 @@ export function buildPrintDocument(
     rollLayout = 'auto',
   } = opts;
   const cfg: Required<LabelConfig> = { ...DEFAULT_CONFIG, ...config };
-  cfg.disclaimer = config.disclaimer !== undefined ? config.disclaimer : i18n.t('labelCard.defaultDisclaimer');
+  cfg.disclaimer = config.disclaimer !== undefined ? config.disclaimer : labelT('labelCard.defaultDisclaimer');
   const textDir = cfg.textDirection;
   const rowClass = textDir === 'rtl' ? 'row row-rtl' : 'row row-ltr';
 
@@ -512,22 +512,22 @@ export function buildPrintDocument(
 
   <div class="block grid-2">
     <div>
-      ${cfg.showItemName ? fieldRow(i18n.t('labelCard.itemNameLabel'), roll.itemName) : ''}
+      ${cfg.showItemName ? fieldRow(labelT('labelCard.itemNameLabel'), roll.itemName) : ''}
       ${
         cfg.showInternalCode
-          ? fieldRow(i18n.t('labelCard.materialCodeLabel'), pickMaterialCode(roll))
+          ? fieldRow(labelT('labelCard.materialCodeLabel'), pickMaterialCode(roll))
           : ''
       }
       ${
         cfg.showColorName || cfg.showSupplierCode
-          ? fieldRow(i18n.t('labelCard.colorNameLabel'), color)
+          ? fieldRow(labelT('labelCard.colorNameLabel'), color)
           : ''
       }
     </div>
     <div class="right-col">
-      ${cfg.showColorCode ? fieldRow(i18n.t('labelCard.colorCodeLabel'), roll.colorCode ?? '', false, true) : ''}
+      ${cfg.showColorCode ? fieldRow(labelT('labelCard.colorCodeLabel'), roll.colorCode ?? '', false, true) : ''}
       <div class="quality text-${textDir}">
-        <div class="ql">${i18n.t('labelCard.qualityLabel')}</div>
+        <div class="ql">${labelT('labelCard.qualityLabel')}</div>
         <div class="qv">${cfg.quality}</div>
       </div>
     </div>
@@ -536,10 +536,10 @@ export function buildPrintDocument(
   <div class="lower">
     <div class="lower-fields">
       <div class="lower-list">
-        ${fieldRow(i18n.t('labelCard.noteLabel'),       '')}
-        ${fieldRow(i18n.t('labelCard.batchNumberLabel'),     lot)}
-        ${cfg.showLength       ? fieldRow(i18n.t('labelCard.metersLabel'),     meters, true) : ''}
-        ${cfg.showActualWeight ? fieldRow(i18n.t('labelCard.netWeightLabel'), weight, true) : ''}
+        ${fieldRow(labelT('labelCard.noteLabel'),       '')}
+        ${fieldRow(labelT('labelCard.batchNumberLabel'),     lot)}
+        ${cfg.showLength       ? fieldRow(labelT('labelCard.metersLabel'),     meters, true) : ''}
+        ${cfg.showActualWeight ? fieldRow(labelT('labelCard.netWeightLabel'), weight, true) : ''}
       </div>
     </div>
     ${cfg.showQr ? `<div class="qr">${qrSvg}</div>` : ''}

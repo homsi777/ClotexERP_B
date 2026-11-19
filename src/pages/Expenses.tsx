@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { Plus, Search, Loader2, CreditCard, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, tr } from 'date-fns/locale';
@@ -38,7 +39,7 @@ export const Expenses = () => {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
-  const [currencyCode, setCurrencyCode] = useState<'USD' | 'SYP' | 'TRY' | 'EGP'>('USD');
+  const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
 
   const loadExpenses = useCallback(async (search?: string) => {

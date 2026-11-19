@@ -16,6 +16,7 @@ import {
   computeMonthlyStatusEffects,
   createEmployeesFromFingerprints,
 } from '../services/attendanceService.js';
+import { computeDailyAlerts, computeAnnualReport } from '../services/hr/hrInsights.js';
 import { ATTENDANCE_STATUS_CODES } from '../services/hr/attendanceStatus.js';
 import { insertAuditLog } from '../services/auditLogService.js';
 
@@ -147,6 +148,23 @@ export const attendanceRoutes: FastifyPluginAsync = async (app) => {
     } finally {
       client.release();
     }
+  });
+
+  // شاشة HR: تنبيهات يوم محدد (لم يُسجَّل/غياب/نسيان انصراف/تأخر) — قراءة فقط.
+  app.get('/alerts', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const q = req.query as Record<string, string>;
+    const date = q.date && /^\d{4}-\d{2}-\d{2}$/.test(q.date) ? q.date : new Date().toISOString().slice(0, 10);
+    return reply.send({ ok: true, data: await computeDailyAlerts(req.user!.companyId, date) });
+  });
+
+  // تقرير سنوي: إجمالي لكل موظف + تفصيل شهري — قراءة فقط.
+  app.get('/annual-report', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const q = req.query as Record<string, string>;
+    const year = Number.parseInt(q.year ?? '', 10) || new Date().getFullYear();
+    if (year < 2000 || year > 2100) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    return reply.send({ ok: true, data: await computeAnnualReport(req.user!.companyId, year, q.employeeId || undefined) });
   });
 
   // TASK 013: معاينة أثر حالات شهر على الراتب ورصيد الإجازات (قراءة فقط).

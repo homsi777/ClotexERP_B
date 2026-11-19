@@ -58,6 +58,7 @@ import arPayrollSalaryLog from '../locales/ar/payrollSalaryLog.json';
 import arSalaries from '../locales/ar/salaries.json';
 import arHrEmployees from '../locales/ar/hrEmployees.json';
 import arHrAttendance from '../locales/ar/hrAttendance.json';
+import arHrHub from '../locales/ar/hrHub.json';
 import arReportsMain from '../locales/ar/reportsMain.json';
 import arReportsCenter from '../locales/ar/reportsCenter.json';
 import arJournal from '../locales/ar/journal.json';
@@ -125,6 +126,7 @@ import trPayrollSalaryLog from '../locales/tr/payrollSalaryLog.json';
 import trSalaries from '../locales/tr/salaries.json';
 import trHrEmployees from '../locales/tr/hrEmployees.json';
 import trHrAttendance from '../locales/tr/hrAttendance.json';
+import trHrHub from '../locales/tr/hrHub.json';
 import trReportsMain from '../locales/tr/reportsMain.json';
 import trReportsCenter from '../locales/tr/reportsCenter.json';
 import trJournal from '../locales/tr/journal.json';
@@ -200,6 +202,7 @@ void i18n.use(initReactI18next).init({
       salaries: arSalaries,
       hrEmployees: arHrEmployees,
       hrAttendance: arHrAttendance,
+      hrHub: arHrHub,
       reportsMain: arReportsMain,
       reportsCenter: arReportsCenter,
       journal: arJournal,
@@ -269,6 +272,7 @@ void i18n.use(initReactI18next).init({
       salaries: trSalaries,
       hrEmployees: trHrEmployees,
       hrAttendance: trHrAttendance,
+      hrHub: trHrHub,
       reportsMain: trReportsMain,
       reportsCenter: trReportsCenter,
       journal: trJournal,
@@ -283,7 +287,7 @@ void i18n.use(initReactI18next).init({
   lng: initialLanguage,
   fallbackLng: DEFAULT_LANGUAGE,
   defaultNS: 'common',
-  ns: ['common', 'dashboard', 'login', 'nav', 'invoices', 'terminology', 'inventory', 'settings', 'customers', 'createItem', 'returns', 'customerStatement', 'supplierStatement', 'purchaseImport', 'stockImport', 'stickerPrinting', 'externalJobs', 'suppliers', 'partiesLog', 'customerStatementImportModal', 'customerLegacyStatement', 'fabricMasterData', 'rollDetails', 'transfers', 'inventorySettings', 'warehouses', 'printJobs', 'yarnManagement', 'categories', 'createRoll', 'customStickerPrinting', 'depreciation', 'bulkPricing', 'cartelaLabels', 'exchangeInvoices', 'invoiceStatement', 'customerOrdersPage', 'orderFormModal', 'treasuryMain', 'treasurySettings', 'paymentBonds', 'collectionBonds', 'safes', 'checksVault', 'treasuryLog', 'bondRecords', 'bondDetails', 'expenses', 'profitDetails', 'payrollSalaryLog', 'salaries', 'hrEmployees', 'hrAttendance', 'reportsMain', 'reportsCenter', 'journal', 'accounting', 'partners', 'manufacturing', 'importBatches', 'documentFileNames', 'labelCard', 'materialInquiry', 'intakeOperations', 'inventoryMovementsLog', 'externalJobMatching', 'rollCut'],
+  ns: ['common', 'dashboard', 'login', 'nav', 'invoices', 'terminology', 'inventory', 'settings', 'customers', 'createItem', 'returns', 'customerStatement', 'supplierStatement', 'purchaseImport', 'stockImport', 'stickerPrinting', 'externalJobs', 'suppliers', 'partiesLog', 'customerStatementImportModal', 'customerLegacyStatement', 'fabricMasterData', 'rollDetails', 'transfers', 'inventorySettings', 'warehouses', 'printJobs', 'yarnManagement', 'categories', 'createRoll', 'customStickerPrinting', 'depreciation', 'bulkPricing', 'cartelaLabels', 'exchangeInvoices', 'invoiceStatement', 'customerOrdersPage', 'orderFormModal', 'treasuryMain', 'treasurySettings', 'paymentBonds', 'collectionBonds', 'safes', 'checksVault', 'treasuryLog', 'bondRecords', 'bondDetails', 'expenses', 'profitDetails', 'payrollSalaryLog', 'salaries', 'hrEmployees', 'hrAttendance', 'hrHub', 'reportsMain', 'reportsCenter', 'journal', 'accounting', 'partners', 'manufacturing', 'importBatches', 'documentFileNames', 'labelCard', 'materialInquiry', 'intakeOperations', 'inventoryMovementsLog', 'externalJobMatching', 'rollCut'],
   interpolation: {
     escapeValue: false,
   },

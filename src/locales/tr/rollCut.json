@@ -48,5 +48,14 @@
   "colDate": "Tarih",
   "colActions": "İşlemler",
   "logEmpty": "Henüz kesim yok",
-  "reprint": "Yeniden yazdır"
+  "reprint": "Yeniden yazdır",
+  "cutSave": "Kesimi kaydet",
+  "cutSavedPending": "Kesim kaydedildi — fatura fiyatlandırma bekliyor",
+  "deferPricing": "Fiyatlandırmadan kaydet (muhasebeci sonra fiyatlar)",
+  "pendingNotice": "Fiyatlandırma yetkiniz yok — kesim kaydedilir, fatura muhasebeci fiyatlayana kadar beklemede kalır",
+  "resultPendingTitle": "Kesim kaydedildi — fiyatlandırma bekliyor",
+  "pendingBadge": "Fiyat bekliyor",
+  "priceNow": "Fiyatla",
+  "confirmPrice": "Onayla",
+  "priced": "Fiyatlandı — fatura {{invoice}}"
 }

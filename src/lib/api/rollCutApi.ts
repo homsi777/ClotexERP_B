@@ -6,7 +6,9 @@ export interface RollCutPayload {
   originalRollId: string;
   cutLengthM: number;
   customerId: string;
-  unitPrice: number;
+  /** اختياري: غيابه = حفظ القص بلا تسعير (فاتورة معلّقة). الخادم يفرض الصلاحية. */
+  unitPrice?: number;
+  deferPricing?: boolean;
   unit?: 'meter' | 'yard';
   currencyCode?: string;
   exchangeRateToUsd?: number;
@@ -17,7 +19,8 @@ export interface RollCutPayload {
 }
 
 export interface RollCutResult {
-  invoice: { id: string; invoiceNo: string };
+  pricingStatus: 'PRICED' | 'PENDING';
+  invoice: { id: string; invoiceNo: string } | null;
   originalRoll: { id: string; barcode: string; remainingLengthM: number };
   cutPiece: { id: string; barcode: string; lengthM: number };
   cutLogId: string;
@@ -25,8 +28,9 @@ export interface RollCutResult {
 
 export interface RollCutLogItem {
   id: string;
-  sales_invoice_id: string;
-  sales_invoice_no: string;
+  pricing_status: 'PENDING' | 'PRICED';
+  sales_invoice_id: string | null;
+  sales_invoice_no: string | null;
   original_roll_id: string;
   cut_piece_roll_id: string;
   original_barcode: string;
@@ -47,11 +51,30 @@ export async function cutAndSellRoll(payload: RollCutPayload): Promise<RollCutRe
   return res.data;
 }
 
-export async function listRollCuts(params: { search?: string; limit?: number } = {}): Promise<RollCutLogItem[]> {
+export async function listRollCuts(params: { search?: string; limit?: number; pending?: boolean } = {}): Promise<RollCutLogItem[]> {
   const q = new URLSearchParams();
   if (params.search) q.set('search', params.search);
+  if (params.pending) q.set('pending', '1');
   if (params.limit) q.set('limit', String(params.limit));
   const qs = q.toString() ? `?${q}` : '';
   const res = await apiFetch<{ ok: boolean; data: RollCutLogItem[] }>(`/api/inventory/rolls/cut-log${qs}`);
+  return res.data;
+}
+
+export interface PriceRollCutPayload {
+  unitPrice: number;
+  currencyCode?: string;
+  exchangeRateToUsd?: number;
+  invoiceDate?: string;
+  paidAmount?: number;
+  cashboxId?: string | null;
+  notes?: string | null;
+}
+
+export async function priceRollCut(cutId: string, payload: PriceRollCutPayload): Promise<{ cutId: string; invoice: { id: string; invoiceNo: string } }> {
+  const res = await apiFetch<{ ok: boolean; data: { cutId: string; invoice: { id: string; invoiceNo: string } } }>(
+    `/api/inventory/rolls/cut/${cutId}/price`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
   return res.data;
 }

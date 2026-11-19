@@ -17,6 +17,7 @@ const createCompanyBody = z.object({
   name: z.string().trim().min(2),
   baseCurrencyCode: z.string().trim().optional(),
   defaultLanguage: z.enum(['ar', 'tr']).optional(),
+  defaultCurrencyCode: z.string().trim().optional(),
   adminUsername: z.string().trim().min(2),
   adminPassword: z.string().min(6),
   adminFullName: z.string().trim().optional(),
@@ -27,6 +28,7 @@ const updateCompanyBody = z.object({
   code: z.string().trim().min(2).optional(),
   isActive: z.boolean().optional(),
   defaultLanguage: z.enum(['ar', 'tr']).optional(),
+  defaultCurrencyCode: z.string().trim().optional(),
 });
 
 export const companyRoutes: FastifyPluginAsync = async (app) => {
@@ -55,6 +57,7 @@ export const companyRoutes: FastifyPluginAsync = async (app) => {
           name: parsed.data.name,
           baseCurrencyCode: parsed.data.baseCurrencyCode,
           defaultLanguage: parsed.data.defaultLanguage,
+          defaultCurrencyCode: parsed.data.defaultCurrencyCode,
         },
         {
           username: parsed.data.adminUsername,
