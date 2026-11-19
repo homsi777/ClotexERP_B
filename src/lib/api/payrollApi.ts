@@ -15,6 +15,9 @@ export interface PayrollEmployeeDto {
   /** TASK 015: لتفعيل شريحة الإجازة 30 يوماً. */
   birth_date?: string | null;
   insurance_start_date?: string | null;
+  /** TASK 016: نسبة الأساسي من الشامل وساعات يوم العمل (من صيغ ملفات المرتبات). */
+  base_share_percent?: string | null;
+  workday_hours?: string | null;
   is_active: boolean;
   notes: string | null;
   fingerprint_code: string | null;
@@ -81,6 +84,8 @@ export interface PayrollEmployeeUpsertPayload {
   hireDate?: string | null;
   birthDate?: string | null;
   insuranceStartDate?: string | null;
+  baseSharePercent?: number | null;
+  workdayHours?: number | null;
   notes?: string | null;
   fingerprintCode?: string | null;
   factory?: string | null;

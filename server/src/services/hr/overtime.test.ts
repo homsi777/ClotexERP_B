@@ -53,6 +53,15 @@ function testExcelOctoberMixedCase() {
   assert.equal(overtimeAmountForWage([{ actualHours: 7, kind: 'FRIDAY_OR_HOLIDAY' }], 11000), 641.67);
 }
 
+function testAdministrationNineHourDayMatchesExcelFormula() {
+  // صيغة الإدارة بالملف: (الشامل ÷ 11.25) × (ساعات ÷ 24) × 1.5 ⇒ 26,000: 6 ساعات = 866.67.
+  const excel = Math.round((26000 / 11.25) * (6 / 24) * 1.5 * 100) / 100;
+  assert.equal(excel, 866.67);
+  assert.equal(overtimeAmountForWage([{ actualHours: 6, kind: 'NORMAL' }], 26000, 9), excel);
+  // وبافتراض 8 ساعات (الخطأ السابق) تختلف القيمة — هذا ما نمنعه.
+  assert.notEqual(overtimeAmountForWage([{ actualHours: 6, kind: 'NORMAL' }], 26000, 8), excel);
+}
+
 function testInvalidWageGivesZero() {
   assert.equal(hourlyRateFromComprehensive(0), 0);
   assert.equal(overtimeAmountForWage([{ actualHours: 5, kind: 'NORMAL' }], -10), 0);

@@ -136,6 +136,8 @@ export interface MonthlyEffectsRowDto {
   fullName: string;
   salaryPeriod: string;
   comprehensiveWage: number;
+  workdayHours: number;
+  baseSharePercent: number | null;
   moneyComputed: boolean;
   summary: MonthlyStatusSummaryDto;
 }

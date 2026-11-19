@@ -456,6 +456,9 @@ export type MonthlyEffectsRow = {
   salaryPeriod: string;
   /** الأجر الشامل المُدخل للموظف (أجر اليوم = ÷30 للشهري فقط). */
   comprehensiveWage: number;
+  /** TASK 016: ساعات يوم العمل لأجر الساعة (8 افتراضياً إن لم تُحدَّد) ونسبة الأساسي إن حُدّدت. */
+  workdayHours: number;
+  baseSharePercent: number | null;
   /** أسبوعي: لا قاعدة HR لأجر اليوم له — تُعرض العدّادات دون مبالغ. */
   moneyComputed: boolean;
   summary: MonthlyStatusSummary;
@@ -469,8 +472,8 @@ export async function computeMonthlyStatusEffects(
   employeeId?: string,
 ): Promise<MonthlyEffectsRow[]> {
   const pool = getPool();
-  const emps = await pool.query<{ id: string; employee_code: string; full_name: string; salary_period: string; base_salary: string }>(
-    `SELECT id, employee_code, full_name, salary_period, base_salary
+  const emps = await pool.query<{ id: string; employee_code: string; full_name: string; salary_period: string; base_salary: string; workday_hours: string | null; base_share_percent: string | null }>(
+    `SELECT id, employee_code, full_name, salary_period, base_salary, workday_hours, base_share_percent
        FROM payroll_employees
       WHERE company_id=$1 AND is_active = true ${employeeId ? 'AND id=$2' : ''}
       ORDER BY employee_code`,
@@ -501,6 +504,8 @@ export async function computeMonthlyStatusEffects(
       fullName: e.full_name,
       salaryPeriod: e.salary_period,
       comprehensiveWage: wage,
+      workdayHours: e.workday_hours != null ? Number(e.workday_hours) : 8,
+      baseSharePercent: e.base_share_percent != null ? Number(e.base_share_percent) : null,
       moneyComputed: monthly,
       summary: summarizeMonthlyStatuses(byEmp.get(e.id) ?? [], monthly ? wage : 0, year, month),
     };

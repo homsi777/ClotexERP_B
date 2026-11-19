@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { previewWageSplit } from '../../lib/hr/wageSplitPreview';
 import { useTranslation } from 'react-i18next';
 import { History, Loader2, Pencil, Plus, Search, X } from 'lucide-react';
 import {
@@ -28,6 +29,8 @@ type EmployeeFormState = {
   hireDate: string;
   birthDate: string;
   insuranceStartDate: string;
+  baseSharePercent: string;
+  workdayHours: string;
   terminationDate: string;
   status: 'ACTIVE' | 'TERMINATED' | 'SUSPENDED';
   baseSalary: string;
@@ -57,6 +60,8 @@ function emptyForm(): EmployeeFormState {
     hireDate: '',
     birthDate: '',
     insuranceStartDate: '',
+    baseSharePercent: '',
+    workdayHours: '',
     terminationDate: '',
     status: 'ACTIVE',
     baseSalary: '',
@@ -83,6 +88,8 @@ function formFromEmployee(emp: PayrollEmployeeDto): EmployeeFormState {
     hireDate: emp.hire_date ? emp.hire_date.slice(0, 10) : '',
     birthDate: emp.birth_date ? emp.birth_date.slice(0, 10) : '',
     insuranceStartDate: emp.insurance_start_date ? emp.insurance_start_date.slice(0, 10) : '',
+    baseSharePercent: emp.base_share_percent != null ? String(Number(emp.base_share_percent)) : '',
+    workdayHours: emp.workday_hours != null ? String(Number(emp.workday_hours)) : '',
     terminationDate: emp.termination_date ? emp.termination_date.slice(0, 10) : '',
     status: emp.status,
     baseSalary: String(emp.base_salary ?? ''),
@@ -115,6 +122,7 @@ export function Employees() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EmployeeFormState>(() => emptyForm());
+  const splitPreview = previewWageSplit(Number(form.baseSalary), Number(form.baseSharePercent));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyEmployee, setHistoryEmployee] = useState<PayrollEmployeeDto | null>(null);
@@ -193,6 +201,8 @@ export function Employees() {
       hireDate: form.hireDate || null,
       birthDate: form.birthDate || null,
       insuranceStartDate: form.insuranceStartDate || null,
+      baseSharePercent: form.baseSharePercent ? Number(form.baseSharePercent) : null,
+      workdayHours: form.workdayHours ? Number(form.workdayHours) : null,
       terminationDate: form.terminationDate || null,
       status: form.status,
       baseSalary: Number(form.baseSalary) || 0,
@@ -364,6 +374,22 @@ export function Employees() {
                 </Field>
                 <Field label={t('modal.fields.insuranceStartDate')}>
                   <input type="date" value={form.insuranceStartDate} onChange={(e) => setForm({ ...form, insuranceStartDate: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label={t('modal.fields.baseSharePercent')}>
+                  <input type="number" min={1} max={100} step={0.5} value={form.baseSharePercent} onChange={(e) => setForm({ ...form, baseSharePercent: e.target.value })} className={inputCls} dir="ltr" placeholder="75 / 80" />
+                  {splitPreview && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {t('modal.fields.splitPreview', {
+                        base: splitPreview.base.toLocaleString(),
+                        incentives: splitPreview.incentives.toLocaleString(),
+                        regularity: splitPreview.regularity.toLocaleString(),
+                        quality: splitPreview.quality.toLocaleString(),
+                      })}
+                    </p>
+                  )}
+                </Field>
+                <Field label={t('modal.fields.workdayHours')}>
+                  <input type="number" min={1} max={24} step={0.5} value={form.workdayHours} onChange={(e) => setForm({ ...form, workdayHours: e.target.value })} className={inputCls} dir="ltr" placeholder="8 / 9" />
                 </Field>
                 <Field label={t('modal.fields.terminationDate')}>
                   <input type="date" value={form.terminationDate} onChange={(e) => setForm({ ...form, terminationDate: e.target.value })} className={inputCls} />

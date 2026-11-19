@@ -32,6 +32,9 @@ const employeeBody = z.object({
   // TASK 015: تُحفظ فقط إن أُرسلت (undefined = لا تغيير عند التحديث).
   birthDate: z.string().optional().nullable(),
   insuranceStartDate: z.string().optional().nullable(),
+  // TASK 016: بنية الأجر من ملفات المرتبات (صالة 75/8، إدارة 80/9). تُحفظ فقط إن أُرسلت.
+  baseSharePercent: z.coerce.number().gt(0).max(100).optional().nullable(),
+  workdayHours: z.coerce.number().min(1).max(24).optional().nullable(),
   notes: z.string().optional().nullable(),
   fingerprintCode: z.string().optional().nullable(),
   factory: z.string().optional().nullable(),
@@ -209,7 +212,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const rows = await pool.query(
       `SELECT pe.id, pe.employee_code, pe.full_name, pe.address, pe.job_title, pe.department, pe.phone,
               pe.base_salary, pe.currency_code, pe.salary_period, pe.hire_date, pe.is_active, pe.notes,
-              pe.birth_date, pe.insurance_start_date,
+              pe.birth_date, pe.insurance_start_date, pe.base_share_percent, pe.workday_hours,
               pe.created_at, pe.updated_at,
               COALESCE(sal.total_paid, 0)::text AS total_salary_paid,
               COALESCE(adv.total_advances, 0)::text AS total_advances,
@@ -248,8 +251,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
            company_id, employee_code, full_name, address, job_title, department, phone,
            base_salary, currency_code, salary_period, hire_date, notes,
            fingerprint_code, factory, category, payment_method, termination_date, status, shift_type_id,
-           birth_date, insurance_start_date
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17::date,$18,$19,$20::date,$21::date)
+           birth_date, insurance_start_date, base_share_percent, workday_hours
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17::date,$18,$19,$20::date,$21::date,$22,$23)
          RETURNING *`,
         [
           companyId,
@@ -273,6 +276,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
           d.shiftTypeId ?? null,
           d.birthDate || null,
           d.insuranceStartDate || null,
+          d.baseSharePercent ?? null,
+          d.workdayHours ?? null,
         ],
       );
       await client.query(
@@ -322,6 +327,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
            status=$19, shift_type_id=$20,
            birth_date = CASE WHEN $22 THEN $21::date ELSE birth_date END,
            insurance_start_date = CASE WHEN $24 THEN $23::date ELSE insurance_start_date END,
+           base_share_percent = CASE WHEN $26 THEN $25::numeric ELSE base_share_percent END,
+           workday_hours = CASE WHEN $28 THEN $27::numeric ELSE workday_hours END,
            updated_at=now()
          WHERE id=$1 AND company_id=$2
          RETURNING *`,
@@ -350,6 +357,10 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
           d.birthDate !== undefined,
           d.insuranceStartDate || null,
           d.insuranceStartDate !== undefined,
+          d.baseSharePercent ?? null,
+          d.baseSharePercent !== undefined,
+          d.workdayHours ?? null,
+          d.workdayHours !== undefined,
         ],
       );
       if (baseSalaryChanged) {

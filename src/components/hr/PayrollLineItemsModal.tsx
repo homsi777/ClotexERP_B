@@ -79,7 +79,8 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, periodMonth, per
         return;
       }
       const multiplier = otKind === 'HOLIDAY' ? 2 : 1.5;
-      const hourly = row.comprehensiveWage / 30 / 8;
+      // أجر الساعة = الشامل ÷ 30 ÷ ساعات يوم الموظف (8 صالة / 9 إدارة — من صيغ ملفات المرتبات)
+      const hourly = row.comprehensiveWage / 30 / (row.workdayHours || 8);
       const amount = Math.round(hours * multiplier * hourly * 100) / 100;
       setRows((cur) => [
         ...cur,
