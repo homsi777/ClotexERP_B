@@ -1,13 +1,296 @@
-import React,{useCallback,useEffect,useState} from 'react';
-import { completeWarpingOrder,createWarpingOrder,getWarpingOptions,listWarpingOrders,releaseWarpingOrder,transitionWarpingOrder,type WarpingOptions,type WarpingOrder } from '../../lib/api/manufacturingWarpingApi';
-const cls='rounded-lg border px-3 py-2 text-sm';
-export function WarpingOrdersPanel({canManage,canQuality}:{canManage:boolean;canQuality:boolean}){
- const [rows,setRows]=useState<WarpingOrder[]>([]),[options,setOptions]=useState<WarpingOptions|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[open,setOpen]=useState(false);
- const [form,setForm]=useState({workOrderId:'',plannedLengthM:'',warpingMachineId:'',targetLoomId:'',operatorEmployeeId:'',shiftTypeId:'',tieCount:'',beamNo:'',notes:''});
- const load=useCallback(async()=>{try{const [r,o]=await Promise.all([listWarpingOrders(),getWarpingOptions()]);setRows(r);setOptions(o);setError('');}catch(e){setError(e instanceof Error?e.message:'تعذر تحميل أوامر التسدية');}},[]);useEffect(()=>{void load();},[load]);
- const run=async(fn:()=>Promise<unknown>)=>{setBusy(true);setError('');try{await fn();await load();}catch(e){setError(e instanceof Error?e.message:'تعذر تنفيذ العملية');}finally{setBusy(false);}};
- const create=()=>run(async()=>{await createWarpingOrder({...form,plannedLengthM:Number(form.plannedLengthM),tieCount:form.tieCount?Number(form.tieCount):null,warpingMachineId:form.warpingMachineId||null,targetLoomId:form.targetLoomId||null,operatorEmployeeId:form.operatorEmployeeId||null,shiftTypeId:form.shiftTypeId||null});setOpen(false);});
- return <div className="p-4">{error&&<div className="mb-3 rounded bg-rose-50 p-3 text-rose-700">{error}</div>}<div className="mb-4 flex justify-between"><div><h2 className="font-bold">أوامر التسدية وكروت السداء</h2><p className="text-sm text-slate-500">يسمح بالسدى المشترك وربط أكثر من أوردر بالماكينة.</p></div>{canManage&&<button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white" onClick={()=>setOpen(!open)}>أمر تسدية جديد</button>}</div>
- {open&&<div className="mb-4 grid gap-2 rounded-xl border bg-slate-50 p-3 md:grid-cols-3"><select className={cls} value={form.workOrderId} onChange={e=>{const w=options?.workOrders.find(x=>x.id===e.target.value);setForm({...form,workOrderId:e.target.value,plannedLengthM:w?String(w.target_length_m):form.plannedLengthM});}}><option value="">أمر الإنتاج</option>{options?.workOrders.map(x=><option key={x.id} value={x.id}>{x.work_order_no}</option>)}</select><input className={cls} type="number" placeholder="الطول المخطط" value={form.plannedLengthM} onChange={e=>setForm({...form,plannedLengthM:e.target.value})}/><select className={cls} value={form.warpingMachineId} onChange={e=>setForm({...form,warpingMachineId:e.target.value})}><option value="">ماكينة التسدية</option>{options?.machines.filter(x=>x.machine_type==='WARPING').map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select><select className={cls} value={form.targetLoomId} onChange={e=>setForm({...form,targetLoomId:e.target.value})}><option value="">النول المستهدف</option>{options?.machines.filter(x=>x.machine_type==='LOOM').map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select><select className={cls} value={form.operatorEmployeeId} onChange={e=>setForm({...form,operatorEmployeeId:e.target.value})}><option value="">عامل التسدية</option>{options?.employees.map(x=><option key={x.id} value={x.id}>{x.employee_code} — {x.full_name}</option>)}</select><select className={cls} value={form.shiftTypeId} onChange={e=>setForm({...form,shiftTypeId:e.target.value})}><option value="">الوردية</option>{options?.shifts.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><input className={cls} type="number" placeholder="عدد الأربطة" value={form.tieCount} onChange={e=>setForm({...form,tieCount:e.target.value})}/><input className={cls} placeholder="رقم المطواة" value={form.beamNo} onChange={e=>setForm({...form,beamNo:e.target.value})}/><input className={cls} placeholder="ملاحظات" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/><button disabled={busy||!form.workOrderId||!form.plannedLengthM} className="rounded-lg bg-indigo-600 px-4 py-2 font-bold text-white disabled:opacity-50" onClick={()=>void create()}>حفظ المسودة</button></div>}
- <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-right text-slate-500"><th className="p-2">الأمر</th><th>أمر الإنتاج</th><th>الماكينة</th><th>النول</th><th>الطول</th><th>العامل/الوردية</th><th>الكارت</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody>{rows.map(r=><tr key={r.id} className="border-b"><td className="p-2 font-bold">{r.warping_order_no}</td><td>{r.work_order_no}</td><td>{r.machine_code||'—'}</td><td>{r.loom_code||'—'}</td><td>{r.actual_length_m??r.planned_length_m}</td><td>{r.operator_name||'—'}<br/><span className="text-xs text-slate-500">{r.shift_name||'—'}</span></td><td>{r.card_no||'—'}</td><td>{r.status}</td><td className="space-x-1 space-x-reverse whitespace-nowrap">{canManage&&r.status==='DRAFT'&&<button disabled={busy} className={cls} onClick={()=>void run(()=>releaseWarpingOrder(r.id,r.version))}>إصدار</button>}{canManage&&r.status==='RELEASED'&&<button disabled={busy} className={cls} onClick={()=>void run(()=>transitionWarpingOrder(r.id,r.version,'IN_PROGRESS'))}>بدء</button>}{canQuality&&r.status==='IN_PROGRESS'&&<button disabled={busy} className={cls} onClick={()=>{const length=Number(prompt('الطول الفعلي',String(r.planned_length_m)));if(Number.isFinite(length))void run(()=>completeWarpingOrder(r.id,{version:r.version,actualLengthM:length,qualityStatus:'ACCEPTED'}));}}>قبول وفحص</button>}{canManage&&['DRAFT','RELEASED','IN_PROGRESS'].includes(r.status)&&<button disabled={busy} className={cls} onClick={()=>{const reason=prompt('سبب الإلغاء');if(reason)void run(()=>transitionWarpingOrder(r.id,r.version,'CANCELLED',reason));}}>إلغاء</button>}</td></tr>)}</tbody></table>{!rows.length&&<p className="p-8 text-center text-slate-500">لا توجد أوامر تسدية</p>}</div></div>;
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  completeWarpingOrder,
+  createWarpingOrder,
+  getWarpingOptions,
+  listWarpingOrders,
+  recordAndGetWarpCardPrint,
+  releaseWarpingOrder,
+  transitionWarpingOrder,
+  type WarpingOptions,
+  type WarpingOrder,
+} from "../../lib/api/manufacturingWarpingApi";
+import { renderWarpCardHtml } from "../../lib/printing/renderWarpCardHtml";
+const cls = "rounded-lg border px-3 py-2 text-sm";
+export function WarpingOrdersPanel({ canManage, canQuality }: { canManage: boolean; canQuality: boolean }) {
+  const [rows, setRows] = useState<WarpingOrder[]>([]),
+    [options, setOptions] = useState<WarpingOptions | null>(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    workOrderId: "",
+    plannedLengthM: "",
+    warpingMachineId: "",
+    targetLoomId: "",
+    operatorEmployeeId: "",
+    shiftTypeId: "",
+    tieCount: "",
+    beamNo: "",
+    notes: "",
+  });
+  const load = useCallback(async () => {
+    try {
+      const [r, o] = await Promise.all([listWarpingOrders(), getWarpingOptions()]);
+      setRows(r);
+      setOptions(o);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحميل أوامر التسدية");
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تنفيذ العملية");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const create = () =>
+    run(async () => {
+      await createWarpingOrder({
+        ...form,
+        plannedLengthM: Number(form.plannedLengthM),
+        tieCount: form.tieCount ? Number(form.tieCount) : null,
+        warpingMachineId: form.warpingMachineId || null,
+        targetLoomId: form.targetLoomId || null,
+        operatorEmployeeId: form.operatorEmployeeId || null,
+        shiftTypeId: form.shiftTypeId || null,
+      });
+      setOpen(false);
+    });
+  const printCard = async (row: WarpingOrder) => {
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=1000,height=700");
+    if (!popup) { setError("اسمح بفتح نافذة الطباعة من المتصفح"); return; }
+    setBusy(true);
+    try {
+      const card = await recordAndGetWarpCardPrint(row.id);
+      popup.document.write(renderWarpCardHtml({ cardNo: card.cardNo, barcode: card.barcode, data: card.cardData }));
+      popup.document.close();
+      await load();
+    } catch (e) { popup.close(); setError(e instanceof Error ? e.message : "تعذرت طباعة الكارت"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="p-4">
+      {error && <div className="mb-3 rounded bg-rose-50 p-3 text-rose-700">{error}</div>}
+      <div className="mb-4 flex justify-between">
+        <div>
+          <h2 className="font-bold">أوامر التسدية وكروت السداء</h2>
+          <p className="text-sm text-slate-500">يسمح بالسدى المشترك وربط أكثر من أوردر بالماكينة.</p>
+        </div>
+        {canManage && (
+          <button
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white"
+            onClick={() => setOpen(!open)}
+          >
+            أمر تسدية جديد
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mb-4 grid gap-2 rounded-xl border bg-slate-50 p-3 md:grid-cols-3">
+          <select
+            className={cls}
+            value={form.workOrderId}
+            onChange={(e) => {
+              const w = options?.workOrders.find((x) => x.id === e.target.value);
+              setForm({
+                ...form,
+                workOrderId: e.target.value,
+                plannedLengthM: w ? String(w.target_length_m) : form.plannedLengthM,
+              });
+            }}
+          >
+            <option value="">أمر الإنتاج</option>
+            {options?.workOrders.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.work_order_no}
+              </option>
+            ))}
+          </select>
+          <input
+            className={cls}
+            type="number"
+            placeholder="الطول المخطط"
+            value={form.plannedLengthM}
+            onChange={(e) => setForm({ ...form, plannedLengthM: e.target.value })}
+          />
+          <select
+            className={cls}
+            value={form.warpingMachineId}
+            onChange={(e) => setForm({ ...form, warpingMachineId: e.target.value })}
+          >
+            <option value="">ماكينة التسدية</option>
+            {options?.machines
+              .filter((x) => x.machine_type === "WARPING")
+              .map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.code} — {x.name}
+                </option>
+              ))}
+          </select>
+          <select
+            className={cls}
+            value={form.targetLoomId}
+            onChange={(e) => setForm({ ...form, targetLoomId: e.target.value })}
+          >
+            <option value="">النول المستهدف</option>
+            {options?.machines
+              .filter((x) => x.machine_type === "LOOM")
+              .map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.code} — {x.name}
+                </option>
+              ))}
+          </select>
+          <select
+            className={cls}
+            value={form.operatorEmployeeId}
+            onChange={(e) => setForm({ ...form, operatorEmployeeId: e.target.value })}
+          >
+            <option value="">عامل التسدية</option>
+            {options?.employees.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.employee_code} — {x.full_name}
+              </option>
+            ))}
+          </select>
+          <select
+            className={cls}
+            value={form.shiftTypeId}
+            onChange={(e) => setForm({ ...form, shiftTypeId: e.target.value })}
+          >
+            <option value="">الوردية</option>
+            {options?.shifts.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className={cls}
+            type="number"
+            placeholder="عدد الأربطة"
+            value={form.tieCount}
+            onChange={(e) => setForm({ ...form, tieCount: e.target.value })}
+          />
+          <input
+            className={cls}
+            placeholder="رقم المطواة"
+            value={form.beamNo}
+            onChange={(e) => setForm({ ...form, beamNo: e.target.value })}
+          />
+          <input
+            className={cls}
+            placeholder="ملاحظات"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          />
+          <button
+            disabled={busy || !form.workOrderId || !form.plannedLengthM}
+            className="rounded-lg bg-indigo-600 px-4 py-2 font-bold text-white disabled:opacity-50"
+            onClick={() => void create()}
+          >
+            حفظ المسودة
+          </button>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-right text-slate-500">
+              <th className="p-2">الأمر</th>
+              <th>أمر الإنتاج</th>
+              <th>الماكينة</th>
+              <th>النول</th>
+              <th>الطول</th>
+              <th>العامل/الوردية</th>
+              <th>الكارت</th>
+              <th>الحالة</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b">
+                <td className="p-2 font-bold">{r.warping_order_no}</td>
+                <td>{r.work_order_no}</td>
+                <td>{r.machine_code || "—"}</td>
+                <td>{r.loom_code || "—"}</td>
+                <td>{r.actual_length_m ?? r.planned_length_m}</td>
+                <td>
+                  {r.operator_name || "—"}
+                  <br />
+                  <span className="text-xs text-slate-500">{r.shift_name || "—"}</span>
+                </td>
+                <td>{r.card_no || "—"}{r.card_no && <button className="mr-2 text-indigo-700 underline" onClick={() => void printCard(r)}>طباعة ({r.print_count ?? 0})</button>}</td>
+                <td>{r.status}</td>
+                <td className="space-x-1 space-x-reverse whitespace-nowrap">
+                  {canManage && r.status === "DRAFT" && (
+                    <button
+                      disabled={busy}
+                      className={cls}
+                      onClick={() => void run(() => releaseWarpingOrder(r.id, r.version))}
+                    >
+                      إصدار
+                    </button>
+                  )}
+                  {canManage && r.status === "RELEASED" && (
+                    <button
+                      disabled={busy}
+                      className={cls}
+                      onClick={() => void run(() => transitionWarpingOrder(r.id, r.version, "IN_PROGRESS"))}
+                    >
+                      بدء
+                    </button>
+                  )}
+                  {canQuality && r.status === "IN_PROGRESS" && (
+                    <button
+                      disabled={busy}
+                      className={cls}
+                      onClick={() => {
+                        const length = Number(prompt("الطول الفعلي", String(r.planned_length_m)));
+                        if (Number.isFinite(length))
+                          void run(() =>
+                            completeWarpingOrder(r.id, {
+                              version: r.version,
+                              actualLengthM: length,
+                              qualityStatus: "ACCEPTED",
+                            }),
+                          );
+                      }}
+                    >
+                      قبول وفحص
+                    </button>
+                  )}
+                  {canManage && ["DRAFT", "RELEASED", "IN_PROGRESS"].includes(r.status) && (
+                    <button
+                      disabled={busy}
+                      className={cls}
+                      onClick={() => {
+                        const reason = prompt("سبب الإلغاء");
+                        if (reason) void run(() => transitionWarpingOrder(r.id, r.version, "CANCELLED", reason));
+                      }}
+                    >
+                      إلغاء
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!rows.length && <p className="p-8 text-center text-slate-500">لا توجد أوامر تسدية</p>}
+      </div>
+    </div>
+  );
 }
