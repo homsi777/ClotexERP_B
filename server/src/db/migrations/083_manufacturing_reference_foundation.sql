@@ -612,7 +612,8 @@ CREATE TABLE manufacturing_downtime_reasons (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT manufacturing_downtime_reason_code_not_blank CHECK (length(trim(code)) > 0),
   CONSTRAINT manufacturing_downtime_reason_name_not_blank CHECK (length(trim(name)) > 0),
-  CONSTRAINT manufacturing_downtime_reason_company_code_unique UNIQUE (company_id, code)
+  CONSTRAINT manufacturing_downtime_reason_company_code_unique UNIQUE (company_id, code),
+  CONSTRAINT manufacturing_downtime_reason_company_identity UNIQUE (company_id, id)
 );
 
 CREATE INDEX manufacturing_downtime_reasons_lookup
