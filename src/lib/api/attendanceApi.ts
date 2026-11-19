@@ -15,6 +15,11 @@ export interface AttendanceRecordDto {
   day_type: 'WORK' | 'REST' | 'HOLIDAY';
   /** TASK 013: رمز حالة اليوم (غ، س، ع…) إن سُجّل. */
   status_code: string | null;
+  /** TASK 018: ساعات الإضافي اليومية بفئات ورقة الانتظام. */
+  ot_day_hours: string;
+  ot_night_hours: string;
+  ot_holiday1_hours: string;
+  ot_holiday2_hours: string;
   source: 'IMPORTED' | 'MANUAL';
   source_file: string | null;
   edited_at: string | null;
@@ -103,6 +108,10 @@ export async function updateAttendanceRecord(
     lateMinutes?: number;
     permissionMinutes?: number;
     dayType?: 'WORK' | 'REST' | 'HOLIDAY';
+    otDayHours?: number;
+    otNightHours?: number;
+    otHoliday1Hours?: number;
+    otHoliday2Hours?: number;
     reason: string;
   },
 ) {
@@ -141,6 +150,14 @@ export interface MonthlyEffectsRowDto {
   baseSharePercent: number | null;
   moneyComputed: boolean;
   summary: MonthlyStatusSummaryDto;
+  overtime: {
+    hourlyRate: number;
+    totalActualHours: number;
+    totalPaidHours: number;
+    totalAmount: number;
+    amountByCategory: { DAY: number; NIGHT: number; HOLIDAY_X1: number; HOLIDAY_X2: number };
+    hours: { day: number; night: number; holiday1: number; holiday2: number };
+  };
 }
 
 export async function setAttendanceStatus(payload: {

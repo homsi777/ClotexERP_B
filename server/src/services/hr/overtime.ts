@@ -41,6 +41,49 @@ export function hourlyRateFromComprehensive(comprehensiveWage: number, workdayHo
 
 export type OvertimeEntry = { actualHours: number; kind: OvertimeDayKind };
 
+/**
+ * فئات الإضافي الأربع بورقة «الانتظام» وصيغها (ملف مرتبات أكتوبر 2026):
+ *  ع.ساعات النهارية ×1.5 ، ع.ساعات الليلية ×1.5 ، العطلات ×1 (بدل/تعويض) ، العطلات ×2.
+ * يُدخلها HR يدوياً لكل يوم (لا صيغة تشتقها من البصمة)، وتُجمع شهرياً.
+ */
+export const OVERTIME_CATEGORY_MULTIPLIERS = {
+  DAY: 1.5,
+  NIGHT: 1.5,
+  HOLIDAY_X1: 1,
+  HOLIDAY_X2: 2,
+} as const;
+export type OvertimeCategory = keyof typeof OVERTIME_CATEGORY_MULTIPLIERS;
+export type OvertimeHoursByCategory = Partial<Record<OvertimeCategory, number>>;
+
+export type OvertimeMonthResult = {
+  hourlyRate: number;
+  totalActualHours: number;
+  totalPaidHours: number;
+  amountByCategory: Record<OvertimeCategory, number>;
+  totalAmount: number;
+};
+
+/** قيمة إضافي شهر لموظف: لكل فئة الساعات × أجر الساعة × معاملها، ثم الجمع (كعمود «قيمة الاضافى المستحق»). */
+export function computeMonthlyOvertime(
+  hours: OvertimeHoursByCategory,
+  comprehensiveWage: number,
+  workdayHours = 8,
+): OvertimeMonthResult {
+  const hourlyRate = hourlyRateFromComprehensive(comprehensiveWage, workdayHours);
+  const amountByCategory = { DAY: 0, NIGHT: 0, HOLIDAY_X1: 0, HOLIDAY_X2: 0 } as Record<OvertimeCategory, number>;
+  let totalActual = 0;
+  let totalPaid = 0;
+  for (const cat of Object.keys(OVERTIME_CATEGORY_MULTIPLIERS) as OvertimeCategory[]) {
+    const h = Number(hours[cat]);
+    if (!Number.isFinite(h) || h <= 0) continue;
+    totalActual += h;
+    totalPaid += h * OVERTIME_CATEGORY_MULTIPLIERS[cat];
+    amountByCategory[cat] = round2(h * OVERTIME_CATEGORY_MULTIPLIERS[cat] * hourlyRate);
+  }
+  const totalAmount = round2(Object.values(amountByCategory).reduce((a, b) => a + b, 0));
+  return { hourlyRate: round2(hourlyRate), totalActualHours: round2(totalActual), totalPaidHours: round2(totalPaid), amountByCategory, totalAmount };
+}
+
 /** قيمة الإضافي لموظف = ساعات مدفوعة × (الشامل ÷ 30 ÷ 8)، مقرَّبة لمنزلتين. */
 export function overtimeAmountForWage(entries: OvertimeEntry[], comprehensiveWage: number, workdayHours = 8): number {
   return round2(totalOvertimePaidHours(entries) * hourlyRateFromComprehensive(comprehensiveWage, workdayHours));

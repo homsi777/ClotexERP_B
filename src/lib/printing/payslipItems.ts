@@ -11,6 +11,7 @@ const ITEM_LABELS_AR: Record<string, { label: string; sign: 1 | -1 }> = {
   SALARY_ADJUSTMENT: { label: 'تعديل راتب', sign: 1 },
   SETTLEMENT_ADD: { label: 'تسوية بالإضافة', sign: 1 },
   OVERTIME: { label: 'إضافي', sign: 1 },
+  ATTENDANCE_OVERTIME: { label: 'إضافي (من الحضور)', sign: 1 },
   PURCHASE_DEDUCTION: { label: 'خصم مشتريات', sign: -1 },
   SETTLEMENT_DEDUCT: { label: 'تسوية بالخصم', sign: -1 },
   ATTENDANCE_ABSENCE_DEDUCTION: { label: 'خصم غياب بدون إذن', sign: -1 },

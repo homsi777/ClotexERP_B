@@ -66,7 +66,12 @@ export const AttendanceStatusPanel: React.FC<Props> = ({ onChanged }) => {
   }, [year, month, tick, t]);
 
   const visibleRows = useMemo(
-    () => rows.filter((r) => r.summary.unauthorizedAbsenceDays + r.summary.halfPayDays + r.summary.leaveDaysUsed > 0),
+    () =>
+      rows.filter(
+        (r) =>
+          r.summary.unauthorizedAbsenceDays + r.summary.halfPayDays + r.summary.leaveDaysUsed > 0 ||
+          r.overtime.totalActualHours > 0,
+      ),
     [rows],
   );
 
@@ -165,6 +170,7 @@ export const AttendanceStatusPanel: React.FC<Props> = ({ onChanged }) => {
                   <th className="p-2 text-end">{t('status.colLeaveDays')}</th>
                   <th className="p-2 text-end">{t('status.colHalfPay')}</th>
                   <th className="p-2 text-end">{t('status.colAbsenceDeduction')}</th>
+                  <th className="p-2 text-end">{t('status.colOvertime')}</th>
                   <th className="p-2 text-end">{t('status.colTotal')}</th>
                 </tr>
               </thead>
@@ -201,6 +207,22 @@ export const AttendanceStatusPanel: React.FC<Props> = ({ onChanged }) => {
                           )}
                         </>
                       ) : '—'}
+                    </td>
+                    <td className="p-2 text-end">
+                      {r.overtime.totalActualHours > 0 ? (
+                        r.moneyComputed ? (
+                          <>
+                            +{money(r.overtime.totalAmount)}
+                            <span className="block text-[10px] text-slate-500">
+                              {t('status.overtimeHours', { hours: r.overtime.totalActualHours })}
+                            </span>
+                          </>
+                        ) : (
+                          t('status.overtimeHours', { hours: r.overtime.totalActualHours })
+                        )
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="p-2 text-end font-bold text-rose-700">
                       {r.moneyComputed ? `−${money(r.summary.totalPayrollDeduction)}` : '—'}

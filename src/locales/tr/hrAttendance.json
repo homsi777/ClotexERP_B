@@ -99,5 +99,11 @@
   "modal.issueLongShift": "{{count}} kayıt 16 saatten uzun (olası çift vardiya): içe aktarılır, kontrol edin.",
   "modal.issueEmptySheets": "Verisiz {{count}} sayfa (tatil/dinlenme) yok sayıldı: {{sheets}}",
   "modal.issueUnreadable": "Başlıkları tanınmayan sayfalar atlandı: {{sheets}}",
-  "modal.incompleteKept": "{{count}} eksik kayıt, önceden içe aktarılmış tam kaydın yerine geçmedi."
+  "modal.incompleteKept": "{{count}} eksik kayıt, önceden içe aktarılmış tam kaydın yerine geçmedi.",
+  "editModal.otDay": "Gündüz fazla mesai (×1.5)",
+  "editModal.otNight": "Gece fazla mesai (×1.5)",
+  "editModal.otHoliday1": "Tatil (×1)",
+  "editModal.otHoliday2": "Tatil (×2)",
+  "status.colOvertime": "Fazla mesai",
+  "status.overtimeHours": "{{hours}} saat"
 }

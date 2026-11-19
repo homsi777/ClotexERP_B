@@ -4,6 +4,7 @@ import {
   hourlyRateFromComprehensive,
   overtimeAmount,
   overtimeAmountForWage,
+  computeMonthlyOvertime,
   overtimePaidHours,
   totalOvertimePaidHours,
 } from './overtime.js';
@@ -67,7 +68,40 @@ function testInvalidWageGivesZero() {
   assert.equal(overtimeAmountForWage([{ actualHours: 5, kind: 'NORMAL' }], -10), 0);
 }
 
+function testMonthlyOvertimeMatchesExcelRowTotal() {
+  // صف «محمد بهاء» بالملف: شامل 11,000، ليلي 18 ساعة، عطلة×2 7 ساعات ⇒ 1,237.5 + 641.67 = 1,879.17.
+  const r = computeMonthlyOvertime({ NIGHT: 18, HOLIDAY_X2: 7 }, 11000, 8);
+  assert.equal(r.amountByCategory.NIGHT, 1237.5);
+  assert.equal(r.amountByCategory.HOLIDAY_X2, 641.67);
+  assert.equal(r.totalAmount, 1879.17);
+  assert.equal(r.totalActualHours, 25);
+  assert.equal(r.totalPaidHours, 41); // 18×1.5 + 7×2
+}
+
+function testAllFourCategoriesAndMultipliers() {
+  // شامل 2,400 ⇒ أجر ساعة 10 (÷30÷8): نهاري 2×1.5=30 ، ليلي 2×1.5=30 ، عطلة×1 2=20 ، عطلة×2 2×2=40 ⇒ 120.
+  const r = computeMonthlyOvertime({ DAY: 2, NIGHT: 2, HOLIDAY_X1: 2, HOLIDAY_X2: 2 }, 2400, 8);
+  assert.equal(r.hourlyRate, 10);
+  assert.deepEqual(r.amountByCategory, { DAY: 30, NIGHT: 30, HOLIDAY_X1: 20, HOLIDAY_X2: 40 });
+  assert.equal(r.totalAmount, 120);
+}
+
+function testAdministrationWorkdayNineInMonthlyTotal() {
+  const r = computeMonthlyOvertime({ DAY: 6 }, 26000, 9);
+  assert.equal(r.totalAmount, 866.67);
+}
+
+function testEmptyOrInvalidMonthlyOvertime() {
+  assert.equal(computeMonthlyOvertime({}, 11000).totalAmount, 0);
+  assert.equal(computeMonthlyOvertime({ DAY: 5 }, 0).totalAmount, 0);
+  assert.equal(computeMonthlyOvertime({ DAY: -3, NIGHT: Number.NaN }, 11000).totalAmount, 0);
+}
+
 testNormalDayHourIsOneAndHalf();
+testMonthlyOvertimeMatchesExcelRowTotal();
+testAllFourCategoriesAndMultipliers();
+testAdministrationWorkdayNineInMonthlyTotal();
+testEmptyOrInvalidMonthlyOvertime();
 testExcelOctoberNightHoursCase();
 testExcelOctoberMixedCase();
 testInvalidWageGivesZero();

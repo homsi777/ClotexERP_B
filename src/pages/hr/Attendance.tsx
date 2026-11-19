@@ -227,6 +227,10 @@ function EditModal({
   const [late, setLate] = useState('0');
   const [permission, setPermission] = useState('0');
   const [dayType, setDayType] = useState<'WORK' | 'REST' | 'HOLIDAY'>('WORK');
+  const [otDay, setOtDay] = useState('0');
+  const [otNight, setOtNight] = useState('0');
+  const [otH1, setOtH1] = useState('0');
+  const [otH2, setOtH2] = useState('0');
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +242,10 @@ function EditModal({
     setLate(record.late_minutes || '0');
     setPermission(record.permission_minutes || '0');
     setDayType(record.day_type);
+    setOtDay(String(Number(record.ot_day_hours) || 0));
+    setOtNight(String(Number(record.ot_night_hours) || 0));
+    setOtH1(String(Number(record.ot_holiday1_hours) || 0));
+    setOtH2(String(Number(record.ot_holiday2_hours) || 0));
     setReason('');
     setError(null);
   }, [record]);
@@ -258,6 +266,10 @@ function EditModal({
         lateMinutes: Number(late) || 0,
         permissionMinutes: Number(permission) || 0,
         dayType,
+        otDayHours: Number(otDay) || 0,
+        otNightHours: Number(otNight) || 0,
+        otHoliday1Hours: Number(otH1) || 0,
+        otHoliday2Hours: Number(otH2) || 0,
         reason: reason.trim(),
       });
       onSaved();
@@ -308,6 +320,20 @@ function EditModal({
               </select>
             </div>
             <div className="col-span-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <label className="block text-xs font-bold text-slate-600">{t('editModal.otDay')}
+                  <input type="number" min={0} max={24} step={0.25} value={otDay} onChange={(e) => setOtDay(e.target.value)} className={`mt-1 ${inputCls}`} dir="ltr" />
+                </label>
+                <label className="block text-xs font-bold text-slate-600">{t('editModal.otNight')}
+                  <input type="number" min={0} max={24} step={0.25} value={otNight} onChange={(e) => setOtNight(e.target.value)} className={`mt-1 ${inputCls}`} dir="ltr" />
+                </label>
+                <label className="block text-xs font-bold text-slate-600">{t('editModal.otHoliday1')}
+                  <input type="number" min={0} max={24} step={0.25} value={otH1} onChange={(e) => setOtH1(e.target.value)} className={`mt-1 ${inputCls}`} dir="ltr" />
+                </label>
+                <label className="block text-xs font-bold text-slate-600">{t('editModal.otHoliday2')}
+                  <input type="number" min={0} max={24} step={0.25} value={otH2} onChange={(e) => setOtH2(e.target.value)} className={`mt-1 ${inputCls}`} dir="ltr" />
+                </label>
+              </div>
               <label className="block text-xs font-bold text-slate-600">{t('editModal.reason')}</label>
               <input value={reason} onChange={(e) => setReason(e.target.value)} className={`mt-1 ${inputCls}`} />
             </div>

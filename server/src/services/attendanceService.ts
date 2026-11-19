@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { summarizeMonthlyStatuses, type MonthlyStatusSummary } from './hr/attendanceStatus.js';
+import { computeMonthlyOvertime, type OvertimeMonthResult } from './hr/overtime.js';
 import { getPool } from '../db/pool.js';
 
 type ServiceErrorCode = 'VALIDATION' | 'NOT_FOUND';
@@ -132,7 +133,8 @@ export async function listAttendanceRecords(
   const res = await pool.query(
     `SELECT ar.id, ar.employee_id, e.employee_code, e.full_name, ar.attendance_date,
             ar.check_in_time, ar.check_out_time, ar.late_minutes, ar.permission_minutes,
-            ar.total_hours, ar.day_type, ar.status_code, ar.source, ar.source_file, ar.edited_at, ar.edit_reason,
+            ar.total_hours, ar.day_type, ar.status_code,
+            ar.ot_day_hours, ar.ot_night_hours, ar.ot_holiday1_hours, ar.ot_holiday2_hours, ar.source, ar.source_file, ar.edited_at, ar.edit_reason,
             u.username AS edited_by
      FROM attendance_daily_records ar
      JOIN payroll_employees e ON e.id = ar.employee_id
@@ -156,6 +158,11 @@ export async function updateAttendanceRecordManual(
     lateMinutes?: number;
     permissionMinutes?: number;
     dayType?: 'WORK' | 'REST' | 'HOLIDAY';
+    /** TASK 018: ساعات الإضافي اليومية (undefined = بلا تغيير). */
+    otDayHours?: number;
+    otNightHours?: number;
+    otHoliday1Hours?: number;
+    otHoliday2Hours?: number;
     reason: string;
   },
 ) {
@@ -186,6 +193,10 @@ export async function updateAttendanceRecordManual(
        permission_minutes = COALESCE($6, permission_minutes),
        total_hours = $7,
        day_type = COALESCE($8, day_type),
+       ot_day_hours = COALESCE($11, ot_day_hours),
+       ot_night_hours = COALESCE($12, ot_night_hours),
+       ot_holiday1_hours = COALESCE($13, ot_holiday1_hours),
+       ot_holiday2_hours = COALESCE($14, ot_holiday2_hours),
        source = 'MANUAL',
        edited_by_user_id = $9,
        edited_at = now(),
@@ -204,6 +215,10 @@ export async function updateAttendanceRecordManual(
       input.dayType ?? null,
       input.userId,
       input.reason.trim(),
+      input.otDayHours ?? null,
+      input.otNightHours ?? null,
+      input.otHoliday1Hours ?? null,
+      input.otHoliday2Hours ?? null,
     ],
   );
   return row.rows[0];
@@ -475,6 +490,8 @@ export type MonthlyEffectsRow = {
   /** أسبوعي: لا قاعدة HR لأجر اليوم له — تُعرض العدّادات دون مبالغ. */
   moneyComputed: boolean;
   summary: MonthlyStatusSummary;
+  /** TASK 018: إضافي الشهر من الساعات اليومية المُدخَلة (بفئات الملف الأربع). */
+  overtime: OvertimeMonthResult & { hours: { day: number; night: number; holiday1: number; holiday2: number } };
 };
 
 /** معاينة أثر حالات شهر على الراتب والرصيد لكل موظف نشط (قراءة فقط، لا ترحيل). */
@@ -502,6 +519,19 @@ export async function computeMonthlyStatusEffects(
       ORDER BY attendance_date`,
     [companyId, from, to],
   );
+  // ساعات الإضافي اليومية المُدخَلة للشهر مجمّعة لكل موظف.
+  const ot = await pool.query<{ employee_id: string; d: string; n: string; h1: string; h2: string }>(
+    `SELECT employee_id,
+            COALESCE(SUM(ot_day_hours),0)::text AS d, COALESCE(SUM(ot_night_hours),0)::text AS n,
+            COALESCE(SUM(ot_holiday1_hours),0)::text AS h1, COALESCE(SUM(ot_holiday2_hours),0)::text AS h2
+       FROM attendance_daily_records
+      WHERE company_id=$1 AND attendance_date BETWEEN $2::date AND $3::date
+      GROUP BY employee_id`,
+    [companyId, from, to],
+  );
+  const otByEmp = new Map(
+    ot.rows.map((r) => [r.employee_id, { day: Number(r.d), night: Number(r.n), holiday1: Number(r.h1), holiday2: Number(r.h2) }]),
+  );
   const byEmp = new Map<string, { date: string; status: string | null }[]>();
   for (const r of recs.rows) {
     const arr = byEmp.get(r.employee_id) ?? [];
@@ -511,6 +541,8 @@ export async function computeMonthlyStatusEffects(
   return emps.rows.map((e) => {
     const monthly = e.salary_period === 'monthly';
     const wage = Number(e.base_salary);
+    const hrs = otByEmp.get(e.id) ?? { day: 0, night: 0, holiday1: 0, holiday2: 0 };
+    const workday = e.workday_hours != null ? Number(e.workday_hours) : 8;
     return {
       employeeId: e.id,
       employeeCode: e.employee_code,
@@ -521,6 +553,14 @@ export async function computeMonthlyStatusEffects(
       baseSharePercent: e.base_share_percent != null ? Number(e.base_share_percent) : null,
       moneyComputed: monthly,
       summary: summarizeMonthlyStatuses(byEmp.get(e.id) ?? [], monthly ? wage : 0, year, month),
+      overtime: {
+        ...computeMonthlyOvertime(
+          { DAY: hrs.day, NIGHT: hrs.night, HOLIDAY_X1: hrs.holiday1, HOLIDAY_X2: hrs.holiday2 },
+          monthly ? wage : 0,
+          workday,
+        ),
+        hours: hrs,
+      },
     };
   });
 }

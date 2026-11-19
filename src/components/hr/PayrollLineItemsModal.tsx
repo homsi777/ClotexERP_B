@@ -28,6 +28,7 @@ let seq = 0;
 const nextKey = () => `r${++seq}`;
 
 const ATTENDANCE_KINDS: PayrollLineItemKind[] = ['ATTENDANCE_ABSENCE_DEDUCTION', 'ATTENDANCE_HALF_PAY_DEDUCTION'];
+const ATTENDANCE_OT_KIND: PayrollLineItemKind = 'ATTENDANCE_OVERTIME';
 
 type Props = {
   runId: string;
@@ -60,6 +61,48 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, periodMonth, per
   const [otHours, setOtHours] = useState('');
   const [otKind, setOtKind] = useState<'NORMAL' | 'HOLIDAY'>('NORMAL');
   const [otBusy, setOtBusy] = useState(false);
+  const [otAttBusy, setOtAttBusy] = useState(false);
+
+  // إضافي الشهر من ساعات الحضور اليومية المُدخَلة (فئات ورقة الانتظام الأربع) بصيغة الملف.
+  // يستبدل بند الإضافي السابق من الحضور ولا يحفظ؛ الحفظ بزر المحاسب.
+  const fillOvertimeFromAttendance = async () => {
+    if (importedFromExcel && !window.confirm(t('lineItems.overtimeImportedConfirm'))) return;
+    setOtAttBusy(true);
+    try {
+      const res = await getMonthlyStatusEffects(periodYear, periodMonth, line.employee_id);
+      const row = res.data.rows[0];
+      if (!row || !row.moneyComputed) {
+        showToast({ type: 'warning', message: t('lineItems.overtimeWeekly') });
+        return;
+      }
+      const o = row.overtime;
+      if (!(o.totalAmount > 0)) {
+        showToast({ type: 'warning', message: t('lineItems.overtimeFromAttendanceNone') });
+        return;
+      }
+      const h = o.hours;
+      const parts = [
+        h.day > 0 ? `نهاري ${h.day}` : '',
+        h.night > 0 ? `ليلي ${h.night}` : '',
+        h.holiday1 > 0 ? `عطلة×1 ${h.holiday1}` : '',
+        h.holiday2 > 0 ? `عطلة×2 ${h.holiday2}` : '',
+      ].filter(Boolean);
+      setRows((cur) => [
+        ...cur.filter((r) => r.kind !== ATTENDANCE_OT_KIND),
+        {
+          key: nextKey(),
+          kind: ATTENDANCE_OT_KIND,
+          amount: String(o.totalAmount),
+          note: `${parts.join(' + ')} ساعة — أجر الساعة ${o.hourlyRate}`,
+        },
+      ]);
+      showToast({ type: 'success', message: t('lineItems.fromAttendanceDone') });
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('lineItems.overtimeFailed') });
+    } finally {
+      setOtAttBusy(false);
+    }
+  };
 
   // الإضافي = الساعات × (الأجر الشامل ÷ 30 ÷ 8) × (1.5 عادي | 2 جمعة/عطلة) — نفس معادلة ملف Excel
   // (server/src/services/hr/overtime.ts). يضيف بنداً قابلاً للتعديل ولا يحفظ.
@@ -225,6 +268,15 @@ export const PayrollLineItemsModal: React.FC<Props> = ({ runId, periodMonth, per
           >
             {fetchingAttendance && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {t('lineItems.fromAttendance')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void fillOvertimeFromAttendance()}
+            disabled={otAttBusy}
+            className="ms-2 inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {otAttBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {t('lineItems.overtimeFromAttendance')}
           </button>
 
           <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">

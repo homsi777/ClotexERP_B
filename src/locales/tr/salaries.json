@@ -224,7 +224,8 @@
       "SETTLEMENT_DEDUCT": "Mahsup (kesinti)",
       "ATTENDANCE_ABSENCE_DEDUCTION": "İzinsiz devamsızlık kesintisi",
       "ATTENDANCE_HALF_PAY_DEDUCTION": "Yarım ücret kesintisi (hastalık/evlilik)",
-      "OVERTIME": "Fazla mesai"
+      "OVERTIME": "Fazla mesai",
+      "ATTENDANCE_OVERTIME": "Fazla mesai (devamdan)"
     },
     "groupAdditions": "Hak edişler",
     "groupDeductions": "Kesintiler",
@@ -258,7 +259,9 @@
     "overtimeNeedHours": "Sıfırdan büyük saat girin",
     "overtimeFailed": "Fazla mesai hesaplanamadı",
     "overtimeWeekly": "Haftalık maaş: saatlik ücret kuralı yok",
-    "overtimeImportedConfirm": "Satır Excel'den içe aktarıldı ve fazla mesaiyi zaten içerebilir. Dahil olmadığından emin misiniz?"
+    "overtimeImportedConfirm": "Satır Excel'den içe aktarıldı ve fazla mesaiyi zaten içerebilir. Dahil olmadığından emin misiniz?",
+    "overtimeFromAttendance": "Fazla mesaiyi devamdan getir",
+    "overtimeFromAttendanceNone": "Bu çalışan için bu ayda fazla mesai saati kayıtlı değil"
   },
   "leaveBalances": {
     "title": "Yıllık izin bakiyeleri",

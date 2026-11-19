@@ -224,7 +224,8 @@
       "SETTLEMENT_DEDUCT": "تسوية بالخصم",
       "ATTENDANCE_ABSENCE_DEDUCTION": "خصم غياب بدون إذن",
       "ATTENDANCE_HALF_PAY_DEDUCTION": "خصم نصف أجر (مرضية/زواج)",
-      "OVERTIME": "إضافي"
+      "OVERTIME": "إضافي",
+      "ATTENDANCE_OVERTIME": "إضافي (من الحضور)"
     },
     "groupAdditions": "استحقاقات",
     "groupDeductions": "استقطاعات",
@@ -258,7 +259,9 @@
     "overtimeNeedHours": "أدخل عدد ساعات أكبر من صفر",
     "overtimeFailed": "تعذّر حساب الإضافي",
     "overtimeWeekly": "راتب أسبوعي: لا قاعدة لأجر الساعة",
-    "overtimeImportedConfirm": "السطر مستورد من Excel وقد يتضمن الإضافي أصلاً. هل أنت متأكد أنه غير محسوب ضمنه؟"
+    "overtimeImportedConfirm": "السطر مستورد من Excel وقد يتضمن الإضافي أصلاً. هل أنت متأكد أنه غير محسوب ضمنه؟",
+    "overtimeFromAttendance": "جلب الإضافي من الحضور",
+    "overtimeFromAttendanceNone": "لا ساعات إضافي مسجّلة لهذا الموظف في هذا الشهر"
   },
   "leaveBalances": {
     "title": "أرصدة الإجازات السنوية",

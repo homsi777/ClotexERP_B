@@ -99,5 +99,11 @@
   "modal.issueLongShift": "{{count}} سجل بأكثر من 16 ساعة (وردية مزدوجة محتملة): يُستورد، راجعه.",
   "modal.issueEmptySheets": "{{count}} ورقة بلا بيانات (عطلة/راحة) تم تجاهلها: {{sheets}}",
   "modal.issueUnreadable": "أوراق لا تُعرَف عناوينها وتم تخطيها: {{sheets}}",
-  "modal.incompleteKept": "{{count}} سجل ناقص لم يستبدل سجلاً كاملاً مستورداً سابقاً."
+  "modal.incompleteKept": "{{count}} سجل ناقص لم يستبدل سجلاً كاملاً مستورداً سابقاً.",
+  "editModal.otDay": "إضافي نهاري (×1.5)",
+  "editModal.otNight": "إضافي ليلي (×1.5)",
+  "editModal.otHoliday1": "عطلة (×1)",
+  "editModal.otHoliday2": "عطلة (×2)",
+  "status.colOvertime": "إضافي",
+  "status.overtimeHours": "{{hours}} ساعة"
 }

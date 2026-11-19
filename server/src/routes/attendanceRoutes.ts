@@ -60,6 +60,11 @@ const manualUpdateBody = z.object({
   lateMinutes: z.coerce.number().nonnegative().optional(),
   permissionMinutes: z.coerce.number().nonnegative().optional(),
   dayType: z.enum(['WORK', 'REST', 'HOLIDAY']).optional(),
+  // TASK 018: ساعات الإضافي اليومية بفئات ورقة الانتظام (0–24).
+  otDayHours: z.coerce.number().min(0).max(24).optional(),
+  otNightHours: z.coerce.number().min(0).max(24).optional(),
+  otHoliday1Hours: z.coerce.number().min(0).max(24).optional(),
+  otHoliday2Hours: z.coerce.number().min(0).max(24).optional(),
   reason: z.string().min(1, 'سبب التعديل مطلوب'),
 });
 
@@ -177,6 +182,10 @@ export const attendanceRoutes: FastifyPluginAsync = async (app) => {
         lateMinutes: d.lateMinutes,
         permissionMinutes: d.permissionMinutes,
         dayType: d.dayType,
+        otDayHours: d.otDayHours,
+        otNightHours: d.otNightHours,
+        otHoliday1Hours: d.otHoliday1Hours,
+        otHoliday2Hours: d.otHoliday2Hours,
         reason: d.reason,
       });
       await insertAuditLog(client, {
@@ -185,7 +194,7 @@ export const attendanceRoutes: FastifyPluginAsync = async (app) => {
         action: 'ATTENDANCE_RECORD_MANUALLY_EDITED',
         entityType: 'attendance_daily_record',
         entityId: id,
-        details: { reason: d.reason, checkInTime: d.checkInTime, checkOutTime: d.checkOutTime, lateMinutes: d.lateMinutes, permissionMinutes: d.permissionMinutes, dayType: d.dayType },
+        details: { reason: d.reason, checkInTime: d.checkInTime, checkOutTime: d.checkOutTime, lateMinutes: d.lateMinutes, permissionMinutes: d.permissionMinutes, dayType: d.dayType, otDayHours: d.otDayHours, otNightHours: d.otNightHours, otHoliday1Hours: d.otHoliday1Hours, otHoliday2Hours: d.otHoliday2Hours },
       });
       await client.query('COMMIT');
       return reply.send({ ok: true, data: row });
