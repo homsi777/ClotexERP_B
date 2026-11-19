@@ -39,6 +39,7 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'manufacturing.sizing.manage', name: 'إدارة وتنفيذ أوامر التصميغ', category: 'manufacturing' },
   { code: 'manufacturing.weaving.view', name: 'عرض تشغيل وإنتاج النسج', category: 'manufacturing' },
   { code: 'manufacturing.weaving.manage', name: 'إدارة تشغيل وإنتاج النسج', category: 'manufacturing' },
+  { code: 'manufacturing.raw_inspection.manage', name: 'فحص واعتماد رولات القماش الخام', category: 'manufacturing' },
   { code: 'manufacturing.machines.manage', name: 'إدارة الماكينات', category: 'manufacturing' },
   { code: 'manufacturing.maintenance.manage', name: 'إدارة أعطال وصيانة الماكينات', category: 'manufacturing' },
   { code: 'manufacturing.quality.catalog.manage', name: 'إدارة مكتبة عيوب الجودة', category: 'manufacturing' },

@@ -19,6 +19,7 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.sizing.manage', 'إدارة وتنفيذ أوامر التصميغ', 'manufacturing'),
   ('manufacturing.weaving.view', 'عرض تشغيل وإنتاج النسج', 'manufacturing'),
   ('manufacturing.weaving.manage', 'إدارة تشغيل وإنتاج النسج', 'manufacturing'),
+  ('manufacturing.raw_inspection.manage', 'فحص واعتماد رولات القماش الخام', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -45,6 +46,7 @@ JOIN permissions p ON p.code IN (
   'manufacturing.sizing.manage',
   'manufacturing.weaving.view',
   'manufacturing.weaving.manage',
+  'manufacturing.raw_inspection.manage',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
@@ -386,6 +388,23 @@ CREATE TABLE manufacturing_weaving_shift_logs (
  FOREIGN KEY(company_id,shift_type_id) REFERENCES attendance_shift_types(company_id,id) ON DELETE RESTRICT
 );
 
+CREATE TABLE manufacturing_raw_roll_outputs (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,weaving_run_id uuid NOT NULL,
+ production_batch_no text NOT NULL,roll_no text NOT NULL,production_barcode text NOT NULL,length_m numeric(14,3) NOT NULL CHECK(length_m>0),width_cm numeric(14,2),actual_weight_kg numeric(14,3),gsm numeric(14,2),
+ inspection_status text NOT NULL DEFAULT 'PENDING' CHECK(inspection_status IN ('PENDING','ACCEPTED','CONDITIONAL','REJECTED')),
+ grade text,inspection_notes text,result_fabric_roll_id uuid REFERENCES fabric_rolls(id),inspected_by_user_id uuid REFERENCES users(id),inspected_at timestamptz,
+ created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(company_id,production_barcode),UNIQUE(company_id,weaving_run_id,roll_no),UNIQUE(company_id,id),
+ FOREIGN KEY(company_id,weaving_run_id) REFERENCES manufacturing_weaving_runs(company_id,id) ON DELETE RESTRICT
+);
+CREATE INDEX manufacturing_raw_roll_outputs_status ON manufacturing_raw_roll_outputs(company_id,inspection_status,created_at DESC);
+
+CREATE TABLE manufacturing_raw_roll_defects (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,raw_roll_output_id uuid NOT NULL,defect_id uuid NOT NULL,
+ position_m numeric(14,3),quantity integer NOT NULL DEFAULT 1 CHECK(quantity>0),severity text CHECK(severity IN ('MINOR','MAJOR','CRITICAL')),notes text,created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(company_id,raw_roll_output_id) REFERENCES manufacturing_raw_roll_outputs(company_id,id) ON DELETE CASCADE
+);
+
 CREATE TABLE manufacturing_warping_yarn_issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   warping_order_id uuid NOT NULL, issue_no text NOT NULL,
@@ -589,11 +608,20 @@ CREATE TABLE manufacturing_quality_defect_catalog (
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT manufacturing_quality_defect_code_not_blank CHECK (length(trim(code)) > 0),
   CONSTRAINT manufacturing_quality_defect_name_not_blank CHECK (length(trim(name)) > 0),
-  CONSTRAINT manufacturing_quality_defect_company_code_unique UNIQUE (company_id, code)
+  CONSTRAINT manufacturing_quality_defect_company_code_unique UNIQUE (company_id, code),
+  CONSTRAINT manufacturing_quality_defect_company_identity UNIQUE (company_id, id)
 );
 
 CREATE INDEX manufacturing_quality_defect_lookup
   ON manufacturing_quality_defect_catalog(company_id, inspection_type, is_active, name);
+ALTER TABLE manufacturing_raw_roll_defects ADD CONSTRAINT manufacturing_raw_roll_defects_catalog_fk FOREIGN KEY(company_id,defect_id) REFERENCES manufacturing_quality_defect_catalog(company_id,id) ON DELETE RESTRICT;
+
+-- Preserve every movement type introduced by earlier migrations, including CUT.
+ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_movement_type_check;
+ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_movement_type_check CHECK (movement_type IN (
+  'OPENING','PURCHASE_RECEIPT','MANUAL_CREATE','TRANSFER_OUT','TRANSFER_IN','RESERVE','RELEASE_RESERVATION',
+  'SALE','RETURN','ADJUSTMENT','DAMAGE','STATUS_CHANGE','EXTERNAL_JOB_SENT','EXTERNAL_JOB_RETURNED','CUT','INTERNAL_PRODUCTION'
+));
 
 -- Seed only neutral reference values explicitly stated in the approved task.
 -- ON CONFLICT keeps the migration safe for companies that already use these codes.
