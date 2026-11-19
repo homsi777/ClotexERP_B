@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate,useSearchParams } from 'react-router-dom';
 import { Briefcase, Loader2, Scissors, Search } from 'lucide-react';
 import {
   listExternalJobs,
@@ -9,10 +9,13 @@ import {
 import { useToast } from '../../components/NonBlockingToast';
 import { ApiRequestError } from '../../lib/api/client';
 
-export const ExternalJobs = () => {
+export const ExternalJobs = ({embedded=false}:{embedded?:boolean}) => {
   const { t: lifecycleT, i18n: lifecycleI18n } = useTranslation('externalJobs');
   const { t } = useTranslation('externalJobs');
   const navigate = useNavigate();
+  const [query]=useSearchParams();
+  const manufacturing=embedded||query.get('from')==='manufacturing';
+  const origin=manufacturing?'?from=manufacturing':'';
   const { showToast } = useToast();
 
   const [jobs, setJobs] = useState<ExternalJob[]>([]);
@@ -30,7 +33,7 @@ export const ExternalJobs = () => {
       const res = await listExternalJobs({
         search: search || undefined,
         documentStatus: statusFilter || undefined,
-        jobKind: kindFilter || undefined,
+        jobKind: manufacturing?'PROCESSING':kindFilter || undefined,
         page,
         pageSize,
       });
@@ -41,7 +44,7 @@ export const ExternalJobs = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, kindFilter, page, showToast, t]);
+  }, [search, statusFilter, kindFilter, page, showToast, t,manufacturing]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -58,7 +61,7 @@ export const ExternalJobs = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate('/purchases/external-jobs/processing/new')}
+            onClick={() => navigate('/purchases/external-jobs/processing/new'+origin)}
             className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition"
           >
             <Scissors className="w-4 h-4" /> {t('page.newProcessingJob')}
@@ -88,7 +91,7 @@ export const ExternalJobs = () => {
             <option value="CONFIRMED">{t('status.confirmed')}</option>
             <option value="VOIDED">{t('status.voided')}</option>
           </select>
-          <select
+          {!manufacturing&&<select
             value={kindFilter}
             onChange={(e) => { setKindFilter(e.target.value as typeof kindFilter); setPage(1); }}
             className="border border-slate-200 rounded-lg px-3 py-2 bg-white text-sm"
@@ -96,7 +99,7 @@ export const ExternalJobs = () => {
             <option value="">{t('filters.allKinds')}</option>
             <option value="GENERAL">{t('kind.general')}</option>
             <option value="PROCESSING">{t('kind.processing')}</option>
-          </select>
+          </select>}
         </div>
 
         <div className="overflow-x-auto">
@@ -121,7 +124,8 @@ export const ExternalJobs = () => {
               ) : jobs.map((job) => (
                 <tr
                   key={job.id}
-                  onClick={() => navigate(`/purchases/external-jobs/${job.id}`)}
+                  data-external-job={job.id}
+                  onClick={() => navigate(`/purchases/external-jobs/${job.id}${origin}`)}
                   className="hover:bg-slate-50 cursor-pointer bg-white"
                 >
                   <td className="px-4 py-3 font-mono font-medium text-indigo-700">{job.job_no}</td>
@@ -133,7 +137,7 @@ export const ExternalJobs = () => {
                       <span className="block text-[11px] text-slate-400 mt-0.5 font-mono">#{job.supplier_order_no}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{job.sent_date}</td>
+                  <td className="px-4 py-3 text-slate-600">{job.sent_date.slice(0,10)}</td>
                   <td className="px-4 py-3 font-medium text-slate-800">{job.supplier_name}</td>
                   <td className="px-4 py-3 text-slate-600">
                     {t('table.linesProgress', { received: job.received_count ?? 0, total: job.line_count ?? 0 })}

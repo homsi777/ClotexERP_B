@@ -1,4 +1,6 @@
 {
+  "lifecycle.errors.productionCostFrozen":"Üretim maliyeti onaylandı; dış işçilik ücreti değiştirilemez",
+  "workflow":{"label": "Dış işçilik işlemleri", "overview": "İş takibi", "receive": "Parti kabulü", "quality": "Kalite ve partiler", "settlements": "Farklar ve kapanış", "pricing": "Fiyat ve ücret", "noBatches": "Henüz kontrol edilecek kabul partisi yok.", "printBatch": "Bu parti kabulünü yazdır", "popupBlocked": "Tarayıcıda yazdırma penceresine izin verin.", "costLocked": "Üretim maliyeti onaylandı; dış işçilik ücreti değiştirilemez"},
   "status.draft": "Taslak",
   "status.confirmed": "Onaylandı ve Gönderildi",
   "status.voided": "İptal Edildi",

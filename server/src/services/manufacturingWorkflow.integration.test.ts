@@ -38,6 +38,8 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
   const { externalJobRoutes } = await import('../routes/externalJobRoutes.js');
   const { warehouseZoneRoutes } = await import('../routes/warehouseZoneRoutes.js');
   const { manufacturingReferenceRoutes } = await import('../routes/manufacturingReferenceRoutes.js');
+  const {authRoutes}=await import('../routes/authRoutes.js');
+  const {warehouseRoutes,warehouseLocationRoutes}=await import('../routes/warehouseRoutes.js');
   const app = Fastify();
   try {
     await app.register(manufacturingWorkOrderRoutes, { prefix: '/orders' });
@@ -49,6 +51,9 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
     await app.register(externalJobRoutes, { prefix: '/external' });
     await app.register(warehouseZoneRoutes, { prefix: '/zones' });
     await app.register(manufacturingReferenceRoutes, { prefix: '/reference' });
+    await app.register(authRoutes,{prefix:'/auth'});
+    await app.register(warehouseRoutes,{prefix:'/warehouses'});
+    await app.register(warehouseLocationRoutes,{prefix:'/locations'});
     const company = randomUUID(), user = randomUUID(), warehouse = randomUUID(), item = randomUUID(), yarn = randomUUID();
     const spec = randomUUID(), version = randomUUID();
     const warpMachine = randomUUID(), loom = randomUUID(), sizingMachine = randomUUID();
@@ -176,13 +181,19 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
         await call('POST',`/cost/${order.id}/finalize`,{},400);
         const overview=await call('GET',`/external/${job.id}/lifecycle`);
         const returnBody={requestId:randomUUID(),dyePaperNo:'DYE-1',destinationWarehouseId:warehouse,lines:[{sourceLineId:overview.lines[0].id,lengthM:35,defective:true,defectReason:'DYE_HOUSE',responsibleParty:'Dye house',notes:'Check shade'}]};
-        await call('POST',`/external/${job.id}/lifecycle/returns`,returnBody);
+        if(['1','external'].includes(process.env.CLOTEX_MANUFACTURING_BROWSER_TESTS??'')){
+          const {verifyExternalManufacturingUI}=await import('./manufacturingScreens.browser.test.js');
+          await verifyExternalManufacturingUI(app,token,job.id,warehouse,overview.lines[0].id);
+        }else await call('POST',`/external/${job.id}/lifecycle/returns`,returnBody);
         const returns=await call('GET',`/external/${job.id}/lifecycle`);
         const returned=(await admin.query('SELECT id FROM external_job_return_lines WHERE job_id=$1',[job.id])).rows[0];
         await call('POST',`/external/${job.id}/lifecycle/resolve-defect`,{returnLineId:returned.id,decision:'ACCEPT',notes:'Quality approved shade'});
         await call('POST',`/external/${job.id}/lifecycle/settlements`,{sourceLineId:overview.lines[0].id,amountM:5,reason:'Approved process shrinkage'});
         await call('POST',`/external/${job.id}/lifecycle/service-pricing`,{lines:[{serviceId:returns.services[0].id,unitPrice:0.5,currencyCode:'USD',basis:'METER',approvedQuantity:35}]});
         await call('POST',`/external/${job.id}/lifecycle/close`,{});
+        // Physical receipt closure must not prevent the accountant from pricing
+        // later, but finalized production costs remain immutable.
+        await call('POST',`/external/${job.id}/lifecycle/service-pricing`,{lines:[{serviceId:returns.services[0].id,unitPrice:0.5,currencyCode:'USD',basis:'METER',approvedQuantity:35}]});
       }
       const report=await call('GET',`/cost/${order.id}`);
       assert.equal(report.unrated,0);
@@ -190,6 +201,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       assert.equal(report.acceptedLengthM,withSizing?85:90);
       await call('POST',`/cost/${order.id}/finalize`,{});
       await call('POST',`/cost/${order.id}/finalize`,{});
+      if(withSizing){const linked=(await admin.query('SELECT job_id FROM manufacturing_external_links WHERE company_id=$1 AND work_order_id=$2',[company,order.id])).rows[0];const ext=await call('GET',`/external/${linked.job_id}/lifecycle`);await call('POST',`/external/${linked.job_id}/lifecycle/service-pricing`,{lines:[{serviceId:ext.services[0].id,unitPrice:1,currencyCode:'USD',basis:'METER',approvedQuantity:35}]},400);}
       const allocated=await admin.query('SELECT SUM(allocated_usd) amount FROM manufacturing_cost_allocations WHERE company_id=$1 AND work_order_id=$2',[company,order.id]);
       assert.equal(Number(allocated.rows[0].amount),report.totalUsd);
       if(!withSizing){

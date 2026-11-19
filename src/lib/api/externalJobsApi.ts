@@ -150,7 +150,10 @@ export async function listExternalJobs(params: {
 }
 
 export async function getExternalJob(id: string) {
-  return apiFetch<{ ok: boolean; data: ExternalJobDetail }>(`/api/external-jobs/${id}`);
+  const response=await apiFetch<{ok:boolean;data:ExternalJobDetail|{header:ExternalJob;lines:ExternalJobLine[]}}>(`/api/external-jobs/${id}`);
+  // The backend deliberately separates its header and lines. Present the flat
+  // detail model consumed by the receipt page, without changing the server contract.
+  return {...response,data:'header' in response.data?{...response.data.header,lines:response.data.lines}:response.data};
 }
 
 export async function createExternalJob(payload: CreateExternalJobPayload) {

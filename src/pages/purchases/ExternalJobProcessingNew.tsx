@@ -22,6 +22,8 @@ export const ExternalJobProcessingNew = () => {
   const { t } = useTranslation('externalJobs');
   const navigate = useNavigate();
   const [query] = useSearchParams();
+  const manufacturing=query.get('from')==='manufacturing';
+  const back=manufacturing?'/manufacturing?section=external':'/purchases/external-jobs';
   const [previousJobId, setPreviousJobId] = useState(query.get('previousJobId') || '');
   const { showToast } = useToast();
 
@@ -165,7 +167,7 @@ export const ExternalJobProcessingNew = () => {
         rollIds: selectedRolls.map((r) => r.id),
       });
       showToast({ type: 'success', message: t('processingNew.createdSuccess', { jobNo: res.data.jobNo }) });
-      navigate(`/purchases/external-jobs/${res.data.id}`);
+      navigate(`/purchases/external-jobs/${res.data.id}${manufacturing?'?from=manufacturing':''}`);
     } catch (e) {
       showToast({ type: 'error', message: e instanceof ApiRequestError ? e.message : t('processingNew.createFailed') });
     } finally {
@@ -180,7 +182,7 @@ export const ExternalJobProcessingNew = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6" dir={lifecycleI18n.dir()}>
       <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/purchases/external-jobs')} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition">
+        <button onClick={() => navigate(back)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition">
           <ArrowRight className="w-5 h-5" />
         </button>
         <div>

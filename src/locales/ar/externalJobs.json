@@ -1,4 +1,6 @@
 {
+  "lifecycle.errors.productionCostFrozen":"تكلفة أمر الإنتاج معتمدة؛ لا يمكن تعديل أجرة المصنعية",
+  "workflow":{"label": "إجراءات المصنعية", "overview": "متابعة المهمة", "receive": "استلام دفعة", "quality": "الجودة والدفعات", "settlements": "التسويات والإغلاق", "pricing": "التسعير والأجرة", "noBatches": "لا توجد دفعات مستلمة للفحص بعد.", "printBatch": "طباعة استلام هذه الدفعة", "popupBlocked": "اسمح بفتح نافذة الطباعة من المتصفح.", "costLocked": "تكلفة أمر الإنتاج معتمدة؛ لا يمكن تعديل أجرة المصنعية"},
   "status.draft": "مسودة",
   "status.confirmed": "مؤكدة ومُرسلة",
   "status.voided": "ملغاة",

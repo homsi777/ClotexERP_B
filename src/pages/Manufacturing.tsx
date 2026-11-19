@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Factory, FileSpreadsheet, Gauge, Plus, RefreshCw, Upload, Wrench } from "lucide-react";
 import { usePermissions } from "../hooks/usePermissions";
@@ -9,8 +10,10 @@ import { SizingOrdersPanel } from "../components/manufacturing/SizingOrdersPanel
 import { WeavingRunsPanel } from "../components/manufacturing/WeavingRunsPanel";
 import { ProductionQualityPanel } from "../components/manufacturing/ProductionQualityPanel";
 import { ManufacturingCostPanel } from "../components/manufacturing/ManufacturingCostPanel";
+import { ManufacturingNavigation,manufacturingSections,type ManufacturingSection } from '../components/manufacturing/ManufacturingNavigation';
+import { ExternalJobs } from './purchases/ExternalJobs';
 
-type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving" | "rawInspection" | "costing";
+type Tab = ManufacturingSection;
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const primary = "rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50";
 const statusColor: Record<MachineStatus, string> = {
@@ -22,8 +25,13 @@ const statusColor: Record<MachineStatus, string> = {
 
 export const Manufacturing = () => {
   const { t } = useTranslation("manufacturing");
-  const { has } = usePermissions();
-  const [tab, setTab] = useState<Tab>("machines");
+  const { has,user } = usePermissions();
+  const [params,setParams]=useSearchParams();
+  const candidate=params.get('section');
+  const tab=manufacturingSections.includes(candidate as Tab)?candidate as Tab:null;
+  const group=params.get('group');
+  const [revision,setRevision]=useState(0);
+  const navigateSection=(section:Tab|null,nextGroup?:string)=>{setFormOpen(false);setEditing(null);setSelected(null);setError('');setParams(section?{section}:nextGroup?{group:nextGroup}:{});};
   const [overview, setOverview] = useState<ManufacturingOverview | null>(null);
   const [departments, setDepartments] = useState<ManufacturingDepartment[]>([]);
   const [machines, setMachines] = useState<ManufacturingMachine[]>([]);
@@ -50,22 +58,26 @@ export const Manufacturing = () => {
   const canWeavingManage=has("manufacturing.weaving.manage");
   const canRawInspection=has("manufacturing.raw_inspection.manage");
   const canInventoryManage=has("inventory.manage");
+  const allowedSections=manufacturingSections.filter(s=>{
+    const permissions:Record<Tab,string[]>={machines:['manufacturing.reference.view','manufacturing.machines.manage'],departments:['manufacturing.reference.view','manufacturing.reference.manage'],downtime:['manufacturing.reference.view','manufacturing.reference.manage'],defects:['manufacturing.reference.view','manufacturing.quality.catalog.manage'],specifications:['manufacturing.specifications.view','manufacturing.specifications.import','manufacturing.specifications.approve'],workOrders:['manufacturing.work_orders.view','manufacturing.work_orders.manage'],warping:['manufacturing.warping.view','manufacturing.warping.manage'],sizing:['manufacturing.sizing.view','manufacturing.sizing.manage'],weaving:['manufacturing.weaving.view','manufacturing.weaving.manage'],rawInspection:['manufacturing.raw_inspection.manage','manufacturing.weaving.view'],costing:['manufacturing.cost.view','manufacturing.cost.manage','inventory.manage'],external:['inventory.manage','purchases.view','manufacturing.work_orders.view']};
+    return permissions[s].some(has)||(s==='costing'&&user?.role==='accountant');
+  });
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [o, d, m, r, q] = await Promise.all([getManufacturingOverview(), listManufacturingDepartments(), listManufacturingMachines(), listDowntimeReasons(), listQualityDefects()]);
-      setOverview(o);
-      setDepartments(d);
-      setMachines(m);
-      setDowntime(r);
-      setDefects(q);
+      if(!user)return;
+      if(!tab&&!group&&has('manufacturing.dashboard.view'))setOverview(await getManufacturingOverview());
+      if(tab==='machines'){const[m,d]=await Promise.all([listManufacturingMachines(),listManufacturingDepartments()]);setMachines(m);setDepartments(d);}
+      if(tab==='departments')setDepartments(await listManufacturingDepartments());
+      if(tab==='downtime')setDowntime(await listDowntimeReasons());
+      if(tab==='defects'||tab==='rawInspection')setDefects(await listQualityDefects());
     } catch (e) {
       setError(e instanceof Error ? e.message : t("error.load"));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t,tab,group,user]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -94,15 +106,16 @@ export const Manufacturing = () => {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t("pageTitle")}</h1>
-          <p className="mt-1 text-slate-500">{t("referenceSubtitle")}</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">{t("navigation.subtitle")}</p>
         </div>
-        <button onClick={() => void load()} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-bold">
+        <button onClick={() => {setRevision(v=>v+1);void load();}} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-bold">
           <RefreshCw className="h-4 w-4" />
           {t("refresh")}
         </button>
       </header>
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {user?<ManufacturingNavigation section={tab} group={group} onNavigate={navigateSection} t={t} allowed={allowedSections}/>:<p className="p-4 text-slate-500">{t('loading')}</p>}
+      {!tab&&!group&&<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map(([label, value, Icon, color]) => (
           <div key={label} className="flex items-center gap-4 rounded-xl border bg-white p-4 shadow-sm">
             <div className={`rounded-full p-3 ${color}`}>
@@ -114,23 +127,9 @@ export const Manufacturing = () => {
             </div>
           </div>
         ))}
-      </div>
-      <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-3">
-          <div className="flex flex-wrap gap-2">
-            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing", "weaving", "rawInspection", "costing"] as Tab[]).map((x) => (
-              <button
-                key={x}
-                onClick={() => {
-                  setTab(x);
-                  setFormOpen(false);
-                }}
-                className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === x ? "bg-indigo-600 text-white" : "border bg-white text-slate-700"}`}
-              >
-                {x==="costing"?"المواد والتكاليف":x==="sizing"?"التصميغ":x==="weaving"?"النسج والورديات":x==="rawInspection"?"فحص الخام":t(`tabs.${x}`)}
-              </button>
-            ))}
-          </div>
+      </div>}
+      {tab&&<section className="min-w-0 overflow-hidden rounded-xl border bg-white shadow-sm">
+        {mayAdd&&<div className="flex justify-end border-b bg-slate-50 p-3">
           {mayAdd && (
             <button
               onClick={() => {
@@ -143,7 +142,7 @@ export const Manufacturing = () => {
               {t("add")}
             </button>
           )}
-        </div>
+        </div>}
         {formOpen && (
           <ReferenceForm
             tab={tab}
@@ -158,7 +157,7 @@ export const Manufacturing = () => {
             }}
           />
         )}
-        <div className="overflow-x-auto">
+        <div key={`${tab}:${revision}`} className="min-w-0 overflow-x-auto">
           {tab === "specifications" ? (
             <WorkbookPreviewPanel t={t} canImport={canSpecImport} canApprove={canSpecApprove} />
           ) : tab === "workOrders" ? (
@@ -173,6 +172,8 @@ export const Manufacturing = () => {
             <ProductionQualityPanel canInspect={canRawInspection} canReceive={canInventoryManage} defects={defects} />
           ) : tab === "costing" ? (
             <ManufacturingCostPanel />
+          ) : tab === 'external' ? (
+            <div className="p-3 sm:p-5"><ExternalJobs embedded/></div>
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">{t("loading")}</div>
           ) : tab === "machines" ? (
@@ -230,7 +231,7 @@ export const Manufacturing = () => {
             />
           )}
         </div>
-      </section>
+      </section>}
       {selected && (
         <MachinePanel
           machine={selected}

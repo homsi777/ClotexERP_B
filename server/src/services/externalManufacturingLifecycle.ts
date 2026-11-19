@@ -110,7 +110,8 @@ export async function assertLegacyPricing(db: Db, companyId: string, jobId: stri
 
 export async function manufacturingOverview(db: Db, companyId: string, jobId: string) {
   uuid.parse(jobId);
-  const job = (await db.query(`SELECT j.*,s.name AS supplier_name,p.name AS preparation_type_name FROM external_jobs j
+  const job = (await db.query(`SELECT j.*,s.name AS supplier_name,p.name AS preparation_type_name,
+    EXISTS(SELECT 1 FROM manufacturing_external_links l JOIN manufacturing_cost_closures c ON c.company_id=l.company_id AND c.work_order_id=l.work_order_id WHERE l.company_id=j.company_id AND l.job_id=j.id) AS production_cost_closed FROM external_jobs j
     JOIN suppliers s ON s.id=j.supplier_id AND s.company_id=j.company_id
     LEFT JOIN external_job_preparation_types p ON p.id=j.preparation_type_id AND p.company_id=j.company_id
     WHERE j.id=$1 AND j.company_id=$2 AND j.job_kind='PROCESSING'`, [jobId, companyId])).rows[0];
@@ -254,7 +255,9 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
     currencyCode: z.string().trim().min(1).max(8), basis: z.enum(['METER', 'KG', 'FIXED']), approvedQuantity: amount })).min(1).max(30) }).strict().parse(raw);
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.fee_posted_at) fail('تم ترحيل الفاتورة؛ لا يمكن تعديل الأسعار');
-  if (job.lifecycle_closed_at) fail('المصنعية مغلقة؛ لا يمكن تعديل أسعارها');
+  const frozen = await db.query(`SELECT 1 FROM manufacturing_external_links l JOIN manufacturing_cost_closures c
+    ON c.company_id=l.company_id AND c.work_order_id=l.work_order_id WHERE l.company_id=$1 AND l.job_id=$2 LIMIT 1`,[companyId,jobId]);
+  if (frozen.rows.length) fail('تكلفة أمر الإنتاج معتمدة؛ لا يمكن تعديل أجرة المصنعية');
   const services = (await db.query('SELECT id FROM external_job_services WHERE job_id=$1 AND company_id=$2 ORDER BY id FOR UPDATE', [jobId, companyId])).rows;
   if (input.lines.length !== services.length || new Set(input.lines.map(l => l.serviceId)).size !== services.length || input.lines.some(l => !services.some(s => s.id === l.serviceId))) fail('يجب تسعير جميع الخدمات مرة واحدة');
   let totalUsd = 0;

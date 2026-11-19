@@ -1,11 +1,13 @@
 import { manufacturingError } from '../../lib/externalManufacturingI18n';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link,useSearchParams } from 'react-router-dom';
 import { getManufacturing, manufacturingAction, type ManufacturingResponse, type ServiceBasis } from '../../lib/api/externalManufacturingApi';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { listLocations } from '../../lib/api/warehousesApi';
 import { postExternalJobFee } from '../../lib/api/externalJobsApi';
+import { renderExternalManufacturingBatch } from '../../lib/printing/renderExternalManufacturingBatch';
+import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 
 type Row = { sourceLineId: string; lengthM: string; weightKg: string; barcode: string; colorName: string; colorCode: string; widthCm: string; gsm: string; defective: boolean; defectReason: 'DYE_HOUSE' | 'INTERNAL_KNITTING' | 'OTHER'; responsibleParty: string; notes: string };
 const blank = (): Row => ({ sourceLineId: '', lengthM: '', weightKg: '', barcode: '', colorName: '', colorCode: '', widthCm: '', gsm: '', defective: false, defectReason: 'DYE_HOUSE', responsibleParty: '', notes: '' });
@@ -13,6 +15,8 @@ const inputClass = 'border rounded p-2 w-full text-sm';
 const remaining = (l: { sent_length_m: string; returned_m: string; shortage_m: string; excess_m: string }) => Math.max(0, Math.round((Number(l.sent_length_m) + Number(l.excess_m) - Number(l.returned_m) - Number(l.shortage_m)) * 1000) / 1000);
 
 export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { jobId: string; receiving?: boolean }) {
+  const [query]=useSearchParams();
+  const manufacturingOrigin=query.get('from')==='manufacturing';
   const { t: lifecycleT, i18n: lifecycleI18n } = useTranslation('externalJobs');
   const [response, setResponse] = useState<ManufacturingResponse | null>(null);
   const [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]);
@@ -24,7 +28,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
   const [notes, setNotes] = useState('');
   const [attachments, setAttachments] = useState('');
   const [completed, setCompleted] = useState<string[]>([]);
-  const [tab, setTab] = useState<'returns' | 'pricing'>('returns');
+  const [tab, setTab] = useState<'overview'|'receive'|'quality'|'settlements'|'pricing'>('overview');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -61,7 +65,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
     const signature = JSON.stringify(payload);
     if (!retry.current || retry.current.payload !== signature) retry.current = { payload: signature, id: crypto.randomUUID() };
     await manufacturingAction(jobId, 'returns', { ...payload, requestId: retry.current.id });
-    retry.current = null; setRows([blank()]); setPaper(''); setNotes(''); setAttachments(''); setCompleted([]);
+    retry.current = null; setRows([blank()]); setPaper(''); setNotes(''); setAttachments(''); setCompleted([]);setTab('overview');
   }, lifecycleT('lifecycle.returnSaved'));
   if (!response) return <section className="p-4 border rounded">{error || lifecycleT('lifecycle.loading')}</section>;
   const { data, canPrice, canManage, canReceive } = response;
@@ -72,9 +76,9 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
   const excess = data.lines.reduce((n, l) => n + Number(l.excess_m), 0);
   const defective = data.batches.flatMap(b => b.lines).filter(l => l.defective).reduce((n, l) => n + Number(l.length_m), 0);
   const open = !data.job.lifecycle_closed_at && data.job.document_status === 'CONFIRMED' && !data.legacyMode;
-  return <section className="bg-white border rounded-xl p-4 space-y-4" dir={lifecycleI18n.dir()}>
+  return <section data-external-lifecycle className="min-w-0 bg-white border rounded-xl p-4 space-y-4" dir={lifecycleI18n.dir()}>
     <h3 className="font-bold">{lifecycleT('lifecycle.title')}{data.job.job_no} — {data.job.supplier_name}</h3>
-    {data.job.previous_job_id && <Link to={`/purchases/external-jobs/${data.job.previous_job_id}`} className="text-indigo-600">{lifecycleT('lifecycle.previous')}</Link>}
+    {data.job.previous_job_id && <Link to={`/purchases/external-jobs/${data.job.previous_job_id}${manufacturingOrigin?'?from=manufacturing':''}`} className="text-indigo-600">{lifecycleT('lifecycle.previous')}</Link>}
     {error && <p role="alert" className="text-red-700">{error}</p>}{message && <p role="status" className="text-green-700">{message}</p>}
     {data.legacyMode && <p className="text-amber-800">{lifecycleT('lifecycle.legacyNotice')}</p>}
     {data.legacyMode && <div className="border rounded p-3"><p>{lifecycleT('lifecycle.legacyDisplay')}</p>
@@ -83,8 +87,11 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
     </div>}
     <p>{lifecycleT('lifecycle.sentPrefix')}{sent.toFixed(3)}{lifecycleT('lifecycle.receivedPrefix')}{received.toFixed(3)}{lifecycleT('lifecycle.remainingPrefix')}{Math.max(0, sent + excess - received - shortage).toFixed(3)}{lifecycleT('lifecycle.shortagePrefix')}{shortage.toFixed(3)}{lifecycleT('lifecycle.excessPrefix')}{excess.toFixed(3)}{lifecycleT('lifecycle.defectivePrefix')}{data.legacyMode ? lifecycleT('lifecycle.unknown') : defective.toFixed(3)}{lifecycleT('lifecycle.meterSuffix')}</p>
     <p>{data.legacyMode ? lifecycleT(`status.${data.job.document_status.toLowerCase()}`) : data.job.lifecycle_closed_at ? lifecycleT('lifecycle.closed') : lifecycleT('lifecycle.open')} — {data.job.fee_posted_at ? lifecycleT('lifecycle.posted') : data.job.fee_amount !== null ? lifecycleT('lifecycle.pricedPending') : lifecycleT('lifecycle.unpriced')}</p>
-    <div className="flex gap-3"><button onClick={() => setTab('returns')}>{lifecycleT('lifecycle.returnsTab')}</button><button onClick={() => setTab('pricing')}>{lifecycleT('lifecycle.pricingTab')}</button></div>
-    {tab === 'returns' ? <>
+    <nav aria-label={lifecycleT('workflow.label')} className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">{([
+      ['overview',lifecycleT('workflow.overview')],...(receiving&&canReceive&&open?[['receive',lifecycleT('workflow.receive')]]:[]),['quality',lifecycleT('workflow.quality')],...(canManage?[['settlements',lifecycleT('workflow.settlements')]]:[]),['pricing',lifecycleT('workflow.pricing')]
+    ] as Array<[typeof tab,string]>).map(([id,label])=><button key={id} data-external-tab={id} aria-current={tab===id?'page':undefined} className={`rounded-lg border px-3 py-2 text-sm font-bold ${tab===id?'bg-indigo-600 text-white':'bg-white text-slate-700'}`} onClick={()=>setTab(id)}>{label}</button>)}</nav>
+    {tab !== 'pricing' ? <>
+      {tab==='overview'&&<>
       <div className="overflow-auto"><table className="w-full text-sm"><thead><tr>{[lifecycleT('lifecycle.itemColumn'),lifecycleT('lifecycle.rollColumn'),lifecycleT('lifecycle.sentColumn'),lifecycleT('lifecycle.receivedColumn'),lifecycleT('lifecycle.remainingColumn'),lifecycleT('lifecycle.shortageColumn')].map(h => <th key={h}>{h}</th>)}</tr></thead>
         <tbody>{data.lines.map(l => <tr key={l.id}><td>{l.item_name} / {l.internal_code}</td><td>{l.color_name} / {l.roll_no} / {l.sent_barcode}</td><td>{l.sent_length_m} / {l.sent_weight_display ?? lifecycleT('lifecycle.unknown')}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : l.returned_m}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : remaining(l).toFixed(3)}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : l.shortage_m}</td></tr>)}</tbody></table></div>
       <h4 className="font-bold">{lifecycleT('lifecycle.servicesTitle')}</h4>
@@ -94,17 +101,18 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
         <button onClick={() => setServices(a => [...a,{ name:'',quantity:'1',basis:'METER' }])}>{lifecycleT('lifecycle.addService')}</button><button onClick={() => run(() => manufacturingAction(jobId,'services',{ services: services.map(s => ({...s,quantity:Number(s.quantity)})) }),lifecycleT('lifecycle.servicesSaved'))}>{lifecycleT('lifecycle.saveServices')}</button>
       </fieldset></details>}
       {!receiving && open && canReceive && <Link className="text-indigo-700 font-bold" to={`/inventory/create?externalJobId=${jobId}`}>{lifecycleT('lifecycle.receive')}</Link>}
+      </>}
       {/* سياسة بشير — "نفس شعور فاتورة الشراء": رأس المستند (مستودع/موقع/
           ورقة الصباغة) أعلاه، ثم جدول أسطر بعمود لكل حقل + زر حذف بكل صف +
           صف إجماليات أسفله، بنفس النمط البصري المُستخدَم بجداول فواتير
           الشراء/البيع والمناقلات بالمشروع — المنطق والنداء الخلفي (receive)
           لم يتغيّرا بحرف واحد، تعديل عرض فقط. */}
-      {receiving && canReceive && open && <fieldset disabled={busy} className="space-y-3 border rounded-xl p-4 bg-slate-50">
+      {tab==='receive'&&receiving && canReceive && open && <fieldset disabled={busy} className="space-y-3 border rounded-xl p-4 bg-slate-50">
         <legend className="font-bold px-1">{lifecycleT('lifecycle.receiptLegend')}</legend>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <label className="text-sm">{lifecycleT('lifecycle.warehouse')}<select className={inputClass} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}><option value="">{lifecycleT('lifecycle.chooseWarehouse')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
-          <label className="text-sm">{lifecycleT('lifecycle.location')}<select className={inputClass} value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">{lifecycleT('lifecycle.noLocation')}</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-          <label className="text-sm">{lifecycleT('lifecycle.dyePaper')}<input className={inputClass} required value={paper} onChange={e => setPaper(e.target.value)}/></label>
+          <label className="text-sm">{lifecycleT('lifecycle.warehouse')}<select aria-label={lifecycleT('lifecycle.warehouse')} className={inputClass} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}><option value="">{lifecycleT('lifecycle.chooseWarehouse')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+          <label className="text-sm">{lifecycleT('lifecycle.location')}<select aria-label={lifecycleT('lifecycle.location')} className={inputClass} value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">{lifecycleT('lifecycle.noLocation')}</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+          <label className="text-sm">{lifecycleT('lifecycle.dyePaper')}<input aria-label={lifecycleT('lifecycle.dyePaper')} className={inputClass} required value={paper} onChange={e => setPaper(e.target.value)}/></label>
         </div>
 
         <div className="overflow-x-auto bg-white border rounded-lg">
@@ -142,7 +150,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
                       <input placeholder={lifecycleT('lifecycle.returnedColor')} className={inputClass} value={r.colorName} onChange={e=>patch(i,{colorName:e.target.value})}/>
                       <input placeholder={lifecycleT('lifecycle.returnedColorCode')} className={inputClass} value={r.colorCode} onChange={e=>patch(i,{colorCode:e.target.value})}/>
                     </td>
-                    <td className="p-2 text-center"><input type="checkbox" checked={r.defective} onChange={e=>patch(i,{defective:e.target.checked})}/></td>
+                    <td className="p-2 text-center"><input aria-label={lifecycleT('lifecycle.defectiveCheck')} type="checkbox" checked={r.defective} onChange={e=>patch(i,{defective:e.target.checked})}/></td>
                     <td className="p-2"><input aria-label={lifecycleT('lifecycle.lineNotes')} placeholder={lifecycleT('lifecycle.lineNotes')} className={inputClass} value={r.notes} onChange={e=>patch(i,{notes:e.target.value})}/></td>
                     <td className="p-2"><button type="button" onClick={()=>setRows(a=>a.filter((_,j)=>j!==i))}>{lifecycleT('lifecycle.deleteLine')}</button></td>
                   </tr>
@@ -190,23 +198,24 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
 
         <button disabled={!warehouseId||!paper.trim()||!rows.length||rows.some(r=>!r.sourceLineId||Number(r.lengthM)<=0)} onClick={receive} className="bg-emerald-700 text-white px-4 py-2 rounded font-bold">{lifecycleT('lifecycle.confirmReceipt')}</button>
       </fieldset>}
-      {data.batches.map(b=><details key={b.id} open><summary>{lifecycleT('lifecycle.batchPrefix')}{b.dye_paper_no} — {new Date(b.received_at).toLocaleString(lifecycleI18n.language)}</summary><p>{b.notes}</p><p>{lifecycleT('lifecycle.servicesPrefix')}{b.service_ids.map(id=>data.services.find(s=>s.id===id)?.name??id).join(lifecycleT('lifecycle.separator'))}</p>{b.attachments.map(url=><a className="block text-indigo-600" key={url} href={url} target="_blank" rel="noopener noreferrer">{lifecycleT('lifecycle.attachment')}</a>)}
+      {(tab==='overview'||tab==='quality')&&data.batches.map(b=><details key={b.id} open><summary>{lifecycleT('lifecycle.batchPrefix')}{b.dye_paper_no} — {new Date(b.received_at).toLocaleString(lifecycleI18n.language)}</summary><button type="button" className="my-2 rounded-lg border px-3 py-2 text-sm font-bold text-indigo-700" onClick={()=>{if(!openDocumentPrintWindow(renderExternalManufacturingBatch(data,b),`${data.job.job_no} — ${b.dye_paper_no}`))setError(lifecycleT('workflow.popupBlocked'));}}>{lifecycleT('workflow.printBatch')}</button><p>{b.notes}</p><p>{lifecycleT('lifecycle.servicesPrefix')}{b.service_ids.map(id=>data.services.find(s=>s.id===id)?.name??id).join(lifecycleT('lifecycle.separator'))}</p>{b.attachments.map(url=><a className="block text-indigo-600" key={url} href={url} target="_blank" rel="noopener noreferrer">{lifecycleT('lifecycle.attachment')}</a>)}
         {b.lines.map(l=><div key={l.id} className="border p-2"><p>{l.original_barcode} ← {l.barcode} — {l.length_m}{lifecycleT('lifecycle.meterWeightSeparator')}{l.weight_kg??lifecycleT('lifecycle.unknown')}{lifecycleT('lifecycle.kgSeparator')}{lifecycleT(`lifecycle.rollStatus.${l.status}`, { defaultValue: l.status })}</p><p>{l.defect_reason ? lifecycleT(`lifecycle.defect.${l.defect_reason}`) : ''} {l.responsible_party} {l.notes} {l.resolution ? lifecycleT(`lifecycle.decision.${l.resolution}`) : ''} {l.resolution_notes}</p>
-          {l.defective&&!l.resolution&&canManage&&<div>{(['ACCEPT','REWORK','WRITE_OFF'] as const).map((decision,i)=><button key={decision} className="border rounded p-2 ml-2" disabled={busy} onClick={()=>{ const note=window.prompt(lifecycleT('lifecycle.decisionNotes')); if(note?.trim())void run(()=>manufacturingAction(jobId,'resolve-defect',{returnLineId:l.id,decision,notes:note.trim()}),lifecycleT('lifecycle.decisionSaved')); }}>{[lifecycleT('lifecycle.accept'),lifecycleT('lifecycle.rework'),lifecycleT('lifecycle.writeOff')][i]}</button>)}</div>}
-          {l.resolution==='REWORK'&&canReceive&&<Link className="text-indigo-700" to={`/purchases/external-jobs/processing/new?previousJobId=${jobId}`}>{lifecycleT('lifecycle.createRework')}</Link>}
+          {tab==='quality'&&l.defective&&!l.resolution&&canManage&&<div>{(['ACCEPT','REWORK','WRITE_OFF'] as const).map((decision,i)=><button key={decision} className="border rounded p-2 ml-2" disabled={busy} onClick={()=>{ const note=window.prompt(lifecycleT('lifecycle.decisionNotes')); if(note?.trim())void run(()=>manufacturingAction(jobId,'resolve-defect',{returnLineId:l.id,decision,notes:note.trim()}),lifecycleT('lifecycle.decisionSaved')); }}>{[lifecycleT('lifecycle.accept'),lifecycleT('lifecycle.rework'),lifecycleT('lifecycle.writeOff')][i]}</button>)}</div>}
+          {l.resolution==='REWORK'&&canReceive&&<Link className="text-indigo-700" to={`/purchases/external-jobs/processing/new?previousJobId=${jobId}${manufacturingOrigin?'&from=manufacturing':''}`}>{lifecycleT('lifecycle.createRework')}</Link>}
         </div>)}</details>)}
-      <h4>{lifecycleT('lifecycle.settlements')}</h4>{data.settlements.map(s=><p key={s.id}>{s.kind==='EXCESS'?lifecycleT('lifecycle.approvedExcess'):lifecycleT('lifecycle.approvedShortage')} — {s.amount_m}{lifecycleT('lifecycle.metersSeparator')}{s.reason} — {new Date(s.approved_at).toLocaleString(lifecycleI18n.language)}</p>)}
-      {canManage&&open&&<fieldset disabled={busy} className="border p-3 space-y-2"><legend>{lifecycleT('lifecycle.settlementLegend')}</legend>
+      {tab==='quality'&&!data.batches.length&&<p className="rounded bg-slate-50 p-4 text-slate-500">{lifecycleT('workflow.noBatches')}</p>}
+      {tab==='settlements'&&<><h4>{lifecycleT('lifecycle.settlements')}</h4>{data.settlements.map(s=><p key={s.id}>{s.kind==='EXCESS'?lifecycleT('lifecycle.approvedExcess'):lifecycleT('lifecycle.approvedShortage')} — {s.amount_m}{lifecycleT('lifecycle.metersSeparator')}{s.reason} — {new Date(s.approved_at).toLocaleString(lifecycleI18n.language)}</p>)}</>}
+      {tab==='settlements'&&canManage&&open&&<fieldset disabled={busy} className="border p-3 space-y-2"><legend>{lifecycleT('lifecycle.settlementLegend')}</legend>
         <select aria-label={lifecycleT('lifecycle.settlementType')} className={inputClass} value={settlement.kind} onChange={e=>setSettlement({...settlement,kind:e.target.value})}><option value="SHORTAGE">{lifecycleT('lifecycle.shortage')}</option><option value="EXCESS">{lifecycleT('lifecycle.excess')}</option></select>
         <select className={inputClass} value={settlement.sourceLineId} onChange={e=>setSettlement({...settlement,sourceLineId:e.target.value})}><option value="">{lifecycleT('lifecycle.sourceLine')}</option>{data.lines.filter(l=>settlement.kind==='EXCESS'||remaining(l)>0).map(l=><option value={l.id} key={l.id}>{l.sent_barcode} — {remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}</select>
         <input aria-label={lifecycleT('lifecycle.settlementQuantity')} className={inputClass} type="number" min="0.001" step="0.001" value={settlement.amountM} onChange={e=>setSettlement({...settlement,amountM:e.target.value})}/><input placeholder={lifecycleT('lifecycle.settlementReason')} className={inputClass} value={settlement.reason} onChange={e=>setSettlement({...settlement,reason:e.target.value})}/>
         <button onClick={()=>run(async()=>{await manufacturingAction(jobId,'settlements',{...settlement,amountM:Number(settlement.amountM)});setSettlement({sourceLineId:'',amountM:'',reason:'',kind:'SHORTAGE'});},lifecycleT('lifecycle.settlementSaved'))}>{lifecycleT('lifecycle.approveSettlement')}</button><button className="mr-4" onClick={()=>run(()=>manufacturingAction(jobId,'close',{}),lifecycleT('lifecycle.closedSuccess'))}>{lifecycleT('lifecycle.close')}</button>
       </fieldset>}
     </> : <div className="space-y-3">
-      <p>{lifecycleT('lifecycle.pricingInfo')}</p>
+      <p>{lifecycleT(data.job.production_cost_closed?'workflow.costLocked':'lifecycle.pricingInfo')}</p>
       {data.legacyMode ? <p>{lifecycleT('lifecycle.legacyPricing')}</p> : !canPrice?<p>{lifecycleT('lifecycle.pricingPermission')}</p>:<fieldset disabled={busy||!!data.job.fee_posted_at} className="space-y-3">
-        {prices.map((p,i)=><div key={p.serviceId} className="border p-2 grid grid-cols-2 gap-2"><strong>{data.services.find(s=>s.id===p.serviceId)?.name}</strong><label>{lifecycleT('lifecycle.basis')}<select className={inputClass} value={p.basis} onChange={e=>setPrices(a=>a.map((v,j)=>i===j?{...v,basis:e.target.value as ServiceBasis}:v))}><option value="METER">{lifecycleT('lifecycle.meter')}</option><option value="KG">{lifecycleT('lifecycle.kg')}</option><option value="FIXED">{lifecycleT('lifecycle.fixed')}</option></select></label>{(['unitPrice','currencyCode','approvedQuantity'] as const).map((k,j)=><label key={k}>{[lifecycleT('lifecycle.unitPrice'),lifecycleT('lifecycle.currency'),lifecycleT('lifecycle.approvedQuantity')][j]}<input className={inputClass} type={k==='currencyCode'?'text':'number'} min="0" step="0.0001" value={p[k]} onChange={e=>setPrices(a=>a.map((v,n)=>n===i?{...v,[k]:e.target.value}:v))}/></label>)}<p>{lifecycleT('lifecycle.totalPrefix')}{(Number(p.unitPrice)*Number(p.approvedQuantity)).toFixed(4)} {p.currencyCode}</p></div>)}
-        <button disabled={!prices.length||prices.some(p=>p.unitPrice==='')} onClick={()=>run(()=>manufacturingAction(jobId,'service-pricing',{lines:prices.map(p=>({...p,unitPrice:Number(p.unitPrice),approvedQuantity:Number(p.approvedQuantity)}))}),lifecycleT('lifecycle.pricingSaved'))}>{lifecycleT('lifecycle.savePricing')}</button>
+        {prices.map((p,i)=><div key={p.serviceId} className="border p-2 grid grid-cols-2 gap-2"><strong>{data.services.find(s=>s.id===p.serviceId)?.name}</strong><label>{lifecycleT('lifecycle.basis')}<select disabled={!!data.job.production_cost_closed} className={inputClass} value={p.basis} onChange={e=>setPrices(a=>a.map((v,j)=>i===j?{...v,basis:e.target.value as ServiceBasis}:v))}><option value="METER">{lifecycleT('lifecycle.meter')}</option><option value="KG">{lifecycleT('lifecycle.kg')}</option><option value="FIXED">{lifecycleT('lifecycle.fixed')}</option></select></label>{(['unitPrice','currencyCode','approvedQuantity'] as const).map((k,j)=><label key={k}>{[lifecycleT('lifecycle.unitPrice'),lifecycleT('lifecycle.currency'),lifecycleT('lifecycle.approvedQuantity')][j]}<input disabled={!!data.job.production_cost_closed} className={inputClass} type={k==='currencyCode'?'text':'number'} min="0" step="0.0001" value={p[k]} onChange={e=>setPrices(a=>a.map((v,n)=>n===i?{...v,[k]:e.target.value}:v))}/></label>)}<p>{lifecycleT('lifecycle.totalPrefix')}{(Number(p.unitPrice)*Number(p.approvedQuantity)).toFixed(4)} {p.currencyCode}</p></div>)}
+        <button disabled={!!data.job.production_cost_closed||!prices.length||prices.some(p=>p.unitPrice===''||Number(p.unitPrice)<0||Number(p.approvedQuantity)<=0)} onClick={()=>run(()=>manufacturingAction(jobId,'service-pricing',{lines:prices.map(p=>({...p,unitPrice:Number(p.unitPrice),approvedQuantity:Number(p.approvedQuantity)}))}),lifecycleT('lifecycle.pricingSaved'))}>{lifecycleT('lifecycle.savePricing')}</button>
         <button className="mr-4" disabled={data.job.fee_amount===null} onClick={()=>{if(window.confirm(lifecycleT('lifecycle.confirmPost')))void run(()=>postExternalJobFee(jobId),lifecycleT('lifecycle.postSaved'));}}>{lifecycleT('lifecycle.post')}</button>
       </fieldset>}
       <p>{lifecycleT('lifecycle.feePrefix')}{data.job.fee_amount??lifecycleT('lifecycle.unpriced')} {data.job.fee_currency_code} — {data.job.fee_posted_at?lifecycleT('lifecycle.posted'):lifecycleT('lifecycle.unposted')}</p>

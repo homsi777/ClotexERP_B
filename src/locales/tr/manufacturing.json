@@ -1,4 +1,29 @@
 {
+  "navigation": {
+    "label":"Üretim bölümleri","home":"Tüm üretim bölümleri","open":"Bölümü aç","backToGroup":"Bu bölümün işlemleri","subtitle":"Önce bölümü, ardından işlemi seçin. Yazdırma ilgili kaydın içindedir.",
+    "groups":{
+      "planning":{"title":"Teknik föyler ve üretim emirleri","description":"Teknik föyleri içe aktarın ve onaylayın; üretim emirlerini yönetin."},
+      "operations":{"title":"Üretim aşamaları","description":"Çözgü, çözgü kartı, haşıllama, dokuma ve vardiyalar."},
+      "quality":{"title":"Kalite ve üretim girişi","description":"Ham kumaşı kontrol edin, kalite raporunu ve top girişini yönetin."},
+      "costs":{"title":"Malzemeler ve maliyetler","description":"Tüketim, iadeler, giderler ve maliyet onayı."},
+      "external":{"title":"Dış işçilik","description":"Sevk, parti kabulü, kalite, fiyatlandırma ve fark mutabakatı."},
+      "settings":{"title":"Fabrika ayarları","description":"Bölümler, makineler, duruş nedenleri ve kalite kusurları."}
+    },
+    "sections":{
+      "specifications":{"title":"Teknik föy kütüphanesi","description":"Excel dosyasını seçin, verileri inceleyin, sürümü kaydedip onaylayın."},
+      "workOrders":{"title":"Üretim emirleri","description":"Onaylı teknik föyden emir oluşturun ve kapanışına kadar takip edin."},
+      "warping":{"title":"Çözgü ve çözgü kartı","description":"Çözgü emri, iplik çıkışı ve iade/fire mutabakatı. Kart numarasının yanındaki düğmeden yazdırın."},
+      "sizing":{"title":"Haşıllama","description":"Haşıllamaya sevk edilen levendi seçin, reçeteyi ve tüketimi kaydedip aşamayı tamamlayın."},
+      "weaving":{"title":"Dokuma ve vardiyalar","description":"Levent ve tezgâhı seçin; sayaçları ve atkı tüketimini kaydedip çalışmayı kapatın."},
+      "rawInspection":{"title":"Ham kontrol ve top girişi","description":"Kaliteyi kaydedip onaylayın, ardından topları girin. Rapor ve yazdırma parti satırındadır."},
+      "costing":{"title":"Malzeme tüketimi ve maliyet onayı","description":"Üretim emrini seçerek tüketim, iade ve giderleri kaydedin; maliyet dökümünü dışa aktarın."},
+      "external":{"title":"Dış işçilik işleri","description":"Sevk, kabul, kalite, fiyat ve farkları işin detayından yönetin; sevk belgesini yazdırın."},
+      "machines":{"title":"Makineler ve bakım","description":"Makineler, teknik durum, arıza ve bakım geçmişi."},
+      "departments":{"title":"Fabrika bölümleri","description":"Makinelerin bağlı olduğu fabrika bölümlerini tanımlayın."},
+      "downtime":{"title":"Duruş nedenleri","description":"Üretimde kullanılan duruş nedenlerini yönetin."},
+      "defects":{"title":"Kalite kusurları","description":"Kusurları, kontrol aşamalarını ve önem derecelerini tanımlayın."}
+    }
+  },
   "pageTitle":"Üretim ve İmalat","referenceSubtitle":"Üretim emirlerinden önce fabrika, makine ve kalite ana verileri","refresh":"Yenile","add":"Ekle","edit":"Düzenle","save":"Kaydet","saving":"Kaydediliyor…","cancel":"İptal","apply":"Uygula","loading":"Yükleniyor…","noData":"Kayıt yok","yes":"Evet","no":"Hayır","history":"Geçmiş","changeStatus":"Makine durumunu değiştir","addBreakdown":"Yeni arıza kaydet","statusHistory":"Durum geçmişi","maintenanceHistory":"Arıza ve bakım geçmişi","technicalSpecifications":"Teknik özellikler",
   "summary":{"machines":"Makineler","active":"Çalışan makineler","unavailable":"Duruş veya bakım","openMaintenance":"Açık bakım"},
   "tabs":{"machines":"Makineler","departments":"Fabrika bölümleri","downtime":"Duruş nedenleri","defects":"Kalite kusurları","specifications":"Spesifikasyon kütüphanesi","workOrders":"Üretim emirleri","warping":"Çözgü ve kartları"},

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams,useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Loader2, Lock, Pencil, Printer, XCircle } from 'lucide-react';
 import {
   getExternalJob, receiveExternalJobLine, setExternalJobFee, postExternalJobFee, voidExternalJob,
@@ -23,6 +23,8 @@ export const ExternalJobReceipt = () => {
   const { t } = useTranslation('externalJobs');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [query]=useSearchParams();
+  const back=query.get('from')==='manufacturing'?'/manufacturing?section=external':'/purchases/external-jobs';
   const { showToast } = useToast();
 
   const [job, setJob] = useState<ExternalJobDetail | null>(null);
@@ -161,7 +163,7 @@ export const ExternalJobReceipt = () => {
     try {
       await voidExternalJob(id, null);
       showToast({ type: 'success', message: t('toast.voidSuccess') });
-      navigate('/purchases/external-jobs');
+      navigate(back);
     } catch (e) {
       showToast({ type: 'error', message: e instanceof ApiRequestError ? e.message : t('toast.voidFailed') });
     } finally {
@@ -198,7 +200,7 @@ export const ExternalJobReceipt = () => {
     try {
       await voidProcessingExternalJob(id, { password });
       showToast({ type: 'success', message: t('toast.voidSuccess') });
-      navigate('/purchases/external-jobs');
+      navigate(back);
     } catch (e) {
       throw e instanceof ApiRequestError ? e : new Error(t('toast.voidFailed'));
     }
@@ -231,12 +233,12 @@ export const ExternalJobReceipt = () => {
     <div className="max-w-5xl mx-auto space-y-6" dir="rtl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/purchases/external-jobs')} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition">
+          <button onClick={() => navigate(back)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition">
             <ArrowRight className="w-5 h-5" />
           </button>
           <div>
             <h2 className="text-2xl font-bold text-slate-900 font-mono">{job.job_no}</h2>
-            <p className="text-slate-500 mt-1 text-sm">{job.supplier_name} — {job.sent_date}</p>
+            <p className="text-slate-500 mt-1 text-sm">{job.supplier_name} — {job.sent_date.slice(0,10)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -421,7 +423,7 @@ export const ExternalJobReceipt = () => {
         </div>
       ) : null}
 
-      {job.job_kind === 'PROCESSING' && id && <ExternalManufacturingLifecycle key={id} jobId={id} />}
+      {job.job_kind === 'PROCESSING' && id && <ExternalManufacturingLifecycle key={id} jobId={id} receiving />}
       {job.job_kind === 'PROCESSING' && receipt !== null && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
           <h3 className="font-bold text-slate-800">{t('receiptSection.title')}</h3>
