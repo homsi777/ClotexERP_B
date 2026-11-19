@@ -11,7 +11,7 @@ import {
   generateWarpingOrderNo,
   type WarpingStatus,
 } from "../services/manufacturingWarpingService.js";
-import { generateWarpingYarnIssueNo } from "../services/manufacturingYarnIssueService.js";
+import { generateWarpingYarnIssueNo, validateYarnSettlement } from "../services/manufacturingYarnIssueService.js";
 
 const input = z.object({
   workOrderId: z.string().uuid(),
@@ -77,7 +77,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async (req, reply) => {
     if (!canView(req.user)) return sendError(reply, 403, "ليست لديك صلاحية عرض أوامر التسدية", "FORBIDDEN");
     const rows = await getPool().query(
-      `SELECT x.*,w.work_order_no,m.code AS machine_code,m.name AS machine_name,l.code AS loom_code,l.name AS loom_name,e.full_name AS operator_name,s.name AS shift_name,c.id AS warp_card_id,c.card_no,c.barcode AS card_barcode,c.card_data,c.print_count
+      `SELECT x.*,w.work_order_no,m.code AS machine_code,m.name AS machine_name,l.code AS loom_code,l.name AS loom_name,e.full_name AS operator_name,s.name AS shift_name,c.id AS warp_card_id,c.card_no,c.barcode AS card_barcode,c.card_data,c.print_count,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('id',b.id,'beamNo',b.beam_no,'barcode',b.barcode,'lengthM',b.length_m,'status',b.status,'qualityStatus',b.quality_status)) FROM manufacturing_warp_beams b WHERE b.warping_order_id=x.id AND b.company_id=x.company_id),'[]') AS output_beams
       FROM manufacturing_warping_orders x JOIN manufacturing_work_orders w ON w.id=x.work_order_id AND w.company_id=x.company_id
       LEFT JOIN manufacturing_machines m ON m.id=x.warping_machine_id AND m.company_id=x.company_id LEFT JOIN manufacturing_machines l ON l.id=x.target_loom_id AND l.company_id=x.company_id
       LEFT JOIN payroll_employees e ON e.id=x.operator_employee_id AND e.company_id=x.company_id LEFT JOIN attendance_shift_types s ON s.id=x.shift_type_id AND s.company_id=x.company_id
@@ -309,7 +310,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         .object({
           version: z.number().int().positive(),
           actualLengthM: z.number().min(0),
-          qualityStatus: z.enum(["ACCEPTED", "CONDITIONAL", "REJECTED"]),
+        qualityStatus: z.enum(["ACCEPTED", "CONDITIONAL", "REJECTED"]),
+        nextStage: z.enum(["SIZING","WEAVING"]).default("WEAVING"),
           qualityNotes: z.string().trim().max(2000).nullable().optional(),
         })
         .safeParse(req.body);
@@ -342,6 +344,10 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
           req.user!.sub,
         ],
       );
+      if(target==="COMPLETED"){
+        const beam=await client.query<{beam_no:string;beam_barcode:string}>(`SELECT COALESCE(NULLIF(trim(beam_no),''),warping_order_no||'-B1') AS beam_no,beam_barcode FROM manufacturing_warping_orders WHERE id=$1 AND company_id=$2`,[id,req.user!.companyId]);
+        await client.query(`INSERT INTO manufacturing_warp_beams(company_id,warping_order_id,beam_no,barcode,length_m,status,quality_status,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[req.user!.companyId,id,beam.rows[0].beam_no,beam.rows[0].beam_barcode,p.data.actualLengthM,p.data.nextStage==="SIZING"?"READY_FOR_SIZING":"READY_FOR_WEAVING",p.data.qualityStatus,p.data.qualityNotes??null,req.user!.sub]);
+      }
       await event(
         client,
         req.user!.companyId,
@@ -488,8 +494,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
     const client = await getPool().connect();
     try {
       await client.query("BEGIN");
-      const issue = await client.query<{ warping_order_id: string; status: string }>(
-        `SELECT warping_order_id,status FROM manufacturing_warping_yarn_issues WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+    const issue = await client.query<{ warping_order_id: string; status: string; warping_status:string }>(
+      `SELECT i.warping_order_id,i.status,x.status AS warping_status FROM manufacturing_warping_yarn_issues i JOIN manufacturing_warping_orders x ON x.id=i.warping_order_id AND x.company_id=i.company_id WHERE i.id=$1 AND i.company_id=$2 FOR UPDATE OF i`,
         [issueId, req.user!.companyId],
       );
       if (!issue.rows.length || issue.rows[0].status !== "REQUESTED") {
@@ -543,8 +549,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         req.user!.companyId,
         issue.rows[0].warping_order_id,
         "UPDATED",
-        "IN_PROGRESS",
-        "IN_PROGRESS",
+      issue.rows[0].warping_status,
+      issue.rows[0].warping_status,
         { action: "YARN_ISSUED", issueId },
         req.user!.sub,
       );
@@ -557,6 +563,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
       client.release();
     }
   });
+
+  app.post("/yarn-issues/:issueId/close",async(req,reply)=>{if(!has(req.user,"manufacturing.warping.manage"))return sendError(reply,403,"ليست لديك صلاحية تسوية عهدة الخيط","FORBIDDEN");const {issueId}=req.params as {issueId:string};const p=z.object({lines:z.array(z.object({lineId:z.string().uuid(),returnedWeightKg:z.number().min(0),wasteWeightKg:z.number().min(0),notes:z.string().trim().max(1000).nullable().optional()})).min(1).max(100)}).safeParse(req.body);if(!p.success)return sendError(reply,400,"بيانات المرتجع والهالك غير صالحة","VALIDATION");const client=await getPool().connect();try{await client.query("BEGIN");const issue=await client.query<{warping_order_id:string;status:string;warping_status:string}>(`SELECT i.warping_order_id,i.status,x.status AS warping_status FROM manufacturing_warping_yarn_issues i JOIN manufacturing_warping_orders x ON x.id=i.warping_order_id AND x.company_id=i.company_id WHERE i.id=$1 AND i.company_id=$2 FOR UPDATE OF i`,[issueId,req.user!.companyId]);if(!issue.rows.length||issue.rows[0].status!=="ISSUED"){await client.query("ROLLBACK");return sendError(reply,409,"عهدة الخيط غير موجودة أو ليست قيد التسوية","INVALID_STATE");}const lines=await client.query<{id:string;yarn_lot_id:string;issued_weight_kg:string;warehouse_id:string}>(`SELECT l.id,l.yarn_lot_id,l.issued_weight_kg,y.warehouse_id FROM manufacturing_warping_yarn_issue_lines l JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id WHERE l.issue_id=$1 AND l.company_id=$2 ORDER BY l.id FOR UPDATE OF y`,[issueId,req.user!.companyId]);if(lines.rows.length!==p.data.lines.length){await client.query("ROLLBACK");return sendError(reply,400,"يجب تسوية جميع أسطر طلب الصرف معاً","VALIDATION");}const byId=new Map(p.data.lines.map(x=>[x.lineId,x]));for(const line of lines.rows){const settlement=byId.get(line.id);if(!settlement){await client.query("ROLLBACK");return sendError(reply,400,"أحد أسطر التسوية غير موجود","VALIDATION");}const error=validateYarnSettlement({issued:Number(line.issued_weight_kg),returned:settlement.returnedWeightKg,waste:settlement.wasteWeightKg});if(error){await client.query("ROLLBACK");return sendError(reply,400,error,"VALIDATION");}if(settlement.returnedWeightKg>0){await client.query(`UPDATE yarn_lots SET weight_kg=weight_kg+$3,status='AVAILABLE',updated_at=now() WHERE id=$1 AND company_id=$2`,[line.yarn_lot_id,req.user!.companyId,settlement.returnedWeightKg]);await client.query(`INSERT INTO yarn_lot_movements(company_id,yarn_lot_id,movement_type,weight_delta_kg,to_warehouse_id,reference_type,reference_id,notes,created_by_user_id) VALUES($1,$2,'MANUFACTURING_RETURN',$3,$4,'WARPING_YARN_ISSUE',$5,$6,$7)`,[req.user!.companyId,line.yarn_lot_id,settlement.returnedWeightKg,line.warehouse_id,issueId,settlement.notes??"مرتجع تسدية",req.user!.sub]);}if(settlement.wasteWeightKg>0)await client.query(`INSERT INTO yarn_lot_movements(company_id,yarn_lot_id,movement_type,weight_delta_kg,reference_type,reference_id,notes,created_by_user_id) VALUES($1,$2,'MANUFACTURING_WASTE',0,'WARPING_YARN_ISSUE',$3,$4,$5)`,[req.user!.companyId,line.yarn_lot_id,issueId,JSON.stringify({wasteWeightKg:settlement.wasteWeightKg,notes:settlement.notes??null}),req.user!.sub]);await client.query(`UPDATE manufacturing_warping_yarn_issue_lines SET returned_weight_kg=$3,waste_weight_kg=$4,notes=COALESCE($5,notes) WHERE id=$1 AND company_id=$2`,[line.id,req.user!.companyId,settlement.returnedWeightKg,settlement.wasteWeightKg,settlement.notes??null]);}await client.query(`UPDATE manufacturing_warping_yarn_issues SET status='CLOSED',closed_by_user_id=$3,closed_at=now(),updated_at=now() WHERE id=$1 AND company_id=$2`,[issueId,req.user!.companyId,req.user!.sub]);await event(client,req.user!.companyId,issue.rows[0].warping_order_id,"UPDATED",issue.rows[0].warping_status,issue.rows[0].warping_status,{action:"YARN_ISSUE_CLOSED",issueId},req.user!.sub);await client.query("COMMIT");return reply.send({ok:true,data:{id:issueId,status:"CLOSED"}});}catch(e){await client.query("ROLLBACK").catch(()=>undefined);return dbError(reply,e);}finally{client.release();}});
 };
 
 async function event(

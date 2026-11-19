@@ -3,6 +3,7 @@ import {
   completeWarpingOrder,
   createWarpingYarnIssue,
   approveWarpingYarnIssue,
+  closeWarpingYarnIssue,
   createWarpingOrder,
   getWarpingOptions,
   listWarpingOrders,
@@ -32,7 +33,7 @@ export function WarpingOrdersPanel({
     [issueFor, setIssueFor] = useState<WarpingOrder | null>(null),
     [issueForm, setIssueForm] = useState({ yarnLotId: "", weightKg: "" }),
     [yarnIssues, setYarnIssues] = useState<
-      Array<{ id: string; issue_no: string; status: string; warpingOrderNo: string }>
+      Array<{ id: string; issue_no: string; status: string; warpingOrderNo: string; lines:Array<{id:string;issuedWeightKg:number}> }>
     >([]);
   const [form, setForm] = useState({
     workOrderId: "",
@@ -120,6 +121,7 @@ export function WarpingOrdersPanel({
       setIssueFor(null);
       setIssueForm({ yarnLotId: "", weightKg: "" });
     });
+  const settleYarn=(issue:(typeof yarnIssues)[number])=>{const lines:Array<{lineId:string;returnedWeightKg:number;wasteWeightKg:number}>=[];for(const line of issue.lines){const returned=Number(prompt(`الوزن المرتجع من المصروف ${line.issuedWeightKg} كغ`,`0`));if(!Number.isFinite(returned)||returned<0)return;const waste=Number(prompt("وزن الهالك كغ","0"));if(!Number.isFinite(waste)||waste<0)return;lines.push({lineId:line.id,returnedWeightKg:returned,wasteWeightKg:waste});}void run(()=>closeWarpingYarnIssue(issue.id,lines));};
   return (
     <div className="p-4">
       {error && <div className="mb-3 rounded bg-rose-50 p-3 text-rose-700">{error}</div>}
@@ -181,6 +183,7 @@ export function WarpingOrdersPanel({
           </div>
         </div>
       )}
+      {yarnIssues.some((i)=>i.status==="ISSUED")&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h3 className="mb-2 font-bold">عهد خيط مصروفة تنتظر المرتجع والهالك</h3><div className="flex flex-wrap gap-2">{yarnIssues.filter(i=>i.status==="ISSUED").map(i=><div key={i.id} className="rounded border bg-white p-2 text-sm">{i.issue_no} — {i.warpingOrderNo}<button className="mr-3 rounded bg-emerald-700 px-3 py-1 font-bold text-white" disabled={busy} onClick={()=>settleYarn(i)}>تسوية وإغلاق</button></div>)}</div></div>}
       <div className="mb-4 flex justify-between">
         <div>
           <h2 className="font-bold">أوامر التسدية وكروت السداء</h2>
@@ -339,7 +342,7 @@ export function WarpingOrdersPanel({
                     </button>
                   )}
                 </td>
-                <td>{r.status}</td>
+                <td>{r.status}{r.output_beams.map(b=><div key={b.id} className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs">{b.beamNo} — {b.status}</div>)}</td>
                 <td className="space-x-1 space-x-reverse whitespace-nowrap">
                   {canManage && r.status === "DRAFT" && (
                     <button

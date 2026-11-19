@@ -26,6 +26,7 @@ export type WarpingOrder = {
   card_barcode: string | null;
   card_data: Record<string, unknown> | null;
   print_count: number | null;
+  output_beams:Array<{id:string;beamNo:string;barcode:string;lengthM:number;status:string;qualityStatus:string}>;
 };
 export type WarpingOptions = {
   workOrders: Array<{ id: string; work_order_no: string; target_length_m: number; status: string }>;
@@ -67,6 +68,7 @@ export const completeWarpingOrder = (
     version: number;
     actualLengthM: number;
     qualityStatus: "ACCEPTED" | "CONDITIONAL" | "REJECTED";
+    nextStage?: "SIZING"|"WEAVING";
     qualityNotes?: string;
   },
 ) =>
@@ -86,11 +88,14 @@ export const createWarpingYarnIssue = (
     `${base}/${warpingOrderId}/yarn-issues`,
     { method: "POST", body: JSON.stringify(body) },
   ).then((r) => r.data);
+export type WarpingYarnIssueLine={id:string;yarnLotId:string;barcode:string;itemName:string;requestedWeightKg:number;issuedWeightKg:number;returnedWeightKg:number;wasteWeightKg:number};
+export type WarpingYarnIssue={id:string;issue_no:string;status:string;lines:WarpingYarnIssueLine[]};
 export const listWarpingYarnIssues = (warpingOrderId: string) =>
-  apiFetch<{ ok: true; data: Array<{ id: string; issue_no: string; status: string; lines: unknown[] }> }>(
+  apiFetch<{ ok: true; data: WarpingYarnIssue[] }>(
     `${base}/${warpingOrderId}/yarn-issues`,
   ).then((r) => r.data);
 export const approveWarpingYarnIssue = (issueId: string) =>
   apiFetch<{ ok: true; data: unknown }>(`${base}/yarn-issues/${issueId}/issue`, { method: "POST", body: "{}" }).then(
     (r) => r.data,
   );
+export const closeWarpingYarnIssue=(issueId:string,lines:Array<{lineId:string;returnedWeightKg:number;wasteWeightKg:number;notes?:string}>)=>apiFetch<{ok:true;data:unknown}>(`${base}/yarn-issues/${issueId}/close`,{method:'POST',body:JSON.stringify({lines})}).then(r=>r.data);

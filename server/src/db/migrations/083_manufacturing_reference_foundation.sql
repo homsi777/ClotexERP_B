@@ -307,6 +307,19 @@ CREATE TABLE manufacturing_warping_order_events (
 CREATE INDEX manufacturing_warping_order_events_history
   ON manufacturing_warping_order_events(company_id, warping_order_id, created_at DESC);
 
+CREATE TABLE manufacturing_warp_beams (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  warping_order_id uuid NOT NULL, beam_no text NOT NULL, barcode text NOT NULL,
+  length_m numeric(14,3) NOT NULL CHECK(length_m>=0),
+  status text NOT NULL CHECK(status IN ('READY_FOR_SIZING','READY_FOR_WEAVING','IN_SIZING','IN_WEAVING','REJECTED','CONSUMED')),
+  quality_status text NOT NULL CHECK(quality_status IN ('ACCEPTED','CONDITIONAL','REJECTED')),
+  notes text, version integer NOT NULL DEFAULT 1 CHECK(version>0),
+  created_by_user_id uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(company_id,beam_no), UNIQUE(company_id,barcode), UNIQUE(company_id,id),
+  FOREIGN KEY(company_id,warping_order_id) REFERENCES manufacturing_warping_orders(company_id,id) ON DELETE RESTRICT
+);
+CREATE INDEX manufacturing_warp_beams_status ON manufacturing_warp_beams(company_id,status,created_at DESC);
+
 CREATE TABLE manufacturing_warping_yarn_issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   warping_order_id uuid NOT NULL, issue_no text NOT NULL,
