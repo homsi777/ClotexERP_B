@@ -41,6 +41,8 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'manufacturing.weaving.view', name: 'عرض تشغيل وإنتاج النسج', category: 'manufacturing' },
   { code: 'manufacturing.weaving.manage', name: 'إدارة تشغيل وإنتاج النسج', category: 'manufacturing' },
   { code: 'manufacturing.raw_inspection.manage', name: 'فحص واعتماد رولات القماش الخام', category: 'manufacturing' },
+  { code: 'manufacturing.cost.view', name: 'عرض تكاليف الإنتاج', category: 'manufacturing' },
+  { code: 'manufacturing.cost.manage', name: 'تسعير واعتماد تكاليف الإنتاج', category: 'manufacturing' },
   { code: 'manufacturing.machines.manage', name: 'إدارة الماكينات', category: 'manufacturing' },
   { code: 'manufacturing.maintenance.manage', name: 'إدارة أعطال وصيانة الماكينات', category: 'manufacturing' },
   { code: 'manufacturing.quality.catalog.manage', name: 'إدارة مكتبة عيوب الجودة', category: 'manufacturing' },

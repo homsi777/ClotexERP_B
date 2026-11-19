@@ -12,6 +12,7 @@ import {
   type WarpingStatus,
 } from "../services/manufacturingWarpingService.js";
 import { generateWarpingYarnIssueNo, validateYarnSettlement } from "../services/manufacturingYarnIssueService.js";
+import { costRate } from "../services/manufacturingCostService.js";
 
 const input = z.object({
   workOrderId: z.string().uuid(),
@@ -332,6 +333,11 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         await client.query("ROLLBACK");
         return sendError(reply, 409, "لا يمكن إكمال الفحص في الحالة الحالية", "INVALID_STATE");
       }
+      const yarn = await client.query("SELECT id FROM manufacturing_warping_yarn_issues WHERE company_id=$1 AND warping_order_id=$2 AND status IN ('ISSUED','CLOSED') LIMIT 1", [req.user!.companyId,id]);
+      if (!yarn.rows.length) {
+        await client.query("ROLLBACK");
+        return sendError(reply,400,"يجب تسجيل صرف الخيط الفعلي قبل إكمال التسدية","YARN_ISSUE_REQUIRED");
+      }
       await client.query(
         `UPDATE manufacturing_warping_orders SET status=$3,actual_length_m=$4,quality_status=$5,quality_notes=$6,completed_by_user_id=$7,completed_at=now(),version=version+1,updated_by_user_id=$7,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [
@@ -509,8 +515,10 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         weight_kg: string;
         warehouse_id: string;
         status: string;
+        unit_cost: string | null;
+        currency_code: string;
       }>(
-        `SELECT l.id,l.yarn_lot_id,l.requested_weight_kg,y.weight_kg,y.warehouse_id,y.status FROM manufacturing_warping_yarn_issue_lines l JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id WHERE l.issue_id=$1 AND l.company_id=$2 ORDER BY y.id FOR UPDATE OF y`,
+        `SELECT l.id,l.yarn_lot_id,l.requested_weight_kg,y.weight_kg,y.warehouse_id,y.status,y.unit_cost,y.currency_code FROM manufacturing_warping_yarn_issue_lines l JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id WHERE l.issue_id=$1 AND l.company_id=$2 ORDER BY y.id FOR UPDATE OF y`,
         [issueId, req.user!.companyId],
       );
       for (const line of lines.rows) {
@@ -524,8 +532,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
           [line.yarn_lot_id, req.user!.companyId, amount],
         );
         await client.query(
-          `UPDATE manufacturing_warping_yarn_issue_lines SET issued_weight_kg=$3 WHERE id=$1 AND company_id=$2`,
-          [line.id, req.user!.companyId, amount],
+          `UPDATE manufacturing_warping_yarn_issue_lines SET issued_weight_kg=$3,issued_unit_cost=$4,issued_currency_code=$5,issued_exchange_rate=$6 WHERE id=$1 AND company_id=$2`,
+          [line.id, req.user!.companyId, amount,line.unit_cost,line.currency_code,await costRate(client,req.user!.companyId,line.currency_code)],
         );
         await client.query(
           `INSERT INTO yarn_lot_movements(company_id,yarn_lot_id,movement_type,weight_delta_kg,from_warehouse_id,reference_type,reference_id,notes,created_by_user_id) VALUES($1,$2,'MANUFACTURING_ISSUE',$3,$4,'WARPING_YARN_ISSUE',$5,$6,$7)`,

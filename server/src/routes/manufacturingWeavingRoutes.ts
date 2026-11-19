@@ -345,6 +345,11 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
         await client.query("ROLLBACK");
         return sendError(reply, 400, "لا يمكن إغلاق تشغيل بلا إنتاج مسجل", "VALIDATION");
       }
+      const material = await client.query("SELECT id FROM manufacturing_material_entries WHERE company_id=$1 AND weaving_run_id=$2 AND kind='ISSUE' LIMIT 1", [req.user!.companyId,id]);
+      if (!material.rows.length) {
+        await client.query("ROLLBACK");
+        return sendError(reply,400,"سجل استهلاك اللحمة من تبويب المواد والتكاليف قبل إغلاق النسج","MATERIAL_CONSUMPTION_REQUIRED");
+      }
       await client.query(
         `UPDATE manufacturing_weaving_runs SET status='COMPLETED',completed_at=now(),version=version+1,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [id, req.user!.companyId],

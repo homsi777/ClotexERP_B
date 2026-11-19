@@ -62,6 +62,8 @@ function createFakeDb() {
     const sql = norm(text);
 
     if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+    // These fixtures model purchased stock, with no manufacturing ancestry.
+    if (sql.startsWith('with recursive ancestors(id)')) return { rows: [] };
 
     if (sql.includes('select is_processing_party, is_active from suppliers')) {
       const [id, companyId] = params as [string, string];

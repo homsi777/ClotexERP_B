@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { manufacturingDispatchOrder, linkManufacturingExternal } from './manufacturingCostService.js';
 import { z } from 'zod';
 import { findOrCreateColor } from './purchaseInvoiceService.js';
 import { getExchangeRateToUsdTx } from './exchangeRateService.js';
@@ -740,6 +741,7 @@ export async function createProcessingExternalJob(
   const input = processingCreateSchema.parse(raw);
   const lifecycleInput = z.object({ previousJobId: z.string().uuid().nullable().optional() }).parse(raw);
   const rollIds = [...new Set(input.rollIds)];
+  const manufacturingOrder = await manufacturingDispatchOrder(client, companyId, rollIds);
 
   const supplierRow = await client.query<{ is_processing_party: boolean; is_active: boolean }>(
     `SELECT is_processing_party, is_active FROM suppliers WHERE id=$1 AND company_id=$2`,
@@ -875,6 +877,7 @@ export async function createProcessingExternalJob(
   }
 
   await initializeManufacturing(client, companyId, jobId, raw);
+  if (manufacturingOrder) await linkManufacturingExternal(client,companyId,userId!,manufacturingOrder,jobId);
   return {
     id: jobId,
     jobNo,

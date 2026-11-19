@@ -254,6 +254,7 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
     currencyCode: z.string().trim().min(1).max(8), basis: z.enum(['METER', 'KG', 'FIXED']), approvedQuantity: amount })).min(1).max(30) }).strict().parse(raw);
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.fee_posted_at) fail('تم ترحيل الفاتورة؛ لا يمكن تعديل الأسعار');
+  if (job.lifecycle_closed_at) fail('المصنعية مغلقة؛ لا يمكن تعديل أسعارها');
   const services = (await db.query('SELECT id FROM external_job_services WHERE job_id=$1 AND company_id=$2 ORDER BY id FOR UPDATE', [jobId, companyId])).rows;
   if (input.lines.length !== services.length || new Set(input.lines.map(l => l.serviceId)).size !== services.length || input.lines.some(l => !services.some(s => s.id === l.serviceId))) fail('يجب تسعير جميع الخدمات مرة واحدة');
   let totalUsd = 0;

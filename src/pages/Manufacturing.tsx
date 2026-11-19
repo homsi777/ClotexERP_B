@@ -8,8 +8,9 @@ import { WarpingOrdersPanel } from "../components/manufacturing/WarpingOrdersPan
 import { SizingOrdersPanel } from "../components/manufacturing/SizingOrdersPanel";
 import { WeavingRunsPanel } from "../components/manufacturing/WeavingRunsPanel";
 import { ProductionQualityPanel } from "../components/manufacturing/ProductionQualityPanel";
+import { ManufacturingCostPanel } from "../components/manufacturing/ManufacturingCostPanel";
 
-type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving" | "rawInspection";
+type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving" | "rawInspection" | "costing";
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const primary = "rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50";
 const statusColor: Record<MachineStatus, string> = {
@@ -117,7 +118,7 @@ export const Manufacturing = () => {
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-3">
           <div className="flex flex-wrap gap-2">
-            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing", "weaving", "rawInspection"] as Tab[]).map((x) => (
+            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing", "weaving", "rawInspection", "costing"] as Tab[]).map((x) => (
               <button
                 key={x}
                 onClick={() => {
@@ -126,7 +127,7 @@ export const Manufacturing = () => {
                 }}
                 className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === x ? "bg-indigo-600 text-white" : "border bg-white text-slate-700"}`}
               >
-                {x==="sizing"?"التصميغ":x==="weaving"?"النسج والورديات":x==="rawInspection"?"فحص الخام":t(`tabs.${x}`)}
+                {x==="costing"?"المواد والتكاليف":x==="sizing"?"التصميغ":x==="weaving"?"النسج والورديات":x==="rawInspection"?"فحص الخام":t(`tabs.${x}`)}
               </button>
             ))}
           </div>
@@ -170,6 +171,8 @@ export const Manufacturing = () => {
             <WeavingRunsPanel canManage={canWeavingManage} />
           ) : tab === "rawInspection" ? (
             <ProductionQualityPanel canInspect={canRawInspection} canReceive={canInventoryManage} defects={defects} />
+          ) : tab === "costing" ? (
+            <ManufacturingCostPanel />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">{t("loading")}</div>
           ) : tab === "machines" ? (
