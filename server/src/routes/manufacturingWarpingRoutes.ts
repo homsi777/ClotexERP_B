@@ -56,7 +56,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         [company],
       ),
       getPool().query(
-        `SELECT id,code,name FROM attendance_shift_types WHERE company_id=$1 AND is_active ORDER BY name`,
+        `SELECT id,code,name FROM attendance_shift_types WHERE company_id=$1 ORDER BY name`,
         [company],
       ),
       getPool().query(

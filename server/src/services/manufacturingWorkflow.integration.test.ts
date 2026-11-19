@@ -37,6 +37,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
   const { manufacturingCostRoutes } = await import('../routes/manufacturingCostRoutes.js');
   const { externalJobRoutes } = await import('../routes/externalJobRoutes.js');
   const { warehouseZoneRoutes } = await import('../routes/warehouseZoneRoutes.js');
+  const { manufacturingReferenceRoutes } = await import('../routes/manufacturingReferenceRoutes.js');
   const app = Fastify();
   try {
     await app.register(manufacturingWorkOrderRoutes, { prefix: '/orders' });
@@ -47,6 +48,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
     await app.register(manufacturingCostRoutes, { prefix: '/cost' });
     await app.register(externalJobRoutes, { prefix: '/external' });
     await app.register(warehouseZoneRoutes, { prefix: '/zones' });
+    await app.register(manufacturingReferenceRoutes, { prefix: '/reference' });
     const company = randomUUID(), user = randomUUID(), warehouse = randomUUID(), item = randomUUID(), yarn = randomUUID();
     const spec = randomUUID(), version = randomUUID();
     const warpMachine = randomUUID(), loom = randomUUID(), sizingMachine = randomUUID();
@@ -73,6 +75,8 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       assert.equal(response.statusCode, status, `${method} ${path}: ${response.body}`);
       return response.json().data;
     };
+    // A UI mounts these list/options requests before creating its first record.
+    for(const path of ['/warping/','/warping/options','/sizing/','/sizing/options','/weaving/','/weaving/options','/quality/batches','/orders/','/cost/options','/reference/overview','/reference/departments','/reference/machines','/reference/downtime-reasons','/reference/quality-defects','/reference/specifications'])await call('GET',path);
     const readonly = signAuthToken({ sub: user, companyId: company, username: 'flow-user', role: 'user', permissions: [], isPlatformAdmin: false });
     await call('POST', '/orders/', {}, 403, readonly);
     const otherCompany = randomUUID();
@@ -99,7 +103,10 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       await call('POST', `/warping/yarn-issues/${issue.id}/close`, { lines: [{ lineId: issueLines.rows[0].id, returnedWeightKg: 2, wasteWeightKg: 1 }] });
       await admin.query('UPDATE yarn_lots SET unit_cost=99 WHERE id=$1',[yarn]);
       await call('POST', `/warping/${warp.id}/transition`, { version: 2, targetStatus: 'IN_PROGRESS' });
-      await call('POST', `/warping/${warp.id}/complete`, { version: 3, actualLengthM: 100, qualityStatus: 'ACCEPTED', nextStage: withSizing ? 'SIZING' : 'WEAVING' });
+      if(process.env.CLOTEX_MANUFACTURING_BROWSER_TESTS==='1'){
+        const {verifyManufacturingScreens}=await import('./manufacturingScreens.browser.test.js');
+        await verifyManufacturingScreens(app,token,withSizing?'SIZING':'WEAVING',warp.id);
+      }else await call('POST', `/warping/${warp.id}/complete`, { version: 3, actualLengthM: 100, qualityStatus: 'ACCEPTED', nextStage: withSizing ? 'SIZING' : 'WEAVING' });
       const beam = (await admin.query('SELECT id FROM manufacturing_warp_beams WHERE warping_order_id=$1', [warp.id])).rows[0];
       let beamId = beam.id;
       if (withSizing) {

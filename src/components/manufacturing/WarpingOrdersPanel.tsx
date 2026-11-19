@@ -46,6 +46,10 @@ export function WarpingOrdersPanel({
     beamNo: "",
     notes: "",
   });
+  const [completion,setCompletion]=useState<WarpingOrder|null>(null);
+  const [completionLength,setCompletionLength]=useState('');
+  const [completionQuality,setCompletionQuality]=useState<'ACCEPTED'|'CONDITIONAL'|'REJECTED'>('ACCEPTED');
+  const [completionNextStage,setCompletionNextStage]=useState<'SIZING'|'WEAVING'>('WEAVING');
   const load = useCallback(async () => {
     try {
       const [r, o] = await Promise.all([listWarpingOrders(), getWarpingOptions()]);
@@ -94,11 +98,12 @@ export function WarpingOrdersPanel({
       setOpen(false);
     });
   const printCard = async (row: WarpingOrder) => {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=1000,height=700");
+    const popup = window.open("", "_blank", "width=1000,height=700");
     if (!popup) {
       setError("اسمح بفتح نافذة الطباعة من المتصفح");
       return;
     }
+    popup.opener=null;
     setBusy(true);
     try {
       const card = await recordAndGetWarpCardPrint(row.id);
@@ -125,6 +130,13 @@ export function WarpingOrdersPanel({
   return (
     <div className="p-4">
       {error && <div className="mb-3 rounded bg-rose-50 p-3 text-rose-700">{error}</div>}
+      {completion&&<form className="mb-4 grid gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 md:grid-cols-4" onSubmit={e=>{e.preventDefault();if(!completionLength.trim()||!Number.isFinite(Number(completionLength))||Number(completionLength)<0||(completionQuality!=='REJECTED'&&Number(completionLength)<=0))return;void run(async()=>{await completeWarpingOrder(completion.id,{version:completion.version,actualLengthM:Number(completionLength),qualityStatus:completionQuality,nextStage:completionNextStage});setCompletion(null);});}}>
+        <strong className="md:col-span-4">فحص التسدية — {completion.warping_order_no}</strong>
+        <label className="text-sm">الطول الفعلي بالمتر<input aria-label="الطول الفعلي للتسدية" required type="number" min={completionQuality==='REJECTED'?0:0.001} step="0.001" className={`${cls} w-full`} value={completionLength} onChange={e=>setCompletionLength(e.target.value)}/></label>
+        <label className="text-sm">نتيجة الفحص<select aria-label="نتيجة فحص التسدية" className={`${cls} w-full`} value={completionQuality} onChange={e=>setCompletionQuality(e.target.value as typeof completionQuality)}><option value="ACCEPTED">مقبول</option><option value="CONDITIONAL">قبول مشروط</option><option value="REJECTED">مرفوض</option></select></label>
+        <label className="text-sm">المرحلة التالية<select aria-label="المرحلة التالية للمطواة" disabled={completionQuality==='REJECTED'} className={`${cls} w-full`} value={completionNextStage} onChange={e=>setCompletionNextStage(e.target.value as typeof completionNextStage)}><option value="WEAVING">النسج مباشرة</option><option value="SIZING">التصميغ أولاً</option></select></label>
+        <div className="flex items-end gap-2"><button disabled={busy} type="submit" className="rounded-lg bg-indigo-600 px-3 py-2 text-white disabled:opacity-50">حفظ نتيجة الفحص</button><button disabled={busy} type="button" className={cls} onClick={()=>setCompletion(null)}>إلغاء</button></div>
+      </form>}
       {issueFor && (
         <div className="mb-4 grid gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 md:grid-cols-4">
           <strong>طلب صرف خيط — {issueFor.warping_order_no}</strong>
@@ -307,7 +319,7 @@ export function WarpingOrdersPanel({
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[960px] text-sm [&_th]:px-2 [&_td]:px-2">
           <thead>
             <tr className="border-b text-right text-slate-500">
               <th className="p-2">الأمر</th>
@@ -372,15 +384,10 @@ export function WarpingOrdersPanel({
                       disabled={busy}
                       className={cls}
                       onClick={() => {
-                        const length = Number(prompt("الطول الفعلي", String(r.planned_length_m)));
-                        if (Number.isFinite(length))
-                          void run(() =>
-                            completeWarpingOrder(r.id, {
-                              version: r.version,
-                              actualLengthM: length,
-                              qualityStatus: "ACCEPTED",
-                            }),
-                          );
+                        setCompletion(r);
+                        setCompletionLength(String(r.planned_length_m));
+                        setCompletionQuality('ACCEPTED');
+                        setCompletionNextStage('WEAVING');
                       }}
                     >
                       قبول وفحص
