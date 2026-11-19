@@ -171,17 +171,8 @@ const Topbar = () => {
       ],
     },
     { labelKey: 'expenses', to: '/expenses', icon: CreditCard },
-    {
-      labelKey: 'salaries',
-      icon: Briefcase,
-      subItems: [
-        { labelKey: 'salaries.employeeProfiles', to: '/hr/employees' },
-        { labelKey: 'salaries.attendance', to: '/hr/attendance' },
-        { labelKey: 'salaries.monthlyReview', to: '/hr/monthly-review' },
-        { labelKey: 'salaries.employees', to: '/salaries' },
-        { labelKey: 'salaries.log', to: '/salaries/log' },
-      ],
-    },
+    // HR: صفحة رئيسية مستقلة تدخل منها الأقسام (بدل القائمة المنسدلة).
+    { labelKey: 'hr', to: '/hr', icon: Briefcase },
     { labelKey: 'reports', to: '/reports', icon: PieChart },
     { labelKey: 'chartOfAccounts', to: '/chart-of-accounts', icon: Network },
     { labelKey: 'journal', to: '/journal', icon: BookOpen },
