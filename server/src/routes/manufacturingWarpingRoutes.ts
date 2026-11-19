@@ -11,6 +11,7 @@ import {
   generateWarpingOrderNo,
   type WarpingStatus,
 } from "../services/manufacturingWarpingService.js";
+import { generateWarpingYarnIssueNo } from "../services/manufacturingYarnIssueService.js";
 
 const input = z.object({
   workOrderId: z.string().uuid(),
@@ -40,7 +41,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
     if (!canView(req.user) && !has(req.user, "manufacturing.warping.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية عرض خيارات التسدية", "FORBIDDEN");
     const company = req.user!.companyId;
-    const [orders, machines, employees, shifts] = await Promise.all([
+    const [orders, machines, employees, shifts, yarnLots] = await Promise.all([
       getPool().query(
         `SELECT id,work_order_no,target_length_m,status FROM manufacturing_work_orders WHERE company_id=$1 AND status IN ('RELEASED','IN_PROGRESS') ORDER BY created_at DESC`,
         [company],
@@ -57,10 +58,20 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         `SELECT id,code,name FROM attendance_shift_types WHERE company_id=$1 AND is_active ORDER BY name`,
         [company],
       ),
+      getPool().query(
+        `SELECT y.id,y.barcode,y.weight_kg,f.name AS item_name,c.name_ar AS color_name FROM yarn_lots y JOIN fabric_items f ON f.id=y.item_id LEFT JOIN fabric_colors c ON c.id=y.color_id WHERE y.company_id=$1 AND y.status='AVAILABLE' AND y.weight_kg>0 ORDER BY f.name,y.created_at`,
+        [company],
+      ),
     ]);
     return reply.send({
       ok: true,
-      data: { workOrders: orders.rows, machines: machines.rows, employees: employees.rows, shifts: shifts.rows },
+      data: {
+        workOrders: orders.rows,
+        machines: machines.rows,
+        employees: employees.rows,
+        shifts: shifts.rows,
+        yarnLots: yarnLots.rows,
+      },
     });
   });
   app.get("/", async (req, reply) => {
@@ -258,11 +269,17 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
           `UPDATE manufacturing_work_orders SET status='IN_PROGRESS',version=version+1,updated_by_user_id=$3,updated_at=now() WHERE id=$1 AND company_id=$2 AND status='RELEASED'`,
           [x.work_order_id, req.user!.companyId, req.user!.sub],
         );
-        if (workOrderStarted.rowCount) await client.query(
-          `INSERT INTO manufacturing_work_order_events(company_id,work_order_id,event_type,old_status,new_status,details,created_by_user_id)
+        if (workOrderStarted.rowCount)
+          await client.query(
+            `INSERT INTO manufacturing_work_order_events(company_id,work_order_id,event_type,old_status,new_status,details,created_by_user_id)
            VALUES($1,$2,'STARTED','RELEASED','IN_PROGRESS',$3::jsonb,$4)`,
-          [req.user!.companyId,x.work_order_id,JSON.stringify({ source:'WARPING', warpingOrderId:id }),req.user!.sub],
-        );
+            [
+              req.user!.companyId,
+              x.work_order_id,
+              JSON.stringify({ source: "WARPING", warpingOrderId: id }),
+              req.user!.sub,
+            ],
+          );
       }
       await event(
         client,
@@ -385,6 +402,154 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         ok: true,
         data: { cardNo: c.card_no, barcode: c.barcode, cardData: c.card_data, printCount: c.print_count + 1 },
       });
+    } catch (e) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return dbError(reply, e);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.get("/:id/yarn-issues", async (req, reply) => {
+    if (!canView(req.user)) return sendError(reply, 403, "ليست لديك صلاحية عرض صرف الخيط", "FORBIDDEN");
+    const { id } = req.params as { id: string };
+    const rows = await getPool().query(
+      `SELECT i.*,COALESCE(jsonb_agg(jsonb_build_object('id',l.id,'yarnLotId',l.yarn_lot_id,'barcode',y.barcode,'itemName',f.name,'requestedWeightKg',l.requested_weight_kg,'issuedWeightKg',l.issued_weight_kg,'returnedWeightKg',l.returned_weight_kg,'wasteWeightKg',l.waste_weight_kg)) FILTER(WHERE l.id IS NOT NULL),'[]') AS lines FROM manufacturing_warping_yarn_issues i LEFT JOIN manufacturing_warping_yarn_issue_lines l ON l.issue_id=i.id AND l.company_id=i.company_id LEFT JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id LEFT JOIN fabric_items f ON f.id=y.item_id WHERE i.warping_order_id=$1 AND i.company_id=$2 GROUP BY i.id ORDER BY i.created_at DESC`,
+      [id, req.user!.companyId],
+    );
+    return reply.send({ ok: true, data: rows.rows });
+  });
+
+  app.post("/:id/yarn-issues", async (req, reply) => {
+    if (!has(req.user, "manufacturing.warping.manage"))
+      return sendError(reply, 403, "ليست لديك صلاحية طلب صرف الخيط", "FORBIDDEN");
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({
+        notes: z.string().trim().max(2000).nullable().optional(),
+        lines: z
+          .array(
+            z.object({
+              yarnLotId: z.string().uuid(),
+              requestedWeightKg: z.number().positive(),
+              notes: z.string().trim().max(1000).nullable().optional(),
+            }),
+          )
+          .min(1)
+          .max(100),
+      })
+      .safeParse(req.body);
+    if (!p.success) return sendError(reply, 400, "بيانات طلب الصرف غير صالحة", "VALIDATION");
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const order = await client.query<{ status: string }>(
+        `SELECT status FROM manufacturing_warping_orders WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [id, req.user!.companyId],
+      );
+      if (!order.rows.length || !["RELEASED", "IN_PROGRESS"].includes(order.rows[0].status)) {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "أمر التسدية غير موجود أو غير صالح للصرف", "INVALID_STATE");
+      }
+      const no = await generateWarpingYarnIssueNo(client, req.user!.companyId);
+      const issue = await client.query<{ id: string }>(
+        `INSERT INTO manufacturing_warping_yarn_issues(company_id,warping_order_id,issue_no,status,notes,requested_by_user_id,requested_at,created_by_user_id) VALUES($1,$2,$3,'REQUESTED',$4,$5,now(),$5) RETURNING id`,
+        [req.user!.companyId, id, no, p.data.notes ?? null, req.user!.sub],
+      );
+      for (const line of p.data.lines)
+        await client.query(
+          `INSERT INTO manufacturing_warping_yarn_issue_lines(company_id,issue_id,yarn_lot_id,requested_weight_kg,notes) VALUES($1,$2,$3,$4,$5)`,
+          [req.user!.companyId, issue.rows[0].id, line.yarnLotId, line.requestedWeightKg, line.notes ?? null],
+        );
+      await event(
+        client,
+        req.user!.companyId,
+        id,
+        "UPDATED",
+        order.rows[0].status,
+        order.rows[0].status,
+        { action: "YARN_ISSUE_REQUESTED", issueNo: no },
+        req.user!.sub,
+      );
+      await client.query("COMMIT");
+      return reply.status(201).send({ ok: true, data: { id: issue.rows[0].id, issueNo: no, status: "REQUESTED" } });
+    } catch (e) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return dbError(reply, e);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/yarn-issues/:issueId/issue", async (req, reply) => {
+    if (!has(req.user, "manufacturing.yarn_issue.approve"))
+      return sendError(reply, 403, "اعتماد الصرف يتطلب صلاحية مدير المصنع أو الإنتاج", "FORBIDDEN");
+    const { issueId } = req.params as { issueId: string };
+    const client = await getPool().connect();
+    try {
+      await client.query("BEGIN");
+      const issue = await client.query<{ warping_order_id: string; status: string }>(
+        `SELECT warping_order_id,status FROM manufacturing_warping_yarn_issues WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [issueId, req.user!.companyId],
+      );
+      if (!issue.rows.length || issue.rows[0].status !== "REQUESTED") {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "طلب الصرف غير موجود أو سبق تنفيذه", "INVALID_STATE");
+      }
+      const lines = await client.query<{
+        id: string;
+        yarn_lot_id: string;
+        requested_weight_kg: string;
+        weight_kg: string;
+        warehouse_id: string;
+        status: string;
+      }>(
+        `SELECT l.id,l.yarn_lot_id,l.requested_weight_kg,y.weight_kg,y.warehouse_id,y.status FROM manufacturing_warping_yarn_issue_lines l JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id WHERE l.issue_id=$1 AND l.company_id=$2 ORDER BY y.id FOR UPDATE OF y`,
+        [issueId, req.user!.companyId],
+      );
+      for (const line of lines.rows) {
+        const amount = Number(line.requested_weight_kg);
+        if (line.status !== "AVAILABLE" || Number(line.weight_kg) + 0.0005 < amount) {
+          await client.query("ROLLBACK");
+          return sendError(reply, 409, "رصيد أحد لوطات الخيط لم يعد كافياً للصرف", "INSUFFICIENT_YARN");
+        }
+        await client.query(
+          `UPDATE yarn_lots SET weight_kg=weight_kg-$3,status=CASE WHEN weight_kg-$3<=0.0005 THEN 'INACTIVE' ELSE status END,updated_at=now() WHERE id=$1 AND company_id=$2`,
+          [line.yarn_lot_id, req.user!.companyId, amount],
+        );
+        await client.query(
+          `UPDATE manufacturing_warping_yarn_issue_lines SET issued_weight_kg=$3 WHERE id=$1 AND company_id=$2`,
+          [line.id, req.user!.companyId, amount],
+        );
+        await client.query(
+          `INSERT INTO yarn_lot_movements(company_id,yarn_lot_id,movement_type,weight_delta_kg,from_warehouse_id,reference_type,reference_id,notes,created_by_user_id) VALUES($1,$2,'MANUFACTURING_ISSUE',$3,$4,'WARPING_YARN_ISSUE',$5,$6,$7)`,
+          [
+            req.user!.companyId,
+            line.yarn_lot_id,
+            -amount,
+            line.warehouse_id,
+            issueId,
+            "صرف معتمد لأمر تسدية",
+            req.user!.sub,
+          ],
+        );
+      }
+      await client.query(
+        `UPDATE manufacturing_warping_yarn_issues SET status='ISSUED',approved_by_user_id=$3,approved_at=now(),updated_at=now() WHERE id=$1 AND company_id=$2`,
+        [issueId, req.user!.companyId, req.user!.sub],
+      );
+      await event(
+        client,
+        req.user!.companyId,
+        issue.rows[0].warping_order_id,
+        "UPDATED",
+        "IN_PROGRESS",
+        "IN_PROGRESS",
+        { action: "YARN_ISSUED", issueId },
+        req.user!.sub,
+      );
+      await client.query("COMMIT");
+      return reply.send({ ok: true, data: { id: issueId, status: "ISSUED" } });
     } catch (e) {
       await client.query("ROLLBACK").catch(() => undefined);
       return dbError(reply, e);

@@ -40,7 +40,8 @@ export const Manufacturing = () => {
   const canWorkManage = has("manufacturing.work_orders.manage"),
     canWorkRelease = has("manufacturing.work_orders.release");
   const canWarpManage = has("manufacturing.warping.manage"),
-    canWarpQuality = has("manufacturing.warping.quality");
+    canWarpQuality = has("manufacturing.warping.quality"),
+    canApproveYarn = has("manufacturing.yarn_issue.approve");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -155,7 +156,7 @@ export const Manufacturing = () => {
           ) : tab === "workOrders" ? (
             <WorkOrdersPanel t={t} canManage={canWorkManage} canRelease={canWorkRelease} />
           ) : tab === "warping" ? (
-            <WarpingOrdersPanel canManage={canWarpManage} canQuality={canWarpQuality} />
+            <WarpingOrdersPanel canManage={canWarpManage} canQuality={canWarpQuality} canApproveYarn={canApproveYarn} />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">{t("loading")}</div>
           ) : tab === "machines" ? (

@@ -38,6 +38,7 @@ export type WarpingOptions = {
   }>;
   employees: Array<{ id: string; employee_code: string; full_name: string }>;
   shifts: Array<{ id: string; code: string; name: string }>;
+  yarnLots: Array<{ id: string; barcode: string; weight_kg: number; item_name: string; color_name: string | null }>;
 };
 const base = "/api/manufacturing/warping";
 export const listWarpingOrders = () => apiFetch<{ ok: true; data: WarpingOrder[] }>(base).then((r) => r.data);
@@ -77,3 +78,19 @@ export const recordAndGetWarpCardPrint = (id: string) =>
     ok: true;
     data: { cardNo: string; barcode: string; cardData: Record<string, unknown>; printCount: number };
   }>(`${base}/${id}/card/printed`, { method: "POST", body: "{}" }).then((r) => r.data);
+export const createWarpingYarnIssue = (
+  warpingOrderId: string,
+  body: { notes?: string; lines: Array<{ yarnLotId: string; requestedWeightKg: number }> },
+) =>
+  apiFetch<{ ok: true; data: { id: string; issueNo: string; status: string } }>(
+    `${base}/${warpingOrderId}/yarn-issues`,
+    { method: "POST", body: JSON.stringify(body) },
+  ).then((r) => r.data);
+export const listWarpingYarnIssues = (warpingOrderId: string) =>
+  apiFetch<{ ok: true; data: Array<{ id: string; issue_no: string; status: string; lines: unknown[] }> }>(
+    `${base}/${warpingOrderId}/yarn-issues`,
+  ).then((r) => r.data);
+export const approveWarpingYarnIssue = (issueId: string) =>
+  apiFetch<{ ok: true; data: unknown }>(`${base}/yarn-issues/${issueId}/issue`, { method: "POST", body: "{}" }).then(
+    (r) => r.data,
+  );

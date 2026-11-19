@@ -14,6 +14,7 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.warping.view', 'عرض أوامر التسدية وكروتها', 'manufacturing'),
   ('manufacturing.warping.manage', 'إدارة وتنفيذ أوامر التسدية', 'manufacturing'),
   ('manufacturing.warping.quality', 'فحص واعتماد المطاوي', 'manufacturing'),
+  ('manufacturing.yarn_issue.approve', 'اعتماد وصرف الخيط لأوامر التسدية', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -35,6 +36,7 @@ JOIN permissions p ON p.code IN (
   'manufacturing.warping.view',
   'manufacturing.warping.manage',
   'manufacturing.warping.quality',
+  'manufacturing.yarn_issue.approve',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
@@ -198,6 +200,8 @@ ALTER TABLE payroll_employees
   ADD CONSTRAINT payroll_employees_company_identity UNIQUE (company_id, id);
 ALTER TABLE attendance_shift_types
   ADD CONSTRAINT attendance_shift_types_company_identity UNIQUE (company_id, id);
+ALTER TABLE yarn_lots
+  ADD CONSTRAINT yarn_lots_company_identity UNIQUE (company_id, id);
 
 CREATE TABLE manufacturing_warping_orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -302,6 +306,33 @@ CREATE TABLE manufacturing_warping_order_events (
 );
 CREATE INDEX manufacturing_warping_order_events_history
   ON manufacturing_warping_order_events(company_id, warping_order_id, created_at DESC);
+
+CREATE TABLE manufacturing_warping_yarn_issues (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  warping_order_id uuid NOT NULL, issue_no text NOT NULL,
+  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','REQUESTED','ISSUED','CLOSED','CANCELLED')),
+  notes text, requested_by_user_id uuid REFERENCES users(id), requested_at timestamptz,
+  approved_by_user_id uuid REFERENCES users(id), approved_at timestamptz,
+  closed_by_user_id uuid REFERENCES users(id), closed_at timestamptz,
+  created_by_user_id uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(company_id,issue_no), UNIQUE(company_id,id),
+  FOREIGN KEY(company_id,warping_order_id) REFERENCES manufacturing_warping_orders(company_id,id) ON DELETE RESTRICT
+);
+CREATE INDEX manufacturing_warping_yarn_issues_order ON manufacturing_warping_yarn_issues(company_id,warping_order_id,created_at DESC);
+
+CREATE TABLE manufacturing_warping_yarn_issue_lines (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  issue_id uuid NOT NULL, yarn_lot_id uuid NOT NULL,
+  requested_weight_kg numeric(12,3) NOT NULL CHECK(requested_weight_kg>0),
+  issued_weight_kg numeric(12,3) NOT NULL DEFAULT 0 CHECK(issued_weight_kg>=0),
+  returned_weight_kg numeric(12,3) NOT NULL DEFAULT 0 CHECK(returned_weight_kg>=0),
+  waste_weight_kg numeric(12,3) NOT NULL DEFAULT 0 CHECK(waste_weight_kg>=0),
+  notes text, created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(company_id,issue_id,yarn_lot_id),
+  FOREIGN KEY(company_id,issue_id) REFERENCES manufacturing_warping_yarn_issues(company_id,id) ON DELETE RESTRICT,
+  FOREIGN KEY(company_id,yarn_lot_id) REFERENCES yarn_lots(company_id,id) ON DELETE RESTRICT,
+  CHECK(returned_weight_kg+waste_weight_kg<=issued_weight_kg)
+);
 
 CREATE TABLE manufacturing_departments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

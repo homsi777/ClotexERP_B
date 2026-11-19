@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   completeWarpingOrder,
+  createWarpingYarnIssue,
+  approveWarpingYarnIssue,
   createWarpingOrder,
   getWarpingOptions,
   listWarpingOrders,
+  listWarpingYarnIssues,
   recordAndGetWarpCardPrint,
   releaseWarpingOrder,
   transitionWarpingOrder,
@@ -12,12 +15,25 @@ import {
 } from "../../lib/api/manufacturingWarpingApi";
 import { renderWarpCardHtml } from "../../lib/printing/renderWarpCardHtml";
 const cls = "rounded-lg border px-3 py-2 text-sm";
-export function WarpingOrdersPanel({ canManage, canQuality }: { canManage: boolean; canQuality: boolean }) {
+export function WarpingOrdersPanel({
+  canManage,
+  canQuality,
+  canApproveYarn,
+}: {
+  canManage: boolean;
+  canQuality: boolean;
+  canApproveYarn: boolean;
+}) {
   const [rows, setRows] = useState<WarpingOrder[]>([]),
     [options, setOptions] = useState<WarpingOptions | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [open, setOpen] = useState(false);
+    [open, setOpen] = useState(false),
+    [issueFor, setIssueFor] = useState<WarpingOrder | null>(null),
+    [issueForm, setIssueForm] = useState({ yarnLotId: "", weightKg: "" }),
+    [yarnIssues, setYarnIssues] = useState<
+      Array<{ id: string; issue_no: string; status: string; warpingOrderNo: string }>
+    >([]);
   const [form, setForm] = useState({
     workOrderId: "",
     plannedLengthM: "",
@@ -34,6 +50,15 @@ export function WarpingOrdersPanel({ canManage, canQuality }: { canManage: boole
       const [r, o] = await Promise.all([listWarpingOrders(), getWarpingOptions()]);
       setRows(r);
       setOptions(o);
+      const issueGroups = await Promise.all(
+        r.map(async (order) =>
+          (await listWarpingYarnIssues(order.id)).map((issue) => ({
+            ...issue,
+            warpingOrderNo: order.warping_order_no,
+          })),
+        ),
+      );
+      setYarnIssues(issueGroups.flat());
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل أوامر التسدية");
@@ -69,19 +94,93 @@ export function WarpingOrdersPanel({ canManage, canQuality }: { canManage: boole
     });
   const printCard = async (row: WarpingOrder) => {
     const popup = window.open("", "_blank", "noopener,noreferrer,width=1000,height=700");
-    if (!popup) { setError("اسمح بفتح نافذة الطباعة من المتصفح"); return; }
+    if (!popup) {
+      setError("اسمح بفتح نافذة الطباعة من المتصفح");
+      return;
+    }
     setBusy(true);
     try {
       const card = await recordAndGetWarpCardPrint(row.id);
       popup.document.write(renderWarpCardHtml({ cardNo: card.cardNo, barcode: card.barcode, data: card.cardData }));
       popup.document.close();
       await load();
-    } catch (e) { popup.close(); setError(e instanceof Error ? e.message : "تعذرت طباعة الكارت"); }
-    finally { setBusy(false); }
+    } catch (e) {
+      popup.close();
+      setError(e instanceof Error ? e.message : "تعذرت طباعة الكارت");
+    } finally {
+      setBusy(false);
+    }
   };
+  const requestYarn = () =>
+    run(async () => {
+      if (!issueFor) return;
+      await createWarpingYarnIssue(issueFor.id, {
+        lines: [{ yarnLotId: issueForm.yarnLotId, requestedWeightKg: Number(issueForm.weightKg) }],
+      });
+      setIssueFor(null);
+      setIssueForm({ yarnLotId: "", weightKg: "" });
+    });
   return (
     <div className="p-4">
       {error && <div className="mb-3 rounded bg-rose-50 p-3 text-rose-700">{error}</div>}
+      {issueFor && (
+        <div className="mb-4 grid gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 md:grid-cols-4">
+          <strong>طلب صرف خيط — {issueFor.warping_order_no}</strong>
+          <select
+            className={cls}
+            value={issueForm.yarnLotId}
+            onChange={(e) => setIssueForm({ ...issueForm, yarnLotId: e.target.value })}
+          >
+            <option value="">اختر لوط الخيط</option>
+            {options?.yarnLots.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.item_name} — {l.color_name || "—"} — {l.barcode} ({l.weight_kg} كغ)
+              </option>
+            ))}
+          </select>
+          <input
+            className={cls}
+            type="number"
+            step="0.001"
+            placeholder="الوزن المطلوب كغ"
+            value={issueForm.weightKg}
+            onChange={(e) => setIssueForm({ ...issueForm, weightKg: e.target.value })}
+          />
+          <div className="flex gap-2">
+            <button
+              disabled={busy || !issueForm.yarnLotId || Number(issueForm.weightKg) <= 0}
+              className="rounded bg-amber-600 px-3 py-2 font-bold text-white disabled:opacity-50"
+              onClick={() => void requestYarn()}
+            >
+              إرسال للاعتماد
+            </button>
+            <button className={cls} onClick={() => setIssueFor(null)}>
+              إلغاء
+            </button>
+          </div>
+        </div>
+      )}
+      {canApproveYarn && yarnIssues.some((i) => i.status === "REQUESTED") && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <h3 className="mb-2 font-bold">طلبات صرف تنتظر اعتماد مدير المصنع/الإنتاج</h3>
+          <div className="flex flex-wrap gap-2">
+            {yarnIssues
+              .filter((i) => i.status === "REQUESTED")
+              .map((i) => (
+                <div key={i.id} className="rounded border bg-white p-2 text-sm">
+                  {i.issue_no} — {i.warpingOrderNo}
+                  <button
+                    className="mr-3 rounded bg-blue-600 px-3 py-1 font-bold text-white"
+                    disabled={busy}
+                    onClick={() => void run(() => approveWarpingYarnIssue(i.id))}
+                  >
+                    اعتماد وصرف
+                  </button>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
       <div className="mb-4 flex justify-between">
         <div>
           <h2 className="font-bold">أوامر التسدية وكروت السداء</h2>
@@ -232,7 +331,14 @@ export function WarpingOrdersPanel({ canManage, canQuality }: { canManage: boole
                   <br />
                   <span className="text-xs text-slate-500">{r.shift_name || "—"}</span>
                 </td>
-                <td>{r.card_no || "—"}{r.card_no && <button className="mr-2 text-indigo-700 underline" onClick={() => void printCard(r)}>طباعة ({r.print_count ?? 0})</button>}</td>
+                <td>
+                  {r.card_no || "—"}
+                  {r.card_no && (
+                    <button className="mr-2 text-indigo-700 underline" onClick={() => void printCard(r)}>
+                      طباعة ({r.print_count ?? 0})
+                    </button>
+                  )}
+                </td>
                 <td>{r.status}</td>
                 <td className="space-x-1 space-x-reverse whitespace-nowrap">
                   {canManage && r.status === "DRAFT" && (
@@ -251,6 +357,11 @@ export function WarpingOrdersPanel({ canManage, canQuality }: { canManage: boole
                       onClick={() => void run(() => transitionWarpingOrder(r.id, r.version, "IN_PROGRESS"))}
                     >
                       بدء
+                    </button>
+                  )}
+                  {canManage && ["RELEASED", "IN_PROGRESS"].includes(r.status) && (
+                    <button disabled={busy} className={cls} onClick={() => setIssueFor(r)}>
+                      طلب خيط
                     </button>
                   )}
                   {canQuality && r.status === "IN_PROGRESS" && (
