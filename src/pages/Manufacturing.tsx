@@ -7,8 +7,9 @@ import { createManufacturingWorkOrder, listManufacturingWorkOrders, releaseManuf
 import { WarpingOrdersPanel } from "../components/manufacturing/WarpingOrdersPanel";
 import { SizingOrdersPanel } from "../components/manufacturing/SizingOrdersPanel";
 import { WeavingRunsPanel } from "../components/manufacturing/WeavingRunsPanel";
+import { RawRollInspectionPanel } from "../components/manufacturing/RawRollInspectionPanel";
 
-type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving";
+type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving" | "rawInspection";
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const primary = "rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50";
 const statusColor: Record<MachineStatus, string> = {
@@ -46,6 +47,7 @@ export const Manufacturing = () => {
     canApproveYarn = has("manufacturing.yarn_issue.approve");
   const canSizingManage=has("manufacturing.sizing.manage");
   const canWeavingManage=has("manufacturing.weaving.manage");
+  const canRawInspection=has("manufacturing.raw_inspection.manage");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -114,7 +116,7 @@ export const Manufacturing = () => {
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-3">
           <div className="flex flex-wrap gap-2">
-            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing", "weaving"] as Tab[]).map((x) => (
+            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing", "weaving", "rawInspection"] as Tab[]).map((x) => (
               <button
                 key={x}
                 onClick={() => {
@@ -123,7 +125,7 @@ export const Manufacturing = () => {
                 }}
                 className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === x ? "bg-indigo-600 text-white" : "border bg-white text-slate-700"}`}
               >
-                {x==="sizing"?"التصميغ":x==="weaving"?"النسج والورديات":t(`tabs.${x}`)}
+                {x==="sizing"?"التصميغ":x==="weaving"?"النسج والورديات":x==="rawInspection"?"فحص الخام":t(`tabs.${x}`)}
               </button>
             ))}
           </div>
@@ -165,6 +167,8 @@ export const Manufacturing = () => {
             <SizingOrdersPanel canManage={canSizingManage} />
           ) : tab === "weaving" ? (
             <WeavingRunsPanel canManage={canWeavingManage} />
+          ) : tab === "rawInspection" ? (
+            <RawRollInspectionPanel canManage={canRawInspection} defects={defects} />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">{t("loading")}</div>
           ) : tab === "machines" ? (
