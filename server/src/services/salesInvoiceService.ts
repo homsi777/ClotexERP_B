@@ -1596,6 +1596,51 @@ export async function confirmSalesInvoice(
       continue;
     }
 
+    // تسعير مؤجَّل لقص توب (TASK 009): متر هذا السطر خُصم أصلاً من التوب الأصلي عند حفظ القص (حركة CUT).
+    // فلا خصم ثانٍ هنا؛ نحسب التكلفة من التوب الأصلي فقط (للقيد COGS) ونسجّل أن المخزون مُتجاوَز.
+    // المفتاح rollCutPrededucted لا يضعه غير مسار تسعير القص — باقي الفواتير لا تتأثر إطلاقاً.
+    const preCut = parseSalesLineMetadata(ln).rollCutPrededucted as { cutId?: string; originalRollId?: string } | undefined;
+    if (preCut?.originalRollId && Number.isFinite(qtyM)) {
+      const orig = await client.query<{ unit_cost: string | null; currency_code: string | null }>(
+        `SELECT unit_cost, currency_code FROM fabric_rolls WHERE id=$1 AND company_id=$2`,
+        [preCut.originalRollId, companyId],
+      );
+      const ucPre = orig.rows[0]?.unit_cost != null ? Number(orig.rows[0].unit_cost) : null;
+      const snapPre = await buildSalesLineCostSnapshot(
+        client,
+        companyId,
+        qtyM,
+        ucPre,
+        orig.rows[0]?.currency_code ?? null,
+        ccy,
+        exchangeRateToUsd,
+      );
+      linesForCogs.push({ quantityMeters: qtyM, unitCostPerMeter: snapPre.costUnitPriceUsd ?? ucPre });
+      const metaPre = parseSalesLineMetadata(ln);
+      metaPre.inventory = { skipped: true, reason: 'ROLL_CUT_PREDEDUCTED', cut_id: preCut.cutId ?? null, qty_sold_m: qtyM };
+      await client.query(
+        `UPDATE sales_invoice_lines SET
+           metadata=$3::jsonb,
+           cost_unit_price=$4, cost_total=$5, cost_currency_code=$6, cost_exchange_rate_to_usd=$7,
+           cost_unit_price_usd=$8, cost_total_usd=$9, cost_source=$10, cost_snapshot_at=now(), cost_missing=$11
+         WHERE id=$1 AND company_id=$2`,
+        [
+          ln.id,
+          companyId,
+          JSON.stringify(metaPre),
+          snapPre.costUnitPrice,
+          snapPre.costTotal,
+          snapPre.costCurrencyCode,
+          snapPre.costExchangeRateToUsd,
+          snapPre.costUnitPriceUsd,
+          snapPre.costTotalUsd,
+          snapPre.costSource,
+          snapPre.costMissing,
+        ],
+      );
+      continue;
+    }
+
     let rollId = await resolveFabricRollIdForSalesLine(client, companyId, ln);
     if (!rollId) {
       if (qtyM > EPS) {
@@ -2022,6 +2067,15 @@ export async function voidSalesInvoice(
     const rollId =
       String(snap?.fabric_roll_id ?? ln.fabric_roll_id ?? '').trim() ||
       await resolveSalesInvoiceLineRollId(client, companyId, ln, { requireAvailable: false });
+    if (!rollId && (meta.rollCutPrededucted as { cutId?: string } | undefined)?.cutId) {
+      // المتر خُصم عند القص لا بهذه الفاتورة ⇒ لا استرجاع مخزون؛ يعود القص «بانتظار التسعير» ليُسعَّر من جديد.
+      await client.query(
+        `UPDATE fabric_roll_cuts SET pricing_status='PENDING', sales_invoice_id=NULL, sales_invoice_no=NULL
+          WHERE id=$1 AND company_id=$2`,
+        [(meta.rollCutPrededucted as { cutId: string }).cutId, companyId],
+      );
+      continue;
+    }
     if (!rollId) {
       if (isStatementImportLineMetadata(ln.metadata) || Math.abs(Number(ln.quantity)) <= EPS) continue;
       throw Object.assign(

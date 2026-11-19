@@ -4,6 +4,7 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'dashboard.view', name: 'عرض لوحة التحكم', category: 'dashboard' },
   { code: 'inventory.view', name: 'عرض المخزون', category: 'inventory' },
   { code: 'inventory.manage', name: 'إدارة المخزون', category: 'inventory' },
+  { code: 'invoices.price', name: 'تسعير الفواتير والقطع المقصوصة', category: 'invoices' },
   { code: 'suppliers.view', name: 'عرض الموردين', category: 'suppliers' },
   { code: 'suppliers.manage', name: 'إدارة الموردين', category: 'suppliers' },
   { code: 'customers.view', name: 'عرض العملاء', category: 'customers' },

@@ -8,7 +8,12 @@ import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { confirmPurchaseInvoice, createPurchaseInvoice } from '../services/purchaseInvoiceService.js';
 import { repairRollStuckAfterVoidedSale } from '../services/salesInvoiceService.js';
-import { cutAndSellRoll, listRollCuts } from '../services/rollCutService.js';
+import { cutAndSellRoll, listRollCuts, priceRollCut } from '../services/rollCutService.js';
+import type { FastifyRequest } from 'fastify';
+
+function canPriceInvoices(req: FastifyRequest): boolean {
+  return req.user?.role === 'admin' || !!req.user?.permissions?.includes('invoices.price');
+}
 import { postPurchaseInvoiceToGl, reversePurchaseInvoiceGl } from '../services/glPostingService.js';
 import {
   VALID_STATUSES,
@@ -189,7 +194,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     const client = await getPool().connect();
     try {
       await client.query('BEGIN');
-      const result = await cutAndSellRoll(client, companyId, userId, req.body);
+      const result = await cutAndSellRoll(client, companyId, userId, req.body, { canPrice: canPriceInvoices(req) });
       await client.query('COMMIT');
       return reply.status(201).send({ ok: true, data: result });
     } catch (e: unknown) {
@@ -209,12 +214,35 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  // تسعير قص معلّق — صلاحية invoices.price فقط (المحاسب).
+  app.post('/cut/:id/price', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canPriceInvoices(req)) return sendError(reply, 403, 'ليس لديك صلاحية التسعير', 'FORBIDDEN');
+    const { companyId, sub: userId } = req.user!;
+    const { id } = req.params as { id: string };
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const result = await priceRollCut(client, companyId, userId, { ...(req.body as object), cutId: id });
+      await client.query('COMMIT');
+      return reply.send({ ok: true, data: result });
+    } catch (e: unknown) {
+      await client.query('ROLLBACK');
+      const err = e as { code?: string; message?: string };
+      if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
+      if (err?.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
   app.get('/cut-log', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const q = req.query as Record<string, string>;
     const client = await getPool().connect();
     try {
       const rows = await listRollCuts(client, companyId, {
+        pendingOnly: q.pending === '1',
         search: q.search,
         limit: q.limit ? parseInt(q.limit, 10) : undefined,
       });
