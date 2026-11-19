@@ -115,7 +115,8 @@
     "employeesOnlySuccess": "Çalışan verileri içe aktarıldı (bordro olmadan)",
     "wageMismatchTitle": "{{count}} çalışanın kayıtlı ücreti dosyadaki toplam ücretle uyuşmuyor",
     "wageMismatchHint": "Yalnızca uyarı — hiçbir ücret değiştirilmedi. «Temel ücrete eşit» önceki içe aktarmanın toplam yerine temel ücreti yazdığı anlamına gelir; kayıttan düzeltin.",
-    "wageMismatchBasic": "temel ücrete eşit"
+    "wageMismatchBasic": "temel ücrete eşit",
+    "wagesFilled": "Ücreti 0 olan {{count}} çalışanın ücreti dosyadaki toplam ücretten dolduruldu."
   },
   "search": {
     "placeholder": "Çalışan adı, telefon veya adrese göre ara..."
