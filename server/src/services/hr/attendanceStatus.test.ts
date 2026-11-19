@@ -88,6 +88,51 @@ function testZeroWageGivesZeroDeductions() {
   assert.equal(s.totalPayrollDeduction, 0);
 }
 
+function testMixedMonthsDoNotIncreaseCurrentMonthPenalty() {
+  const records = [
+    rec('2026-10-31', 'UNAUTH_ABSENCE'),
+    rec('2026-11-01', 'UNAUTH_ABSENCE'),
+    rec('2026-12-01', 'UNAUTH_ABSENCE'),
+    rec('2025-11-01', 'SICK'),
+    rec('2026-12-02', 'ANNUAL'),
+    rec('2026-10-30', 'WEIRD'),
+  ];
+  const november = summarizeMonthlyStatuses(records, 9000, 2026, 11);
+  assert.equal(november.unauthorizedAbsenceDays, 1);
+  assert.equal(november.absenceDeduction, 375);
+  assert.equal(november.halfPayDays, 0);
+  assert.equal(november.leaveDaysUsed, 0);
+  assert.deepEqual(november.unknownStatuses, []);
+  const december = summarizeMonthlyStatuses(records, 9000, 2026, 12);
+  assert.equal(december.absenceDeduction, 375);
+  assert.equal(december.leaveDaysUsed, 1);
+}
+
+function testInvalidCalendarDatesAreNotCounted() {
+  const records = [
+    rec('2026-11-31', 'UNAUTH_ABSENCE'),
+    rec('2026-11-00', 'SICK'),
+    rec('2026-11-1', 'ANNUAL'),
+    rec('invalid', 'UNAUTH_ABSENCE'),
+    rec('2026-11-30', 'UNAUTH_ABSENCE'),
+  ];
+  const result = summarizeMonthlyStatuses(records, 9000, 2026, 11);
+  assert.equal(result.absenceDeduction, 375);
+  assert.equal(result.totalPayrollDeduction, 375);
+  assert.equal(result.leaveDaysUsed, 0);
+  assert.equal(summarizeMonthlyStatuses([rec('2028-02-29', 'SICK')], 9000, 2028, 2).halfPayDays, 1);
+  assert.equal(summarizeMonthlyStatuses([rec('2027-02-29', 'SICK')], 9000, 2027, 2).halfPayDays, 0);
+}
+
+function testInvalidSummaryPeriodIsRejected() {
+  for (const [year, month] of [[2026, 0], [2026, 13], [2026, 1.5], [NaN, 11], [1999, 11]]) {
+    assert.throws(() => summarizeMonthlyStatuses([], 9000, year, month), RangeError);
+  }
+}
+
+testInvalidSummaryPeriodIsRejected();
+testMixedMonthsDoNotIncreaseCurrentMonthPenalty();
+testInvalidCalendarDatesAreNotCounted();
 testEffectsMatchHrTable();
 testRuleSwitchesOnFirstNovember2026();
 testGraduatedNovemberFourAbsencesMatchesBashirExample();

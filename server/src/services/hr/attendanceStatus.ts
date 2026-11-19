@@ -87,11 +87,20 @@ export function summarizeMonthlyStatuses(
   year: number,
   month: number,
 ): MonthlyStatusSummary {
+  if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError('Invalid attendance summary period');
+  }
+  const periodPrefix = `${year}-${String(month).padStart(2, '0')}-`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const dayWage = dayWageFromComprehensive(comprehensiveWage);
   const counts: Record<string, number> = {};
   const unknown = new Set<string>();
 
   for (const r of records) {
+    // Keep the monthly reset independent of caller-side query filtering.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date) || !r.date.startsWith(periodPrefix)) continue;
+    const day = Number(r.date.slice(8, 10));
+    if (day < 1 || day > lastDay) continue;
     if (!r.status) continue;
     if (!BY_CODE.has(r.status)) {
       unknown.add(r.status);
