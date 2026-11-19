@@ -53,5 +53,10 @@
   "modal.close": "Kapat",
   "errors.fullNameRequired": "Ad Soyad gereklidir",
   "errors.saveFailed": "Çalışan bilgileri kaydedilemedi",
-  "errors.duplicateCode": "Çalışan kodu veya parmak izi numarası zaten kullanılıyor"
+  "errors.duplicateCode": "Çalışan kodu veya parmak izi numarası zaten kullanılıyor",
+  "modal.fields.birthDate": "Doğum tarihi (30 gün izin dilimi için)",
+  "modal.fields.insuranceStartDate": "Sigorta başlangıcı (30 gün izin dilimi için)",
+  "modal.fields.baseSharePercent": "Brüt ücrette temel oran % (Dokuma salonu 75, İdare 80)",
+  "modal.fields.workdayHours": "İş günü saati (Salon 8, İdare 9) — fazla mesai saat ücreti için",
+  "modal.fields.splitPreview": "Temel {{base}} + teşvik {{incentives}} (düzen {{regularity}} / kalite {{quality}})"
 }

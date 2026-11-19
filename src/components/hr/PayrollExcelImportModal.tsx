@@ -28,6 +28,9 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
   const [periodYear, setPeriodYear] = useState(currentYear());
   const [currencyCode, setCurrencyCode] = useState('USD');
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('');
+  // TASK 019: ساعات يوم العمل لموظفي الملف (الإدارة 9، الصالة 8) + استيراد الموظفين فقط.
+  const [workdayHours, setWorkdayHours] = useState('8');
+  const [employeesOnly, setEmployeesOnly] = useState(false);
   const [currencies, setCurrencies] = useState<ExchangeRateDto[]>([]);
   const [loadingFile, setLoadingFile] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -52,6 +55,7 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
       const res = await parsePayrollWorkbook(file);
       setParsed(res);
       if (!departmentLabel.trim()) setDepartmentLabel(file.name.replace(/\.xlsx?$/i, ''));
+      setWorkdayHours(/ادار/.test(file.name.replace(/[أإآ]/g, 'ا')) ? '9' : '8');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('payrollImport.parseFailed'));
     } finally {
@@ -67,7 +71,7 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
       setError(t('payrollImport.departmentRequired'));
       return;
     }
-    if (currencyCode !== 'USD' && !(rate > 0)) {
+    if (!employeesOnly && currencyCode !== 'USD' && !(rate > 0)) {
       setError(t('payrollImport.exchangeRateRequired'));
       return;
     }
@@ -79,9 +83,11 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
         periodMonth,
         periodYear,
         currencyCode,
-        exchangeRateToUsd: rate,
+        exchangeRateToUsd: rate > 0 ? rate : 1,
         fileName,
         rows: parsed.rows,
+        workdayHours: Number(workdayHours) > 0 ? Number(workdayHours) : null,
+        employeesOnly,
       });
       setResult(res.data);
       onImported();
@@ -136,10 +142,24 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
             <div className="space-y-1 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4" />
-                {t('payrollImport.importSuccess', { payrollNo: result.payrollNo })}
+                {result.employeesOnly ? t('payrollImport.employeesOnlySuccess') : t('payrollImport.importSuccess', { payrollNo: result.payrollNo })}
               </div>
               <div>{t('payrollImport.employeesCreated')}: {result.employeesCreated} — {t('payrollImport.employeesMatched')}: {result.employeesMatched}</div>
-              <div>{t('payrollImport.totalNet')}: {result.totalNet.toLocaleString()} {currencyCode}</div>
+              {!result.employeesOnly && <div>{t('payrollImport.totalNet')}: {result.totalNet.toLocaleString()} {currencyCode}</div>}
+              {(result.wageMismatches?.length ?? 0) > 0 && (
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-normal text-amber-800">
+                  <div className="font-bold">{t('payrollImport.wageMismatchTitle', { count: result.wageMismatches?.length })}</div>
+                  <p className="mt-1">{t('payrollImport.wageMismatchHint')}</p>
+                  <ul className="mt-1 list-inside list-disc space-y-0.5">
+                    {result.wageMismatches?.slice(0, 15).map((m) => (
+                      <li key={m.employeeCode}>
+                        {m.employeeCode} — {m.fullName}: {m.storedWage.toLocaleString()} → {m.fileComprehensiveWage.toLocaleString()}
+                        {m.kind === 'MATCHES_BASIC' ? ` (${t('payrollImport.wageMismatchBasic')})` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -179,7 +199,11 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
                     ))}
                   </select>
                 </div>
-                {currencyCode !== 'USD' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600">{t('payrollImport.workdayHours')}</label>
+                  <input type="number" min="1" max="24" step="0.5" value={workdayHours} onChange={(e) => setWorkdayHours(e.target.value)} className={`mt-1 ${inputCls}`} dir="ltr" />
+                </div>
+                {currencyCode !== 'USD' && !employeesOnly && (
                   <div>
                     <label className="block text-xs font-bold text-slate-600">{t('payrollImport.exchangeRate')}</label>
                     <input
@@ -194,6 +218,13 @@ export function PayrollExcelImportModal({ open, onClose, onImported }: Props) {
                   </div>
                 )}
               </div>
+              <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                <input type="checkbox" checked={employeesOnly} onChange={(e) => setEmployeesOnly(e.target.checked)} className="mt-0.5 accent-indigo-600" />
+                <span>
+                  <span className="font-bold">{t('payrollImport.employeesOnlyLabel')}</span>
+                  <span className="block text-slate-500">{t('payrollImport.employeesOnlyHint')}</span>
+                </span>
+              </label>
             </div>
           )}
 

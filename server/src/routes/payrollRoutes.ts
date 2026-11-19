@@ -16,7 +16,7 @@ import {
   payrollItemSchema,
   validatePayrollItems,
 } from '../services/hr/payrollLineItems.js';
-import { computeAnnualLeaveBalance } from '../services/hr/leaveBalance.js';
+import { computeAnnualLeaveBalance, tenYearsInsuranceDateFrom } from '../services/hr/leaveBalance.js';
 
 const employeeBody = z.object({
   employeeCode: z.string().min(1),
@@ -29,6 +29,12 @@ const employeeBody = z.object({
   currencyCode: z.string().min(1).default('USD'),
   salaryPeriod: z.enum(['weekly', 'monthly']).optional().default('monthly'),
   hireDate: z.string().optional().nullable(),
+  // TASK 015: تُحفظ فقط إن أُرسلت (undefined = لا تغيير عند التحديث).
+  birthDate: z.string().optional().nullable(),
+  insuranceStartDate: z.string().optional().nullable(),
+  // TASK 016: بنية الأجر من ملفات المرتبات (صالة 75/8، إدارة 80/9). تُحفظ فقط إن أُرسلت.
+  baseSharePercent: z.coerce.number().gt(0).max(100).optional().nullable(),
+  workdayHours: z.coerce.number().min(1).max(24).optional().nullable(),
   notes: z.string().optional().nullable(),
   fingerprintCode: z.string().optional().nullable(),
   factory: z.string().optional().nullable(),
@@ -92,6 +98,7 @@ const payrollExcelRowSchema = z.object({
   paymentMethod: z.string().optional().nullable(),
   hireDate: z.string().optional().nullable(),
   baseSalary: z.coerce.number(),
+  comprehensiveWage: z.coerce.number().optional().nullable(),
   totalEntitlements: z.coerce.number(),
   totalDeductions: z.coerce.number(),
   finalNet: z.coerce.number(),
@@ -103,8 +110,10 @@ const importExcelBody = z.object({
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodYear: z.coerce.number().int().min(2000).max(2100),
   currencyCode: z.string().min(1),
-  exchangeRateToUsd: z.coerce.number().positive(),
+  exchangeRateToUsd: z.coerce.number().positive().optional().default(1),
   fileName: z.string().min(1),
+  workdayHours: z.coerce.number().min(1).max(24).optional().nullable(),
+  employeesOnly: z.boolean().optional().default(false),
   rows: z.array(payrollExcelRowSchema).min(1),
 });
 
@@ -136,8 +145,9 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const year = Number.parseInt(q.year ?? '', 10) || new Date().getFullYear();
     if (year < 2000 || year > 2100) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
 
-    const rows = await getPool().query<{ id: string; employee_code: string; full_name: string; department: string | null; hire_date: string | null }>(
-      `SELECT id, employee_code, full_name, department, hire_date::text AS hire_date
+    const rows = await getPool().query<{ id: string; employee_code: string; full_name: string; department: string | null; hire_date: string | null; birth_date: string | null; insurance_start_date: string | null }>(
+      `SELECT id, employee_code, full_name, department, hire_date::text AS hire_date,
+            birth_date::text AS birth_date, insurance_start_date::text AS insurance_start_date
          FROM payroll_employees WHERE company_id=$1 AND is_active = true
         ORDER BY employee_code`,
       [companyId],
@@ -155,7 +165,13 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const data = rows.rows.map((e) => {
       const hire = e.hire_date?.slice(0, 10) ?? null;
       const validHire = hire && hire >= '1990-01-01' ? hire : null;
-      const bal = validHire ? computeAnnualLeaveBalance({ hireDate: validHire, year }) : null;
+      const birth = e.birth_date?.slice(0, 10) ?? null;
+      const insStart = e.insurance_start_date?.slice(0, 10) ?? null;
+      // 10 سنوات تأمينات تتحقق بعد عشر سنوات كاملة من بداية التأمين.
+      const tenYears = tenYearsInsuranceDateFrom(insStart);
+      const bal = validHire
+        ? computeAnnualLeaveBalance({ hireDate: validHire, year, birthDate: birth, tenYearsInsuranceDate: tenYears })
+        : null;
       return {
         employeeId: e.id,
         employeeCode: e.employee_code,
@@ -168,8 +184,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
         rawDays: bal?.rawDays ?? null,
         usableFrom: bal?.usableFrom ?? null,
         missingHireDate: !validHire,
-        // 30 يوماً (عمر>50 أو 10 سنوات تأمين) لا يمكن تقييمها دون هذه البيانات.
-        seniorTierUnverified: true,
+        // لا يمكن تقييم شريحة الـ30 يوماً (عمر>50 أو 10 سنوات تأمين) دون تاريخ الميلاد/بداية التأمين.
+        seniorTierUnverified: !birth && !insStart,
       };
     });
     return reply.send({ ok: true, data: { year, rows: data } });
@@ -199,6 +215,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const rows = await pool.query(
       `SELECT pe.id, pe.employee_code, pe.full_name, pe.address, pe.job_title, pe.department, pe.phone,
               pe.base_salary, pe.currency_code, pe.salary_period, pe.hire_date, pe.is_active, pe.notes,
+              pe.birth_date, pe.insurance_start_date, pe.base_share_percent, pe.workday_hours,
               pe.created_at, pe.updated_at,
               COALESCE(sal.total_paid, 0)::text AS total_salary_paid,
               COALESCE(adv.total_advances, 0)::text AS total_advances,
@@ -236,8 +253,9 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
         `INSERT INTO payroll_employees (
            company_id, employee_code, full_name, address, job_title, department, phone,
            base_salary, currency_code, salary_period, hire_date, notes,
-           fingerprint_code, factory, category, payment_method, termination_date, status, shift_type_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17::date,$18,$19)
+           fingerprint_code, factory, category, payment_method, termination_date, status, shift_type_id,
+           birth_date, insurance_start_date, base_share_percent, workday_hours
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17::date,$18,$19,$20::date,$21::date,$22,$23)
          RETURNING *`,
         [
           companyId,
@@ -259,6 +277,10 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
           d.terminationDate ?? null,
           d.status,
           d.shiftTypeId ?? null,
+          d.birthDate || null,
+          d.insuranceStartDate || null,
+          d.baseSharePercent ?? null,
+          d.workdayHours ?? null,
         ],
       );
       await client.query(
@@ -305,7 +327,12 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
            employee_code=$3, full_name=$4, address=$5, job_title=$6, department=$7, phone=$8,
            base_salary=$9, currency_code=$10, salary_period=$11, hire_date=$12::date, notes=$13,
            fingerprint_code=$14, factory=$15, category=$16, payment_method=$17, termination_date=$18::date,
-           status=$19, shift_type_id=$20, updated_at=now()
+           status=$19, shift_type_id=$20,
+           birth_date = CASE WHEN $22 THEN $21::date ELSE birth_date END,
+           insurance_start_date = CASE WHEN $24 THEN $23::date ELSE insurance_start_date END,
+           base_share_percent = CASE WHEN $26 THEN $25::numeric ELSE base_share_percent END,
+           workday_hours = CASE WHEN $28 THEN $27::numeric ELSE workday_hours END,
+           updated_at=now()
          WHERE id=$1 AND company_id=$2
          RETURNING *`,
         [
@@ -329,6 +356,14 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
           d.terminationDate ?? null,
           d.status,
           d.shiftTypeId ?? null,
+          d.birthDate || null,
+          d.birthDate !== undefined,
+          d.insuranceStartDate || null,
+          d.insuranceStartDate !== undefined,
+          d.baseSharePercent ?? null,
+          d.baseSharePercent !== undefined,
+          d.workdayHours ?? null,
+          d.workdayHours !== undefined,
         ],
       );
       if (baseSalaryChanged) {
@@ -1107,6 +1142,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
         exchangeRateToUsd: d.exchangeRateToUsd,
         fileName: d.fileName,
         rows: d.rows,
+        workdayHours: d.workdayHours ?? null,
+        employeesOnly: d.employeesOnly,
       });
       await client.query('COMMIT');
       return reply.status(201).send({ ok: true, data: result });

@@ -108,7 +108,14 @@
     "totalNet": "Net Maaş Toplamı",
     "importing": "İçe aktarılıyor...",
     "confirmImport": "İçe Aktarmayı Onayla",
-    "close": "Kapat"
+    "close": "Kapat",
+    "workdayHours": "İş günü saati (İdare 9, Salon 8)",
+    "employeesOnlyLabel": "Yalnızca çalışan verilerini içe aktar (bordro oluşturma)",
+    "employeesOnlyHint": "Yeni çalışanları parmak izi no, ad, toplam ücret ve temel oranıyla oluşturur; mevcutların boş alanlarını ücretlerine dokunmadan doldurur.",
+    "employeesOnlySuccess": "Çalışan verileri içe aktarıldı (bordro olmadan)",
+    "wageMismatchTitle": "{{count}} çalışanın kayıtlı ücreti dosyadaki toplam ücretle uyuşmuyor",
+    "wageMismatchHint": "Yalnızca uyarı — hiçbir ücret değiştirilmedi. «Temel ücrete eşit» önceki içe aktarmanın toplam yerine temel ücreti yazdığı anlamına gelir; kayıttan düzeltin.",
+    "wageMismatchBasic": "temel ücrete eşit"
   },
   "search": {
     "placeholder": "Çalışan adı, telefon veya adrese göre ara..."
@@ -223,7 +230,9 @@
       "PURCHASE_DEDUCTION": "Alışveriş kesintisi",
       "SETTLEMENT_DEDUCT": "Mahsup (kesinti)",
       "ATTENDANCE_ABSENCE_DEDUCTION": "İzinsiz devamsızlık kesintisi",
-      "ATTENDANCE_HALF_PAY_DEDUCTION": "Yarım ücret kesintisi (hastalık/evlilik)"
+      "ATTENDANCE_HALF_PAY_DEDUCTION": "Yarım ücret kesintisi (hastalık/evlilik)",
+      "OVERTIME": "Fazla mesai",
+      "ATTENDANCE_OVERTIME": "Fazla mesai (devamdan)"
     },
     "groupAdditions": "Hak edişler",
     "groupDeductions": "Kesintiler",
@@ -248,12 +257,23 @@
     "fromAttendanceWeekly": "Haftalık maaş: günlük ücret kuralı yok",
     "fromAttendanceFailed": "Devam verisi alınamadı",
     "importedWarning": "Bu satır Excel'den içe aktarıldı ve devamsızlık kesintisini zaten içerebilir. Devam kalemlerini yalnızca içe aktarılan tabloda hesaplanmadıysa ekleyin, aksi halde iki kez kesilir.",
-    "importedConfirm": "Satır Excel'den içe aktarıldı ve devamsızlık kesintisini içerebilir. Dahil olmadığından emin misiniz?"
+    "importedConfirm": "Satır Excel'den içe aktarıldı ve devamsızlık kesintisini içerebilir. Dahil olmadığından emin misiniz?",
+    "overtimeTitle": "Fazla mesai hesaplayıcı",
+    "overtimeHours": "Saat sayısı",
+    "overtimeNormal": "Normal gün (×1.5)",
+    "overtimeHoliday": "Cuma / resmi tatil (×2)",
+    "overtimeAdd": "Hesapla ve ekle",
+    "overtimeNeedHours": "Sıfırdan büyük saat girin",
+    "overtimeFailed": "Fazla mesai hesaplanamadı",
+    "overtimeWeekly": "Haftalık maaş: saatlik ücret kuralı yok",
+    "overtimeImportedConfirm": "Satır Excel'den içe aktarıldı ve fazla mesaiyi zaten içerebilir. Dahil olmadığından emin misiniz?",
+    "overtimeFromAttendance": "Fazla mesaiyi devamdan getir",
+    "overtimeFromAttendanceNone": "Bu çalışan için bu ayda fazla mesai saati kayıtlı değil"
   },
   "leaveBalances": {
     "title": "Yıllık izin bakiyeleri",
     "year": "Yıl",
-    "hint": "İşe giriş tarihinden İK kurallarıyla hesaplanır (15 sonra 21 gün, 1-9-2025 öncesi için 21, yukarı yuvarlama). 30 günlük dilim (yaş>50 veya 10 yıl sigorta) yaş/sigorta verisi tutulmadığından hesaplanmaz.",
+    "hint": "İşe giriş tarihinden İK kurallarıyla hesaplanır (15 sonra 21 gün, 1-9-2025 öncesi için 21, 50 yaş üstü veya 10 yıl sigortalı için 30, yukarı yuvarlama). 30 günlük dilim yalnızca çalışan kaydında doğum tarihi veya sigorta başlangıcı girilenler için etkinleşir.",
     "missingHire": "{{count}} çalışanın geçerli işe giriş tarihi yok — bakiye hesaplanamaz.",
     "loadFailed": "Bakiyeler yüklenemedi",
     "colEmployee": "Çalışan",

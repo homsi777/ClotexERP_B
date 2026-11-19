@@ -9,7 +9,7 @@ import {
 } from './payrollLineItems.js';
 
 function testKindSigns() {
-  for (const k of ['BONUS', 'TRANSPORT', 'ANNUAL_INCREASE', 'SALARY_ADJUSTMENT', 'SETTLEMENT_ADD'] as const) {
+  for (const k of ['BONUS', 'TRANSPORT', 'ANNUAL_INCREASE', 'SALARY_ADJUSTMENT', 'SETTLEMENT_ADD', 'OVERTIME', 'ATTENDANCE_OVERTIME'] as const) {
     assert.equal(isAdditionKind(k), true, k);
   }
   for (const k of ['PURCHASE_DEDUCTION', 'SETTLEMENT_DEDUCT'] as const) {

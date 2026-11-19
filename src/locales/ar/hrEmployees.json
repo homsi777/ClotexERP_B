@@ -53,5 +53,10 @@
   "modal.close": "إغلاق",
   "errors.fullNameRequired": "الاسم الكامل مطلوب",
   "errors.saveFailed": "فشل حفظ بيانات الموظف",
-  "errors.duplicateCode": "رمز الموظف أو رقم البصمة مستخدم مسبقاً"
+  "errors.duplicateCode": "رمز الموظف أو رقم البصمة مستخدم مسبقاً",
+  "modal.fields.birthDate": "تاريخ الميلاد (لشريحة الإجازة 30 يوماً)",
+  "modal.fields.insuranceStartDate": "بداية التأمينات (لشريحة الإجازة 30 يوماً)",
+  "modal.fields.baseSharePercent": "نسبة الأساسي من الأجر الشامل % (صالة النسيج 75، الإدارة 80)",
+  "modal.fields.workdayHours": "ساعات يوم العمل (صالة 8، إدارة 9) — لأجر ساعة الإضافي",
+  "modal.fields.splitPreview": "أساسي {{base}} + حوافز {{incentives}} (انتظام {{regularity}} / جودة {{quality}})"
 }

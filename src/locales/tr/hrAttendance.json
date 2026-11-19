@@ -91,5 +91,21 @@
   "status.ruleGraduated": "Kademeli kural",
   "status.ruleLegacy": "Eski kural (sabit iki gün)",
   "status.wagePlusPenalty": "Ücret {{wage}} + ceza {{penalty}}",
-  "table.status": "Durum"
+  "table.status": "Durum",
+  "modal.issueIncomplete": "{{count}} kayıtta eksik parmak izi (giriş veya çıkış yok): eksik zaman boş, saat 0 olarak içe aktarılır, elle inceleyin.",
+  "modal.issueMerged": "{{count}} yinelenen satır (önceki gece vardiyasının çıkış yankısı) çalışan/gün başına tek kayıtta birleştirildi.",
+  "modal.issueExcluded": "Sayfa tarihinden çok uzak {{count}} satır dışlandı (içe aktarılmayacak):",
+  "modal.sheetLabel": "sayfa",
+  "modal.issueLongShift": "{{count}} kayıt 16 saatten uzun (olası çift vardiya): içe aktarılır, kontrol edin.",
+  "modal.issueEmptySheets": "Verisiz {{count}} sayfa (tatil/dinlenme) yok sayıldı: {{sheets}}",
+  "modal.issueUnreadable": "Başlıkları tanınmayan sayfalar atlandı: {{sheets}}",
+  "modal.incompleteKept": "{{count}} eksik kayıt, önceden içe aktarılmış tam kaydın yerine geçmedi.",
+  "editModal.otDay": "Gündüz fazla mesai (×1.5)",
+  "editModal.otNight": "Gece fazla mesai (×1.5)",
+  "editModal.otHoliday1": "Tatil (×1)",
+  "editModal.otHoliday2": "Tatil (×2)",
+  "status.colOvertime": "Fazla mesai",
+  "status.overtimeHours": "{{hours}} saat",
+  "modal.createEmployeesHint": "Gerçekten çalışan olanları seçin (cihaz/yer kodlarını atlayın). Her biri ad, parmak izi no ve ücret 0 ile oluşturulur; sonra devam satırları otomatik içe aktarılır.",
+  "modal.createEmployeesButton": "Seçilenleri ({{count}}) oluştur ve satırlarını yeniden aktar"
 }

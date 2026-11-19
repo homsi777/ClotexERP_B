@@ -205,6 +205,17 @@ export const labelPrintRoutes: FastifyPluginAsync = async (app) => {
       `${ROLL_LABEL_SELECT} WHERE fr.id = ANY($1) AND fr.company_id=$2`,
       [[originalRollId, cutPieceRollId], companyId],
     );
+    // القطعة المقصوصة طولها 0 بجدول الأتواب (قاعدة المحرك للتوب المباع)؛ طولها الفعلي بسجل القص.
+    const cutLen = await pool.query<{ cut_length_m: string }>(
+      `SELECT cut_length_m::text AS cut_length_m FROM fabric_roll_cuts
+        WHERE company_id=$1 AND cut_piece_roll_id=$2 AND original_roll_id=$3`,
+      [companyId, cutPieceRollId, originalRollId],
+    );
+    if (cutLen.rows.length) {
+      for (const r of rows.rows) {
+        if (r.id === cutPieceRollId) r.length_m = cutLen.rows[0].cut_length_m;
+      }
+    }
     const byId = new Map(rows.rows.map((r) => [r.id, toDto(r)]));
     // الترتيب الثابت: القطعة المقصوصة (المباعة) أولاً ثم التوب المتبقي.
     const ordered = [cutPieceRollId, originalRollId]

@@ -12,6 +12,12 @@ export interface PayrollEmployeeDto {
   currency_code: string;
   salary_period: 'weekly' | 'monthly';
   hire_date: string | null;
+  /** TASK 015: لتفعيل شريحة الإجازة 30 يوماً. */
+  birth_date?: string | null;
+  insurance_start_date?: string | null;
+  /** TASK 016: نسبة الأساسي من الشامل وساعات يوم العمل (من صيغ ملفات المرتبات). */
+  base_share_percent?: string | null;
+  workday_hours?: string | null;
   is_active: boolean;
   notes: string | null;
   fingerprint_code: string | null;
@@ -76,6 +82,10 @@ export interface PayrollEmployeeUpsertPayload {
   currencyCode?: string;
   salaryPeriod?: 'weekly' | 'monthly';
   hireDate?: string | null;
+  birthDate?: string | null;
+  insuranceStartDate?: string | null;
+  baseSharePercent?: number | null;
+  workdayHours?: number | null;
   notes?: string | null;
   fingerprintCode?: string | null;
   factory?: string | null;
@@ -192,6 +202,8 @@ export type PayrollLineItemKind =
   | 'ANNUAL_INCREASE'
   | 'SALARY_ADJUSTMENT'
   | 'SETTLEMENT_ADD'
+  | 'OVERTIME'
+  | 'ATTENDANCE_OVERTIME'
   | 'PURCHASE_DEDUCTION'
   | 'SETTLEMENT_DEDUCT'
   | 'ATTENDANCE_ABSENCE_DEDUCTION'
@@ -223,12 +235,23 @@ export async function confirmPayrollRun(runId: string) {
   return apiFetch<{ ok: boolean; data: unknown }>(`/api/payroll/runs/${runId}/confirm`, { method: 'PATCH' });
 }
 
+export interface ImportWageMismatch {
+  employeeCode: string;
+  fullName: string;
+  storedWage: number;
+  fileComprehensiveWage: number;
+  /** MATCHES_BASIC = الأرجح استيراد قديم سجّل الأساسي بدل الشامل. */
+  kind: 'MATCHES_BASIC' | 'DIFFERENT';
+}
+
 export interface ImportPayrollExcelResult {
-  payrollRunId: string;
-  payrollNo: string;
+  payrollRunId: string | null;
+  payrollNo: string | null;
   employeesCreated: number;
   employeesMatched: number;
   totalNet: number;
+  employeesOnly?: boolean;
+  wageMismatches?: ImportWageMismatch[];
 }
 
 export async function importPayrollExcel(payload: {
@@ -239,6 +262,8 @@ export async function importPayrollExcel(payload: {
   exchangeRateToUsd: number;
   fileName: string;
   rows: unknown[];
+  workdayHours?: number | null;
+  employeesOnly?: boolean;
 }) {
   return apiFetch<{ ok: boolean; data: ImportPayrollExcelResult }>('/api/payroll/runs/import-excel', {
     method: 'POST',

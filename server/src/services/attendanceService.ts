@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { summarizeMonthlyStatuses, type MonthlyStatusSummary } from './hr/attendanceStatus.js';
+import { computeMonthlyOvertime, type OvertimeMonthResult } from './hr/overtime.js';
 import { getPool } from '../db/pool.js';
 
 type ServiceErrorCode = 'VALIDATION' | 'NOT_FOUND';
@@ -25,6 +26,8 @@ export type AttendanceImportResult = {
   imported: number;
   updated: number;
   protectedSkipped: number;
+  /** صفوف ناقصة (حضور بلا انصراف أو العكس) لم تُستبدَل بها سجلات كاملة مستوردة سابقاً. */
+  incompleteKept: number;
   unmatched: Array<{ fingerprintCode: string; nameInFile: string; count: number }>;
 };
 
@@ -47,6 +50,7 @@ export async function importAttendanceRows(
   let imported = 0;
   let updated = 0;
   let protectedSkipped = 0;
+  let incompleteKept = 0;
   const unmatchedCounts = new Map<string, { nameInFile: string; count: number }>();
 
   for (const row of input.rows) {
@@ -58,12 +62,21 @@ export async function importAttendanceRows(
       continue;
     }
 
-    const existingRecord = await client.query<{ id: string; source: string }>(
-      `SELECT id, source FROM attendance_daily_records WHERE company_id=$1 AND employee_id=$2 AND attendance_date=$3::date`,
+    const existingRecord = await client.query<{ id: string; source: string; check_in_time: string | null; check_out_time: string | null }>(
+      `SELECT id, source, check_in_time, check_out_time FROM attendance_daily_records WHERE company_id=$1 AND employee_id=$2 AND attendance_date=$3::date`,
       [input.companyId, employeeId, row.attendanceDate],
     );
     if (existingRecord.rows.length && existingRecord.rows[0].source === 'MANUAL') {
       protectedSkipped++;
+      continue;
+    }
+
+    // ملف جزئي/ناقص لا يستبدل سجلاً كاملاً مستورداً سابقاً (حضور وانصراف معاً) بسجل ناقص.
+    const incomingIncomplete = !(row.checkInTime && row.checkOutTime);
+    const existingComplete = existingRecord.rows.length
+      && existingRecord.rows[0].check_in_time && existingRecord.rows[0].check_out_time;
+    if (incomingIncomplete && existingComplete) {
+      incompleteKept++;
       continue;
     }
 
@@ -89,6 +102,7 @@ export async function importAttendanceRows(
     imported,
     updated,
     protectedSkipped,
+    incompleteKept,
     unmatched: Array.from(unmatchedCounts.entries()).map(([fingerprintCode, v]) => ({
       fingerprintCode,
       nameInFile: v.nameInFile,
@@ -119,7 +133,8 @@ export async function listAttendanceRecords(
   const res = await pool.query(
     `SELECT ar.id, ar.employee_id, e.employee_code, e.full_name, ar.attendance_date,
             ar.check_in_time, ar.check_out_time, ar.late_minutes, ar.permission_minutes,
-            ar.total_hours, ar.day_type, ar.status_code, ar.source, ar.source_file, ar.edited_at, ar.edit_reason,
+            ar.total_hours, ar.day_type, ar.status_code,
+            ar.ot_day_hours, ar.ot_night_hours, ar.ot_holiday1_hours, ar.ot_holiday2_hours, ar.source, ar.source_file, ar.edited_at, ar.edit_reason,
             u.username AS edited_by
      FROM attendance_daily_records ar
      JOIN payroll_employees e ON e.id = ar.employee_id
@@ -143,6 +158,11 @@ export async function updateAttendanceRecordManual(
     lateMinutes?: number;
     permissionMinutes?: number;
     dayType?: 'WORK' | 'REST' | 'HOLIDAY';
+    /** TASK 018: ساعات الإضافي اليومية (undefined = بلا تغيير). */
+    otDayHours?: number;
+    otNightHours?: number;
+    otHoliday1Hours?: number;
+    otHoliday2Hours?: number;
     reason: string;
   },
 ) {
@@ -173,6 +193,10 @@ export async function updateAttendanceRecordManual(
        permission_minutes = COALESCE($6, permission_minutes),
        total_hours = $7,
        day_type = COALESCE($8, day_type),
+       ot_day_hours = COALESCE($11, ot_day_hours),
+       ot_night_hours = COALESCE($12, ot_night_hours),
+       ot_holiday1_hours = COALESCE($13, ot_holiday1_hours),
+       ot_holiday2_hours = COALESCE($14, ot_holiday2_hours),
        source = 'MANUAL',
        edited_by_user_id = $9,
        edited_at = now(),
@@ -191,6 +215,10 @@ export async function updateAttendanceRecordManual(
       input.dayType ?? null,
       input.userId,
       input.reason.trim(),
+      input.otDayHours ?? null,
+      input.otNightHours ?? null,
+      input.otHoliday1Hours ?? null,
+      input.otHoliday2Hours ?? null,
     ],
   );
   return row.rows[0];
@@ -456,9 +484,14 @@ export type MonthlyEffectsRow = {
   salaryPeriod: string;
   /** الأجر الشامل المُدخل للموظف (أجر اليوم = ÷30 للشهري فقط). */
   comprehensiveWage: number;
+  /** TASK 016: ساعات يوم العمل لأجر الساعة (8 افتراضياً إن لم تُحدَّد) ونسبة الأساسي إن حُدّدت. */
+  workdayHours: number;
+  baseSharePercent: number | null;
   /** أسبوعي: لا قاعدة HR لأجر اليوم له — تُعرض العدّادات دون مبالغ. */
   moneyComputed: boolean;
   summary: MonthlyStatusSummary;
+  /** TASK 018: إضافي الشهر من الساعات اليومية المُدخَلة (بفئات الملف الأربع). */
+  overtime: OvertimeMonthResult & { hours: { day: number; night: number; holiday1: number; holiday2: number } };
 };
 
 /** معاينة أثر حالات شهر على الراتب والرصيد لكل موظف نشط (قراءة فقط، لا ترحيل). */
@@ -469,8 +502,8 @@ export async function computeMonthlyStatusEffects(
   employeeId?: string,
 ): Promise<MonthlyEffectsRow[]> {
   const pool = getPool();
-  const emps = await pool.query<{ id: string; employee_code: string; full_name: string; salary_period: string; base_salary: string }>(
-    `SELECT id, employee_code, full_name, salary_period, base_salary
+  const emps = await pool.query<{ id: string; employee_code: string; full_name: string; salary_period: string; base_salary: string; workday_hours: string | null; base_share_percent: string | null }>(
+    `SELECT id, employee_code, full_name, salary_period, base_salary, workday_hours, base_share_percent
        FROM payroll_employees
       WHERE company_id=$1 AND is_active = true ${employeeId ? 'AND id=$2' : ''}
       ORDER BY employee_code`,
@@ -486,6 +519,19 @@ export async function computeMonthlyStatusEffects(
       ORDER BY attendance_date`,
     [companyId, from, to],
   );
+  // ساعات الإضافي اليومية المُدخَلة للشهر مجمّعة لكل موظف.
+  const ot = await pool.query<{ employee_id: string; d: string; n: string; h1: string; h2: string }>(
+    `SELECT employee_id,
+            COALESCE(SUM(ot_day_hours),0)::text AS d, COALESCE(SUM(ot_night_hours),0)::text AS n,
+            COALESCE(SUM(ot_holiday1_hours),0)::text AS h1, COALESCE(SUM(ot_holiday2_hours),0)::text AS h2
+       FROM attendance_daily_records
+      WHERE company_id=$1 AND attendance_date BETWEEN $2::date AND $3::date
+      GROUP BY employee_id`,
+    [companyId, from, to],
+  );
+  const otByEmp = new Map(
+    ot.rows.map((r) => [r.employee_id, { day: Number(r.d), night: Number(r.n), holiday1: Number(r.h1), holiday2: Number(r.h2) }]),
+  );
   const byEmp = new Map<string, { date: string; status: string | null }[]>();
   for (const r of recs.rows) {
     const arr = byEmp.get(r.employee_id) ?? [];
@@ -495,14 +541,83 @@ export async function computeMonthlyStatusEffects(
   return emps.rows.map((e) => {
     const monthly = e.salary_period === 'monthly';
     const wage = Number(e.base_salary);
+    const hrs = otByEmp.get(e.id) ?? { day: 0, night: 0, holiday1: 0, holiday2: 0 };
+    const workday = e.workday_hours != null ? Number(e.workday_hours) : 8;
     return {
       employeeId: e.id,
       employeeCode: e.employee_code,
       fullName: e.full_name,
       salaryPeriod: e.salary_period,
       comprehensiveWage: wage,
+      workdayHours: e.workday_hours != null ? Number(e.workday_hours) : 8,
+      baseSharePercent: e.base_share_percent != null ? Number(e.base_share_percent) : null,
       moneyComputed: monthly,
       summary: summarizeMonthlyStatuses(byEmp.get(e.id) ?? [], monthly ? wage : 0, year, month),
+      overtime: {
+        ...computeMonthlyOvertime(
+          { DAY: hrs.day, NIGHT: hrs.night, HOLIDAY_X1: hrs.holiday1, HOLIDAY_X2: hrs.holiday2 },
+          monthly ? wage : 0,
+          workday,
+        ),
+        hours: hrs,
+      },
     };
   });
+}
+
+// ─── TASK 019: إنشاء موظفين من أرقام بصمة غير مرتبطة ─────────────────────────────
+
+export type FingerprintEmployeeInput = { fingerprintCode: string; nameInFile: string };
+
+/**
+ * ينشئ موظفين بالاسم ورقم البصمة فقط (أجر 0، نشطون) من قائمة يختارها المحاسب بعد الاستيراد،
+ * ليُكملوا بياناتهم لاحقاً (الأجر، القسم…) أو بمطابقتهم مع ملف المرتبات. اختياري بالكامل: الاستيراد
+ * لا ينشئ شيئاً من تلقاء نفسه لأن الملفات قد تحتوي رموزاً ليست موظفين.
+ * الموجود برقم البصمة نفسه لا يُكرَّر ولا يُعدَّل.
+ */
+export async function createEmployeesFromFingerprints(
+  client: PoolClient,
+  input: { companyId: string; employees: FingerprintEmployeeInput[] },
+): Promise<{ created: number; alreadyExisted: number }> {
+  if (!input.employees.length) fail('لا موظفين للإنشاء', 'VALIDATION');
+  // عملة الموظفين الأكثر استعمالاً بالشركة (الأجر 0 فلا أثر مالي)، وإلا USD.
+  const cur = await client.query<{ currency_code: string }>(
+    `SELECT currency_code FROM payroll_employees WHERE company_id=$1
+      GROUP BY currency_code ORDER BY COUNT(*) DESC LIMIT 1`,
+    [input.companyId],
+  );
+  const currency = cur.rows[0]?.currency_code ?? 'USD';
+
+  let created = 0;
+  let alreadyExisted = 0;
+  for (const e of input.employees) {
+    const code = e.fingerprintCode.trim();
+    if (!code) continue;
+    const exists = await client.query(
+      `SELECT 1 FROM payroll_employees WHERE company_id=$1 AND fingerprint_code=$2`,
+      [input.companyId, code],
+    );
+    if (exists.rows.length) {
+      alreadyExisted++;
+      continue;
+    }
+    const ins = await client.query(
+      `INSERT INTO payroll_employees
+         (company_id, employee_code, full_name, fingerprint_code, base_salary, currency_code, status, notes)
+       VALUES ($1,$2,$3,$4,0,$5,'ACTIVE',$6)
+       ON CONFLICT (company_id, employee_code) DO NOTHING
+       RETURNING id`,
+      [
+        input.companyId,
+        `EMP-${code}`,
+        (e.nameInFile || '').trim() || code,
+        code,
+        currency,
+        'أُنشئ من استيراد ملف بصمة — أكمل الأجر والبيانات (أو استورد ملف المرتبات)',
+      ],
+    );
+    if (ins.rows.length) created++;
+    else alreadyExisted++;
+  }
+  return { created, alreadyExisted };
 }

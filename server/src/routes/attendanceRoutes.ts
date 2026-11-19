@@ -14,6 +14,7 @@ import {
   approveMonthlyAttendanceReview,
   setAttendanceStatus,
   computeMonthlyStatusEffects,
+  createEmployeesFromFingerprints,
 } from '../services/attendanceService.js';
 import { ATTENDANCE_STATUS_CODES } from '../services/hr/attendanceStatus.js';
 import { insertAuditLog } from '../services/auditLogService.js';
@@ -60,6 +61,11 @@ const manualUpdateBody = z.object({
   lateMinutes: z.coerce.number().nonnegative().optional(),
   permissionMinutes: z.coerce.number().nonnegative().optional(),
   dayType: z.enum(['WORK', 'REST', 'HOLIDAY']).optional(),
+  // TASK 018: ساعات الإضافي اليومية بفئات ورقة الانتظام (0–24).
+  otDayHours: z.coerce.number().min(0).max(24).optional(),
+  otNightHours: z.coerce.number().min(0).max(24).optional(),
+  otHoliday1Hours: z.coerce.number().min(0).max(24).optional(),
+  otHoliday2Hours: z.coerce.number().min(0).max(24).optional(),
   reason: z.string().min(1, 'سبب التعديل مطلوب'),
 });
 
@@ -71,7 +77,44 @@ const setStatusBody = z.object({
   reason: z.string().trim().min(1, 'سبب التعديل مطلوب'),
 });
 
+const createEmployeesBody = z.object({
+  employees: z
+    .array(z.object({ fingerprintCode: z.string().trim().min(1), nameInFile: z.string().optional().default('') }))
+    .min(1)
+    .max(300),
+});
+
 export const attendanceRoutes: FastifyPluginAsync = async (app) => {
+  // TASK 019: إنشاء موظفين من أرقام بصمة غير مرتبطة يختارها المحاسب بعد الاستيراد (أجر 0، اسم + رقم بصمة).
+  app.post('/create-employees', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'payroll.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId, sub: userId } = req.user!;
+    const parsed = createEmployeesBody.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || ArabicErrors.validation, 'VALIDATION');
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const result = await createEmployeesFromFingerprints(client, { companyId, employees: parsed.data.employees });
+      await insertAuditLog(client, {
+        companyId,
+        userId,
+        action: 'EMPLOYEES_CREATED_FROM_FINGERPRINT_IMPORT',
+        entityType: 'payroll_employee',
+        entityId: null,
+        details: { count: result.created, codes: parsed.data.employees.map((e) => e.fingerprintCode).slice(0, 100) },
+      });
+      await client.query('COMMIT');
+      return reply.status(201).send({ ok: true, data: result });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
+      return sendError(reply, 500, ArabicErrors.server, 'SERVER');
+    } finally {
+      client.release();
+    }
+  });
+
   // TASK 013: ضبط/مسح حالة يوم (غ، س، ع، م، ز، ج…) — ينشئ سجل اليوم إن لم يوجد. لا يمسّ الرواتب.
   app.put('/status', { preHandler: authenticateRequest }, async (req, reply) => {
     if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
@@ -177,6 +220,10 @@ export const attendanceRoutes: FastifyPluginAsync = async (app) => {
         lateMinutes: d.lateMinutes,
         permissionMinutes: d.permissionMinutes,
         dayType: d.dayType,
+        otDayHours: d.otDayHours,
+        otNightHours: d.otNightHours,
+        otHoliday1Hours: d.otHoliday1Hours,
+        otHoliday2Hours: d.otHoliday2Hours,
         reason: d.reason,
       });
       await insertAuditLog(client, {
@@ -185,7 +232,7 @@ export const attendanceRoutes: FastifyPluginAsync = async (app) => {
         action: 'ATTENDANCE_RECORD_MANUALLY_EDITED',
         entityType: 'attendance_daily_record',
         entityId: id,
-        details: { reason: d.reason, checkInTime: d.checkInTime, checkOutTime: d.checkOutTime, lateMinutes: d.lateMinutes, permissionMinutes: d.permissionMinutes, dayType: d.dayType },
+        details: { reason: d.reason, checkInTime: d.checkInTime, checkOutTime: d.checkOutTime, lateMinutes: d.lateMinutes, permissionMinutes: d.permissionMinutes, dayType: d.dayType, otDayHours: d.otDayHours, otNightHours: d.otNightHours, otHoliday1Hours: d.otHoliday1Hours, otHoliday2Hours: d.otHoliday2Hours },
       });
       await client.query('COMMIT');
       return reply.send({ ok: true, data: row });
