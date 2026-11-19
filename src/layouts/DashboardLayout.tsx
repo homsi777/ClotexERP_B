@@ -119,6 +119,8 @@ const Topbar = () => {
       icon: Tags,
       subItems: [
         { labelKey: 'stickers.cartela', to: '/cartela' },
+        { labelKey: 'stickers.cartelaDelivery', to: '/cartela/delivery' },
+        { labelKey: 'stickers.cartelaCustody', to: '/cartela/custody' },
         { labelKey: 'stickers.labels', to: '/inventory/labels' },
         { labelKey: 'stickers.customLabel', to: '/inventory/custom-label' },
         { labelKey: 'stickers.printJobs', to: '/inventory/print-jobs' },

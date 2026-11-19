@@ -31,6 +31,7 @@ import { partyActivityLogRoutes } from './routes/partyActivityLogRoutes.js';
 import { cashboxRoutes } from './routes/cashboxRoutes.js';
 import { cashboxTransferRoutes } from './routes/cashboxTransferRoutes.js';
 import { cartelaRoutes } from './routes/cartelaRoutes.js';
+import { cartelaCustodyRoutes } from './routes/cartelaCustodyRoutes.js';
 import { exchangeRateRoutes } from './routes/exchangeRateRoutes.js';
 import { voucherRoutes } from './routes/voucherRoutes.js';
 import { checksRoutes } from './routes/checksRoutes.js';
@@ -147,6 +148,7 @@ export async function buildApp() {
   // Label printing engine
   await app.register(labelPrintRoutes, { prefix: '/api/labels' });
   await app.register(cartelaRoutes, { prefix: '/api/cartela' });
+  await app.register(cartelaCustodyRoutes, { prefix: '/api/cartela-custody' });
 
   // Financial / logs / payroll / reports (MVP cloud entities)
   await app.register(returnInvoiceRoutes, { prefix: '/api/returns' });

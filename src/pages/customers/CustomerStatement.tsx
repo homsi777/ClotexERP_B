@@ -1176,6 +1176,9 @@ export const CustomerStatement = () => {
            <p className="text-slate-500 mt-1">{t('page.subtitle')}</p>
          </div>
          <div className="flex gap-2">
+           <button type="button" disabled={!selectedCustomerId} className="border border-violet-300 bg-white text-violet-700 px-4 py-2 rounded-lg hover:bg-violet-50 transition font-medium disabled:opacity-50" onClick={() => navigate(`/cartela/custody?customerId=${selectedCustomerId}`)}>
+             <span>{t('toolbar.cartelaStatement', { defaultValue: 'كشف الكارتيلات' })}</span>
+           </button>
            <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium" onClick={() => setPrintPreviewOpen(true)}>
              <Printer className="w-4 h-4" />
              <span>{t('toolbar.printPdf')}</span>
