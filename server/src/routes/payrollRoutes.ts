@@ -98,6 +98,7 @@ const payrollExcelRowSchema = z.object({
   paymentMethod: z.string().optional().nullable(),
   hireDate: z.string().optional().nullable(),
   baseSalary: z.coerce.number(),
+  comprehensiveWage: z.coerce.number().optional().nullable(),
   totalEntitlements: z.coerce.number(),
   totalDeductions: z.coerce.number(),
   finalNet: z.coerce.number(),
@@ -109,8 +110,10 @@ const importExcelBody = z.object({
   periodMonth: z.coerce.number().int().min(1).max(12),
   periodYear: z.coerce.number().int().min(2000).max(2100),
   currencyCode: z.string().min(1),
-  exchangeRateToUsd: z.coerce.number().positive(),
+  exchangeRateToUsd: z.coerce.number().positive().optional().default(1),
   fileName: z.string().min(1),
+  workdayHours: z.coerce.number().min(1).max(24).optional().nullable(),
+  employeesOnly: z.boolean().optional().default(false),
   rows: z.array(payrollExcelRowSchema).min(1),
 });
 
@@ -1139,6 +1142,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
         exchangeRateToUsd: d.exchangeRateToUsd,
         fileName: d.fileName,
         rows: d.rows,
+        workdayHours: d.workdayHours ?? null,
+        employeesOnly: d.employeesOnly,
       });
       await client.query('COMMIT');
       return reply.status(201).send({ ok: true, data: result });

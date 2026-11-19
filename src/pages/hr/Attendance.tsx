@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Pencil, Upload, X } from 'lucide-
 import {
   listAttendanceRecords,
   importAttendanceFile,
+  createEmployeesFromFingerprints,
   updateAttendanceRecord,
   listShiftTypes,
   createShiftType,
@@ -28,7 +29,17 @@ function firstOfMonthIso(): string {
 
 const inputCls = 'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
-function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported: () => void }) {
+function ImportModal({
+  open,
+  onClose,
+  onImported,
+  canCreateEmployees,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onImported: () => void;
+  canCreateEmployees: boolean;
+}) {
   const { t } = useTranslation('hrAttendance');
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
@@ -40,6 +51,8 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AttendanceImportResultDto | null>(null);
+  const [pickedCodes, setPickedCodes] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState(false);
 
   if (!open) return null;
 
@@ -62,6 +75,27 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
     } finally {
       setLoadingFile(false);
       if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  // TASK 019: ينشئ الموظفين الذين اختارهم المحاسب من القائمة غير المرتبطة ثم يعيد استيراد الصفوف نفسها.
+  async function handleCreateAndReimport() {
+    if (!result || !pickedCodes.size) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const chosen = result.unmatched
+        .filter((u) => pickedCodes.has(u.fingerprintCode))
+        .map((u) => ({ fingerprintCode: u.fingerprintCode, nameInFile: u.nameInFile }));
+      await createEmployeesFromFingerprints(chosen);
+      const res = await importAttendanceFile(fileName, parsedRows);
+      setResult(res.data);
+      setPickedCodes(new Set());
+      onImported();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('modal.importFailed'));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -125,11 +159,42 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
               {result.unmatched.length > 0 && (
                 <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-normal text-amber-800">
                   <div className="font-bold">{t('modal.unmatchedTitle', { count: result.unmatched.length })}</div>
-                  <ul className="mt-1 list-inside list-disc space-y-0.5">
+                  <ul className="mt-1 space-y-0.5">
                     {result.unmatched.map((u) => (
-                      <li key={u.fingerprintCode}>{t('modal.unmatchedRow', { code: u.fingerprintCode, name: u.nameInFile, count: u.count })}</li>
+                      <li key={u.fingerprintCode} className="flex items-center gap-2">
+                        {canCreateEmployees && (
+                          <input
+                            type="checkbox"
+                            className="accent-indigo-600"
+                            checked={pickedCodes.has(u.fingerprintCode)}
+                            onChange={() =>
+                              setPickedCodes((cur) => {
+                                const next = new Set(cur);
+                                if (next.has(u.fingerprintCode)) next.delete(u.fingerprintCode);
+                                else next.add(u.fingerprintCode);
+                                return next;
+                              })
+                            }
+                          />
+                        )}
+                        <span>{t('modal.unmatchedRow', { code: u.fingerprintCode, name: u.nameInFile, count: u.count })}</span>
+                      </li>
                     ))}
                   </ul>
+                  {canCreateEmployees && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-[11px]">{t('modal.createEmployeesHint')}</p>
+                      <button
+                        type="button"
+                        disabled={creating || pickedCodes.size === 0}
+                        onClick={() => void handleCreateAndReimport()}
+                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        {t('modal.createEmployeesButton', { count: pickedCodes.size })}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -572,7 +637,7 @@ export function Attendance() {
         )}
       </div>
 
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={() => void load()} />
+      <ImportModal canCreateEmployees={hasPermission('payroll.manage')} open={importOpen} onClose={() => setImportOpen(false)} onImported={() => void load()} />
       <EditModal record={editingRecord} onClose={() => setEditingRecord(null)} onSaved={() => void load()} />
     </div>
   );

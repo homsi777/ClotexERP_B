@@ -18,6 +18,8 @@ export interface PayrollExcelRow {
   paymentMethod: string | null;
   hireDate: string | null;
   baseSalary: number;
+  /** الأجر الشامل (عمود «الأجر الشامل») — أجر الموظف المعتمد؛ الأساسي جزء منه. */
+  comprehensiveWage: number;
   totalEntitlements: number;
   totalDeductions: number;
   finalNet: number;
@@ -74,6 +76,7 @@ export async function parsePayrollWorkbook(file: File): Promise<ParsedPayrollExc
   const paymentMethodCol = findCol(header, 'طريقة القبض ');
   const hireDateCol = findCol(header, 'تاريخ التعيين ');
   const baseSalaryCol = findCol(header, 'الاجر الاساسى ');
+  const comprehensiveCol = findCol(header, 'الاجر الشامل');
   const totalEntitlementsCol = findCol(header, 'إجمالي الإستحقاقات');
   const totalDeductionsCol = findCol(header, 'المستقطع');
   const finalNetCol = findLastCol(header, 'الصافى بعد التقريب');
@@ -112,6 +115,7 @@ export async function parsePayrollWorkbook(file: File): Promise<ParsedPayrollExc
       paymentMethod: paymentMethodCol >= 0 ? String(r[paymentMethodCol] ?? '').trim() || null : null,
       hireDate: hireDateCol >= 0 ? excelSerialToIsoDate(r[hireDateCol]) : null,
       baseSalary: Number(r[baseSalaryCol]) || 0,
+      comprehensiveWage: comprehensiveCol >= 0 ? Number(r[comprehensiveCol]) || 0 : 0,
       totalEntitlements: Number(r[totalEntitlementsCol]) || 0,
       totalDeductions: Number(r[totalDeductionsCol]) || 0,
       finalNet: Number(r[finalNetCol]) || 0,

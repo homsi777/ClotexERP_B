@@ -108,7 +108,14 @@
     "totalNet": "Net Maaş Toplamı",
     "importing": "İçe aktarılıyor...",
     "confirmImport": "İçe Aktarmayı Onayla",
-    "close": "Kapat"
+    "close": "Kapat",
+    "workdayHours": "İş günü saati (İdare 9, Salon 8)",
+    "employeesOnlyLabel": "Yalnızca çalışan verilerini içe aktar (bordro oluşturma)",
+    "employeesOnlyHint": "Yeni çalışanları parmak izi no, ad, toplam ücret ve temel oranıyla oluşturur; mevcutların boş alanlarını ücretlerine dokunmadan doldurur.",
+    "employeesOnlySuccess": "Çalışan verileri içe aktarıldı (bordro olmadan)",
+    "wageMismatchTitle": "{{count}} çalışanın kayıtlı ücreti dosyadaki toplam ücretle uyuşmuyor",
+    "wageMismatchHint": "Yalnızca uyarı — hiçbir ücret değiştirilmedi. «Temel ücrete eşit» önceki içe aktarmanın toplam yerine temel ücreti yazdığı anlamına gelir; kayıttan düzeltin.",
+    "wageMismatchBasic": "temel ücrete eşit"
   },
   "search": {
     "placeholder": "Çalışan adı, telefon veya adrese göre ara..."

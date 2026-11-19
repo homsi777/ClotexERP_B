@@ -105,5 +105,7 @@
   "editModal.otHoliday1": "Tatil (×1)",
   "editModal.otHoliday2": "Tatil (×2)",
   "status.colOvertime": "Fazla mesai",
-  "status.overtimeHours": "{{hours}} saat"
+  "status.overtimeHours": "{{hours}} saat",
+  "modal.createEmployeesHint": "Gerçekten çalışan olanları seçin (cihaz/yer kodlarını atlayın). Her biri ad, parmak izi no ve ücret 0 ile oluşturulur; sonra devam satırları otomatik içe aktarılır.",
+  "modal.createEmployeesButton": "Seçilenleri ({{count}}) oluştur ve satırlarını yeniden aktar"
 }

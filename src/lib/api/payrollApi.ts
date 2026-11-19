@@ -235,12 +235,23 @@ export async function confirmPayrollRun(runId: string) {
   return apiFetch<{ ok: boolean; data: unknown }>(`/api/payroll/runs/${runId}/confirm`, { method: 'PATCH' });
 }
 
+export interface ImportWageMismatch {
+  employeeCode: string;
+  fullName: string;
+  storedWage: number;
+  fileComprehensiveWage: number;
+  /** MATCHES_BASIC = الأرجح استيراد قديم سجّل الأساسي بدل الشامل. */
+  kind: 'MATCHES_BASIC' | 'DIFFERENT';
+}
+
 export interface ImportPayrollExcelResult {
-  payrollRunId: string;
-  payrollNo: string;
+  payrollRunId: string | null;
+  payrollNo: string | null;
   employeesCreated: number;
   employeesMatched: number;
   totalNet: number;
+  employeesOnly?: boolean;
+  wageMismatches?: ImportWageMismatch[];
 }
 
 export async function importPayrollExcel(payload: {
@@ -251,6 +262,8 @@ export async function importPayrollExcel(payload: {
   exchangeRateToUsd: number;
   fileName: string;
   rows: unknown[];
+  workdayHours?: number | null;
+  employeesOnly?: boolean;
 }) {
   return apiFetch<{ ok: boolean; data: ImportPayrollExcelResult }>('/api/payroll/runs/import-excel', {
     method: 'POST',

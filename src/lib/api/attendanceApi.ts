@@ -179,3 +179,10 @@ export async function getMonthlyStatusEffects(year: number, month: number, emplo
     `/api/attendance/monthly-effects?${q}`,
   );
 }
+
+export async function createEmployeesFromFingerprints(employees: Array<{ fingerprintCode: string; nameInFile: string }>) {
+  return apiFetch<{ ok: boolean; data: { created: number; alreadyExisted: number } }>('/api/attendance/create-employees', {
+    method: 'POST',
+    body: JSON.stringify({ employees }),
+  });
+}

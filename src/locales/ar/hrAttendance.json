@@ -105,5 +105,7 @@
   "editModal.otHoliday1": "عطلة (×1)",
   "editModal.otHoliday2": "عطلة (×2)",
   "status.colOvertime": "إضافي",
-  "status.overtimeHours": "{{hours}} ساعة"
+  "status.overtimeHours": "{{hours}} ساعة",
+  "modal.createEmployeesHint": "اختر من هم موظفون فعلاً (تجاهل رموز الأجهزة/الأماكن). يُنشأ كل منهم بالاسم ورقم البصمة وأجر 0 لتكمل بياناته لاحقاً، ثم تُستورد صفوف حضورهم تلقائياً.",
+  "modal.createEmployeesButton": "إنشاء المحددين ({{count}}) وإعادة استيراد صفوفهم"
 }

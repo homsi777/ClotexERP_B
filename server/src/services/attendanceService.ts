@@ -564,3 +564,60 @@ export async function computeMonthlyStatusEffects(
     };
   });
 }
+
+// ─── TASK 019: إنشاء موظفين من أرقام بصمة غير مرتبطة ─────────────────────────────
+
+export type FingerprintEmployeeInput = { fingerprintCode: string; nameInFile: string };
+
+/**
+ * ينشئ موظفين بالاسم ورقم البصمة فقط (أجر 0، نشطون) من قائمة يختارها المحاسب بعد الاستيراد،
+ * ليُكملوا بياناتهم لاحقاً (الأجر، القسم…) أو بمطابقتهم مع ملف المرتبات. اختياري بالكامل: الاستيراد
+ * لا ينشئ شيئاً من تلقاء نفسه لأن الملفات قد تحتوي رموزاً ليست موظفين.
+ * الموجود برقم البصمة نفسه لا يُكرَّر ولا يُعدَّل.
+ */
+export async function createEmployeesFromFingerprints(
+  client: PoolClient,
+  input: { companyId: string; employees: FingerprintEmployeeInput[] },
+): Promise<{ created: number; alreadyExisted: number }> {
+  if (!input.employees.length) fail('لا موظفين للإنشاء', 'VALIDATION');
+  // عملة الموظفين الأكثر استعمالاً بالشركة (الأجر 0 فلا أثر مالي)، وإلا USD.
+  const cur = await client.query<{ currency_code: string }>(
+    `SELECT currency_code FROM payroll_employees WHERE company_id=$1
+      GROUP BY currency_code ORDER BY COUNT(*) DESC LIMIT 1`,
+    [input.companyId],
+  );
+  const currency = cur.rows[0]?.currency_code ?? 'USD';
+
+  let created = 0;
+  let alreadyExisted = 0;
+  for (const e of input.employees) {
+    const code = e.fingerprintCode.trim();
+    if (!code) continue;
+    const exists = await client.query(
+      `SELECT 1 FROM payroll_employees WHERE company_id=$1 AND fingerprint_code=$2`,
+      [input.companyId, code],
+    );
+    if (exists.rows.length) {
+      alreadyExisted++;
+      continue;
+    }
+    const ins = await client.query(
+      `INSERT INTO payroll_employees
+         (company_id, employee_code, full_name, fingerprint_code, base_salary, currency_code, status, notes)
+       VALUES ($1,$2,$3,$4,0,$5,'ACTIVE',$6)
+       ON CONFLICT (company_id, employee_code) DO NOTHING
+       RETURNING id`,
+      [
+        input.companyId,
+        `EMP-${code}`,
+        (e.nameInFile || '').trim() || code,
+        code,
+        currency,
+        'أُنشئ من استيراد ملف بصمة — أكمل الأجر والبيانات (أو استورد ملف المرتبات)',
+      ],
+    );
+    if (ins.rows.length) created++;
+    else alreadyExisted++;
+  }
+  return { created, alreadyExisted };
+}
