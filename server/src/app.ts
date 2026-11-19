@@ -26,6 +26,7 @@ import { supplierRoutes } from './routes/supplierRoutes.js';
 import { systemRoutes } from './routes/systemRoutes.js';
 import { telegramRoutes } from './routes/telegramRoutes.js';
 import { warehouseLocationRoutes, warehouseRoutes } from './routes/warehouseRoutes.js';
+import { warehouseZoneRoutes } from './routes/warehouseZoneRoutes.js';
 import { returnInvoiceRoutes } from './routes/returnInvoiceRoutes.js';
 import { partyActivityLogRoutes } from './routes/partyActivityLogRoutes.js';
 import { cashboxRoutes } from './routes/cashboxRoutes.js';
@@ -129,6 +130,7 @@ export async function buildApp() {
   await app.register(customerLegacyImportRoutes, { prefix: '/api/customers' });
   await app.register(warehouseRoutes, { prefix: '/api/warehouses' });
   await app.register(warehouseLocationRoutes, { prefix: '/api/warehouse-locations' });
+  await app.register(warehouseZoneRoutes, { prefix: '/api/warehouse-zones' });
   await app.register(fabricCategoryRoutes, { prefix: '/api/fabric/categories' });
   await app.register(fabricItemRoutes, { prefix: '/api/fabric/items' });
   await app.register(fabricColorRoutes, { prefix: '/api/fabric/colors' });

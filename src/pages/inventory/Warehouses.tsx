@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Building2, Check, Loader2, MapPin, Pencil, Plus, RefreshCw, Search, X } from 'lucide-react';
 import {
   type ApiWarehouse,
@@ -9,6 +10,7 @@ import {
   toggleWarehouseStatus,
   updateWarehouse,
 } from '../../lib/api/warehousesApi';
+import { getPendingZoneAlerts } from '../../lib/api/warehouseZonesApi';
 
 const emptyForm = (): WarehousePayload => ({ code: '', name: '', type: 'MAIN', address: '', fabricStage: null });
 
@@ -26,6 +28,8 @@ export const Warehouses = () => {
     { value: 'FINISHED', label: t('fabricStageFinished') },
   ];
   const [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]);
+  // تنبيه متابعة فقط: أتواب بانتظار تحديد العنبر في المستودعات المفعَّلة (لا يوقف أي عملية).
+  const [pendingByWh, setPendingByWh] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -45,6 +49,7 @@ export const Warehouses = () => {
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
       setWarehouses(data);
+      void getPendingZoneAlerts().then((rows) => setPendingByWh(Object.fromEntries(rows.map((r) => [r.warehouse_id, r.pending])))).catch(() => undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('loadError'));
     } finally { setLoading(false); }
@@ -179,9 +184,19 @@ export const Warehouses = () => {
                     </button>
                   </td>
                   <td className="px-5 py-4">
-                    <button onClick={() => openEdit(wh)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => openEdit(wh)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <Link to={`/inventory/zones?warehouseId=${wh.id}`} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-white">
+                        {t('zonesLink', { defaultValue: 'العنابر' })}
+                      </Link>
+                      {pendingByWh[wh.id] > 0 && (
+                        <Link to={`/inventory/zones?warehouseId=${wh.id}`} className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+                          {t('zonesPending', { count: pendingByWh[wh.id], defaultValue: '{{count}} أتواب بانتظار تحديد العنبر' })}
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

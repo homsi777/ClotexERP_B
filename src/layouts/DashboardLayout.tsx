@@ -110,6 +110,7 @@ const Topbar = () => {
         { labelKey: 'inventory.settings', to: '/inventory/settings' },
         { labelKey: 'inventory.bulkPricing', to: '/inventory/bulk-pricing' },
         { labelKey: 'inventory.warehouses', to: '/inventory/warehouses' },
+        { labelKey: 'inventory.zones', to: '/inventory/zones' },
         { labelKey: 'inventory.transfers', to: '/inventory/transfers' },
         { labelKey: 'inventory.depreciation', to: '/inventory/depreciation' },
       ],
