@@ -6,8 +6,9 @@ import { changeManufacturingMachineStatus, createManufacturingMaintenance, getMa
 import { createManufacturingWorkOrder, listManufacturingWorkOrders, releaseManufacturingWorkOrder, transitionManufacturingWorkOrder, type ManufacturingWorkOrderPriority, type ManufacturingWorkOrderSummary } from "../lib/api/manufacturingWorkOrderApi";
 import { WarpingOrdersPanel } from "../components/manufacturing/WarpingOrdersPanel";
 import { SizingOrdersPanel } from "../components/manufacturing/SizingOrdersPanel";
+import { WeavingRunsPanel } from "../components/manufacturing/WeavingRunsPanel";
 
-type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing";
+type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving";
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const primary = "rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50";
 const statusColor: Record<MachineStatus, string> = {
@@ -44,6 +45,7 @@ export const Manufacturing = () => {
     canWarpQuality = has("manufacturing.warping.quality"),
     canApproveYarn = has("manufacturing.yarn_issue.approve");
   const canSizingManage=has("manufacturing.sizing.manage");
+  const canWeavingManage=has("manufacturing.weaving.manage");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -112,7 +114,7 @@ export const Manufacturing = () => {
       <section className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-slate-50 p-3">
           <div className="flex flex-wrap gap-2">
-            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing"] as Tab[]).map((x) => (
+            {(["machines", "departments", "downtime", "defects", "specifications", "workOrders", "warping", "sizing", "weaving"] as Tab[]).map((x) => (
               <button
                 key={x}
                 onClick={() => {
@@ -121,7 +123,7 @@ export const Manufacturing = () => {
                 }}
                 className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === x ? "bg-indigo-600 text-white" : "border bg-white text-slate-700"}`}
               >
-                {x==="sizing"?"التصميغ":t(`tabs.${x}`)}
+                {x==="sizing"?"التصميغ":x==="weaving"?"النسج والورديات":t(`tabs.${x}`)}
               </button>
             ))}
           </div>
@@ -161,6 +163,8 @@ export const Manufacturing = () => {
             <WarpingOrdersPanel canManage={canWarpManage} canQuality={canWarpQuality} canApproveYarn={canApproveYarn} />
           ) : tab === "sizing" ? (
             <SizingOrdersPanel canManage={canSizingManage} />
+          ) : tab === "weaving" ? (
+            <WeavingRunsPanel canManage={canWeavingManage} />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">{t("loading")}</div>
           ) : tab === "machines" ? (

@@ -17,6 +17,8 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.yarn_issue.approve', 'اعتماد وصرف الخيط لأوامر التسدية', 'manufacturing'),
   ('manufacturing.sizing.view', 'عرض أوامر التصميغ والمطاوي', 'manufacturing'),
   ('manufacturing.sizing.manage', 'إدارة وتنفيذ أوامر التصميغ', 'manufacturing'),
+  ('manufacturing.weaving.view', 'عرض تشغيل وإنتاج النسج', 'manufacturing'),
+  ('manufacturing.weaving.manage', 'إدارة تشغيل وإنتاج النسج', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -41,6 +43,8 @@ JOIN permissions p ON p.code IN (
   'manufacturing.yarn_issue.approve',
   'manufacturing.sizing.view',
   'manufacturing.sizing.manage',
+  'manufacturing.weaving.view',
+  'manufacturing.weaving.manage',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
@@ -356,6 +360,32 @@ CREATE TABLE manufacturing_sizing_events (
  FOREIGN KEY(company_id,sizing_order_id) REFERENCES manufacturing_sizing_orders(company_id,id) ON DELETE CASCADE
 );
 
+CREATE TABLE manufacturing_weaving_runs (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,run_no text NOT NULL,
+ work_order_id uuid NOT NULL,warp_beam_id uuid,sized_beam_id uuid,loom_id uuid NOT NULL,operator_employee_id uuid,shift_type_id uuid,
+ status text NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','IN_PROGRESS','PAUSED','COMPLETED','CANCELLED')),
+ planned_length_m numeric(14,3) NOT NULL CHECK(planned_length_m>0),produced_length_m numeric(14,3) NOT NULL DEFAULT 0 CHECK(produced_length_m>=0),
+ opening_counter numeric(16,3),current_counter numeric(16,3),notes text,version integer NOT NULL DEFAULT 1,started_at timestamptz,completed_at timestamptz,
+ created_by_user_id uuid REFERENCES users(id),updated_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(company_id,run_no),UNIQUE(company_id,id),CHECK((warp_beam_id IS NOT NULL)::int+(sized_beam_id IS NOT NULL)::int=1),
+ FOREIGN KEY(company_id,work_order_id) REFERENCES manufacturing_work_orders(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,warp_beam_id) REFERENCES manufacturing_warp_beams(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,sized_beam_id) REFERENCES manufacturing_sized_beams(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,operator_employee_id) REFERENCES payroll_employees(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,shift_type_id) REFERENCES attendance_shift_types(company_id,id) ON DELETE RESTRICT
+);
+CREATE INDEX manufacturing_weaving_runs_status ON manufacturing_weaving_runs(company_id,status,created_at DESC);
+
+CREATE TABLE manufacturing_weaving_shift_logs (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,weaving_run_id uuid NOT NULL,
+ operator_employee_id uuid,shift_type_id uuid,production_date date NOT NULL,counter_start numeric(16,3) NOT NULL,counter_end numeric(16,3) NOT NULL,
+ produced_length_m numeric(14,3) NOT NULL CHECK(produced_length_m>=0),downtime_minutes integer NOT NULL DEFAULT 0 CHECK(downtime_minutes>=0),
+ downtime_reason_id uuid,notes text,created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(company_id,weaving_run_id) REFERENCES manufacturing_weaving_runs(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,operator_employee_id) REFERENCES payroll_employees(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,shift_type_id) REFERENCES attendance_shift_types(company_id,id) ON DELETE RESTRICT
+);
+
 CREATE TABLE manufacturing_warping_yarn_issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   warping_order_id uuid NOT NULL, issue_no text NOT NULL,
@@ -465,6 +495,7 @@ ALTER TABLE manufacturing_warping_orders
     FOREIGN KEY (company_id, target_loom_id)
     REFERENCES manufacturing_machines(company_id, id) ON DELETE RESTRICT;
 ALTER TABLE manufacturing_sizing_orders ADD CONSTRAINT manufacturing_sizing_orders_machine_fk FOREIGN KEY(company_id,sizing_machine_id) REFERENCES manufacturing_machines(company_id,id) ON DELETE RESTRICT;
+ALTER TABLE manufacturing_weaving_runs ADD CONSTRAINT manufacturing_weaving_runs_loom_fk FOREIGN KEY(company_id,loom_id) REFERENCES manufacturing_machines(company_id,id) ON DELETE RESTRICT;
 
 CREATE TABLE manufacturing_machine_status_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -539,6 +570,8 @@ CREATE TABLE manufacturing_downtime_reasons (
 
 CREATE INDEX manufacturing_downtime_reasons_lookup
   ON manufacturing_downtime_reasons(company_id, stage, is_active, name);
+
+ALTER TABLE manufacturing_weaving_shift_logs ADD CONSTRAINT manufacturing_weaving_shift_logs_downtime_fk FOREIGN KEY(company_id,downtime_reason_id) REFERENCES manufacturing_downtime_reasons(company_id,id) ON DELETE RESTRICT;
 
 CREATE TABLE manufacturing_quality_defect_catalog (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
