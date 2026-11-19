@@ -11,6 +11,9 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.work_orders.view', 'عرض أوامر إنتاج التصنيع', 'manufacturing'),
   ('manufacturing.work_orders.manage', 'إنشاء وتعديل أوامر إنتاج التصنيع', 'manufacturing'),
   ('manufacturing.work_orders.release', 'إصدار أوامر إنتاج التصنيع', 'manufacturing'),
+  ('manufacturing.warping.view', 'عرض أوامر التسدية وكروتها', 'manufacturing'),
+  ('manufacturing.warping.manage', 'إدارة وتنفيذ أوامر التسدية', 'manufacturing'),
+  ('manufacturing.warping.quality', 'فحص واعتماد المطاوي', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -29,6 +32,9 @@ JOIN permissions p ON p.code IN (
   'manufacturing.work_orders.view',
   'manufacturing.work_orders.manage',
   'manufacturing.work_orders.release',
+  'manufacturing.warping.view',
+  'manufacturing.warping.manage',
+  'manufacturing.warping.quality',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
@@ -188,6 +194,115 @@ CREATE TABLE manufacturing_work_order_events (
 CREATE INDEX manufacturing_work_order_events_history
   ON manufacturing_work_order_events(company_id, work_order_id, created_at DESC);
 
+ALTER TABLE payroll_employees
+  ADD CONSTRAINT payroll_employees_company_identity UNIQUE (company_id, id);
+ALTER TABLE attendance_shift_types
+  ADD CONSTRAINT attendance_shift_types_company_identity UNIQUE (company_id, id);
+
+CREATE TABLE manufacturing_warping_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  warping_order_no text NOT NULL,
+  work_order_id uuid NOT NULL,
+  status text NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','RELEASED','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED')),
+  planned_length_m numeric(14,3) NOT NULL CHECK (planned_length_m > 0),
+  actual_length_m numeric(14,3) CHECK (actual_length_m IS NULL OR actual_length_m >= 0),
+  warping_machine_id uuid,
+  target_loom_id uuid,
+  operator_employee_id uuid,
+  shift_type_id uuid,
+  tie_count integer CHECK (tie_count IS NULL OR tie_count >= 0),
+  beam_no text,
+  beam_barcode text,
+  quality_status text NOT NULL DEFAULT 'PENDING' CHECK (quality_status IN ('PENDING','ACCEPTED','CONDITIONAL','REJECTED')),
+  quality_notes text,
+  specification_snapshot jsonb NOT NULL CHECK (jsonb_typeof(specification_snapshot) = 'object'),
+  execution_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(execution_snapshot) = 'object'),
+  notes text,
+  version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+  released_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  released_at timestamptz,
+  started_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  started_at timestamptz,
+  completed_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  completed_at timestamptz,
+  cancelled_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  cancelled_at timestamptz,
+  cancellation_reason text,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_warping_orders_company_no_unique UNIQUE (company_id, warping_order_no),
+  CONSTRAINT manufacturing_warping_orders_company_identity UNIQUE (company_id, id),
+  CONSTRAINT manufacturing_warping_orders_work_order_fk
+    FOREIGN KEY (company_id, work_order_id)
+    REFERENCES manufacturing_work_orders(company_id, id) ON DELETE RESTRICT,
+  CONSTRAINT manufacturing_warping_orders_employee_fk
+    FOREIGN KEY (company_id, operator_employee_id)
+    REFERENCES payroll_employees(company_id, id) ON DELETE RESTRICT,
+  CONSTRAINT manufacturing_warping_orders_shift_fk
+    FOREIGN KEY (company_id, shift_type_id)
+    REFERENCES attendance_shift_types(company_id, id) ON DELETE RESTRICT,
+  CONSTRAINT manufacturing_warping_orders_cancel_consistency CHECK (
+    status <> 'CANCELLED' OR (cancelled_at IS NOT NULL AND length(trim(COALESCE(cancellation_reason,''))) > 0)
+  )
+);
+
+CREATE INDEX manufacturing_warping_orders_company_status
+  ON manufacturing_warping_orders(company_id, status, created_at DESC);
+CREATE INDEX manufacturing_warping_orders_work_order
+  ON manufacturing_warping_orders(company_id, work_order_id);
+-- A machine may legitimately serve more than one active order when the warp is
+-- shared. Keep this as a lookup index, never as a uniqueness constraint.
+CREATE INDEX manufacturing_warping_orders_active_machine
+  ON manufacturing_warping_orders(company_id, warping_machine_id)
+  WHERE warping_machine_id IS NOT NULL AND status IN ('RELEASED','IN_PROGRESS');
+CREATE UNIQUE INDEX manufacturing_warping_orders_beam_barcode_unique
+  ON manufacturing_warping_orders(company_id, beam_barcode)
+  WHERE beam_barcode IS NOT NULL;
+
+CREATE TABLE manufacturing_warp_cards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  warping_order_id uuid NOT NULL,
+  card_no text NOT NULL,
+  card_version integer NOT NULL DEFAULT 1 CHECK (card_version > 0),
+  status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REPLACED','VOID')),
+  barcode text NOT NULL,
+  card_data jsonb NOT NULL CHECK (jsonb_typeof(card_data) = 'object'),
+  print_count integer NOT NULL DEFAULT 0 CHECK (print_count >= 0),
+  replaced_by_card_id uuid REFERENCES manufacturing_warp_cards(id) ON DELETE SET NULL,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_warp_cards_company_no_unique UNIQUE (company_id, card_no),
+  CONSTRAINT manufacturing_warp_cards_company_barcode_unique UNIQUE (company_id, barcode),
+  CONSTRAINT manufacturing_warp_cards_order_version_unique UNIQUE (company_id, warping_order_id, card_version),
+  CONSTRAINT manufacturing_warp_cards_order_fk
+    FOREIGN KEY (company_id, warping_order_id)
+    REFERENCES manufacturing_warping_orders(company_id, id) ON DELETE RESTRICT
+);
+
+CREATE UNIQUE INDEX manufacturing_warp_cards_one_active
+  ON manufacturing_warp_cards(company_id, warping_order_id)
+  WHERE status='ACTIVE';
+
+CREATE TABLE manufacturing_warping_order_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  warping_order_id uuid NOT NULL,
+  event_type text NOT NULL CHECK (event_type IN ('CREATED','UPDATED','RELEASED','STARTED','QUALITY_COMPLETED','CANCELLED','CARD_PRINTED')),
+  old_status text CHECK (old_status IS NULL OR old_status IN ('DRAFT','RELEASED','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED')),
+  new_status text NOT NULL CHECK (new_status IN ('DRAFT','RELEASED','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED')),
+  details jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(details) = 'object'),
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT manufacturing_warping_order_events_order_fk FOREIGN KEY (company_id, warping_order_id)
+    REFERENCES manufacturing_warping_orders(company_id, id) ON DELETE CASCADE
+);
+CREATE INDEX manufacturing_warping_order_events_history
+  ON manufacturing_warping_order_events(company_id, warping_order_id, created_at DESC);
+
 CREATE TABLE manufacturing_departments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -259,6 +374,16 @@ CREATE INDEX manufacturing_machines_type
 CREATE UNIQUE INDEX manufacturing_machines_company_serial_unique
   ON manufacturing_machines(company_id, lower(trim(serial_number)))
   WHERE serial_number IS NOT NULL AND length(trim(serial_number)) > 0;
+
+-- Warping tables are declared earlier beside work orders. Add machine links only
+-- after the machine reference table exists so a clean migration can run.
+ALTER TABLE manufacturing_warping_orders
+  ADD CONSTRAINT manufacturing_warping_orders_machine_fk
+    FOREIGN KEY (company_id, warping_machine_id)
+    REFERENCES manufacturing_machines(company_id, id) ON DELETE RESTRICT,
+  ADD CONSTRAINT manufacturing_warping_orders_loom_fk
+    FOREIGN KEY (company_id, target_loom_id)
+    REFERENCES manufacturing_machines(company_id, id) ON DELETE RESTRICT;
 
 CREATE TABLE manufacturing_machine_status_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

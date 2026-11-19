@@ -73,7 +73,12 @@ const machineSchema = z.object({
   powerKw: z.number().positive().nullable().optional(),
   ratedSpeed: z.number().positive().nullable().optional(),
   ratedSpeedUnit: z.enum(['RPM', 'PICKS_PER_MINUTE', 'METERS_PER_MINUTE', 'OTHER']).nullable().optional(),
-  technicalSpecs: z.record(z.union([z.string().max(500), z.number(), z.boolean()])).refine((value) => Object.keys(value).length <= 50).optional(),
+  technicalSpecs: z.record(z.union([z.string().max(1_500_000), z.number(), z.boolean()])).superRefine((value,ctx) => {
+    if (Object.keys(value).length > 50) ctx.addIssue({ code:z.ZodIssueCode.custom,message:'عدد حقول المواصفات الفنية يتجاوز الحد المسموح' });
+    const image=value.sheddingTypeImage;
+    if (typeof image==='string' && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) ctx.addIssue({ code:z.ZodIssueCode.custom,path:['sheddingTypeImage'],message:'صورة نوع اللقية غير صالحة' });
+    const gear=Number(value.gearTooth); if(value.gearTooth!==undefined && (!Number.isInteger(gear)||gear<1||gear>100)) ctx.addIssue({code:z.ZodIssueCode.custom,path:['gearTooth'],message:'المسنن يجب أن يكون من 1 إلى 100'});
+  }).optional(),
   assetValue: z.number().min(0).nullable().optional(),
   assetCurrencyCode: z.string().trim().length(3).nullable().optional(),
   ownershipType: ownershipSchema.default('COMPANY'),
@@ -426,8 +431,12 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
     const rows = await getPool().query(
       `SELECT m.id,m.department_id,d.name AS department_name,m.code,m.name,m.machine_type,m.width_cm,
               m.fixed_location,m.manufacturer,m.model,m.serial_number,m.manufacture_year,m.power_kw,
-              m.rated_speed,m.rated_speed_unit,m.technical_specs,m.asset_value,m.asset_currency_code,m.ownership_type,m.owner_name,
-              m.operational_status,m.notes,m.version,m.is_active,m.created_at,m.updated_at
+              m.rated_speed,m.rated_speed_unit,m.technical_specs-'sheddingTypeImage' AS technical_specs,
+              (m.technical_specs ? 'sheddingTypeImage') AS has_shedding_type_image,m.asset_value,m.asset_currency_code,m.ownership_type,m.owner_name,
+              m.operational_status,m.notes,m.version,m.is_active,m.created_at,m.updated_at,
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('stage','WARPING','orderNo',x.warping_order_no,'workOrderNo',w.work_order_no,'status',x.status) ORDER BY x.created_at)
+                FROM manufacturing_warping_orders x JOIN manufacturing_work_orders w ON w.id=x.work_order_id AND w.company_id=x.company_id
+                WHERE x.company_id=m.company_id AND (x.warping_machine_id=m.id OR x.target_loom_id=m.id) AND x.status IN ('RELEASED','IN_PROGRESS')),'[]'::jsonb) AS current_operations
        FROM manufacturing_machines m
        LEFT JOIN manufacturing_departments d ON d.id=m.department_id AND d.company_id=m.company_id
        WHERE ${conditions.join(' AND ')} ORDER BY m.is_active DESC,m.code`, params,
@@ -471,7 +480,7 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
       const row = await getPool().query(
         `UPDATE manufacturing_machines SET department_id=$4,code=$5,name=$6,machine_type=$7,width_cm=$8,
           fixed_location=$9,manufacturer=$10,model=$11,serial_number=$12,manufacture_year=$13,power_kw=$14,
-          rated_speed=$15,rated_speed_unit=$16,technical_specs=COALESCE($17::jsonb,technical_specs),asset_value=$18,asset_currency_code=$19,
+          rated_speed=$15,rated_speed_unit=$16,technical_specs=CASE WHEN $17::jsonb IS NULL THEN technical_specs ELSE technical_specs || $17::jsonb END,asset_value=$18,asset_currency_code=$19,
           ownership_type=$20,owner_name=$21,notes=$22,is_active=$23,version=version+1,updated_by_user_id=$24,updated_at=now()
          WHERE id=$1 AND company_id=$2 AND version=$3 RETURNING *`,
         [id,req.user!.companyId,d.version,d.departmentId ?? null,normalizeReferenceCode(d.code),d.name,d.machineType,
@@ -483,6 +492,14 @@ export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
       if (!row.rows.length) return sendError(reply, 409, 'تم تعديل الماكينة من مستخدم آخر؛ حدّث الصفحة ثم أعد المحاولة', 'VERSION_CONFLICT');
       return reply.send({ ok: true, data: row.rows[0] });
     } catch (error) { return handleDbError(reply, error); }
+  });
+
+  app.get('/machines/:id/shedding-image', async (req, reply) => {
+    if (!requireAny(req.user, ['manufacturing.reference.view','manufacturing.dashboard.view'])) return sendError(reply,403,'ليست لديك صلاحية عرض صورة اللقية','FORBIDDEN');
+    const { id } = req.params as { id:string };
+    const row=await getPool().query<{image:string|null}>(`SELECT technical_specs->>'sheddingTypeImage' AS image FROM manufacturing_machines WHERE id=$1 AND company_id=$2`,[id,req.user!.companyId]);
+    if(!row.rows.length)return sendError(reply,404,'الماكينة غير موجودة','NOT_FOUND');
+    return reply.send({ok:true,data:{image:row.rows[0].image}});
   });
 
   app.post('/machines/:id/status', async (req, reply) => {
