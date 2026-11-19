@@ -91,5 +91,13 @@
   "status.ruleGraduated": "القاعدة المتدرّجة",
   "status.ruleLegacy": "القاعدة القديمة (يومان ثابتان)",
   "status.wagePlusPenalty": "أجر {{wage}} + جزاء {{penalty}}",
-  "table.status": "الحالة"
+  "table.status": "الحالة",
+  "modal.issueIncomplete": "{{count}} سجل ببصمة ناقصة (حضور بلا انصراف أو العكس): يُستورد بلا وقت ناقص وبساعات 0 لتراجعه يدوياً.",
+  "modal.issueMerged": "دُمج {{count}} صف مكرر (صدى انصراف وردية الليل السابقة) في سجل واحد لكل موظف ويوم.",
+  "modal.issueExcluded": "استُبعد {{count}} صف بتاريخ شاذ بعيد عن تاريخ الورقة (لن يُستورد):",
+  "modal.sheetLabel": "ورقة",
+  "modal.issueLongShift": "{{count}} سجل بأكثر من 16 ساعة (وردية مزدوجة محتملة): يُستورد، راجعه.",
+  "modal.issueEmptySheets": "{{count}} ورقة بلا بيانات (عطلة/راحة) تم تجاهلها: {{sheets}}",
+  "modal.issueUnreadable": "أوراق لا تُعرَف عناوينها وتم تخطيها: {{sheets}}",
+  "modal.incompleteKept": "{{count}} سجل ناقص لم يستبدل سجلاً كاملاً مستورداً سابقاً."
 }

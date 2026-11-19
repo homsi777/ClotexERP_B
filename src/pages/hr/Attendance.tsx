@@ -35,6 +35,7 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
   const [rowCount, setRowCount] = useState(0);
   const [sheetsProcessed, setSheetsProcessed] = useState(0);
   const [parsedRows, setParsedRows] = useState<Awaited<ReturnType<typeof parseAttendanceWorkbook>>['rows']>([]);
+  const [issues, setIssues] = useState<Awaited<ReturnType<typeof parseAttendanceWorkbook>>['issues'] | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +48,13 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
     if (!file) return;
     setError(null);
     setResult(null);
+    setIssues(null);
     setFileName(file.name);
     setLoadingFile(true);
     try {
       const parsed = await parseAttendanceWorkbook(file);
       setParsedRows(parsed.rows);
+      setIssues(parsed.issues);
       setRowCount(parsed.rows.length);
       setSheetsProcessed(parsed.sheetsProcessed);
     } catch (err) {
@@ -118,6 +121,7 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
                 {t('modal.importSuccess', { imported: result.imported, updated: result.updated })}
               </div>
               {result.protectedSkipped > 0 && <div>{t('modal.protectedSkipped', { count: result.protectedSkipped })}</div>}
+              {(result.incompleteKept ?? 0) > 0 && <div>{t('modal.incompleteKept', { count: result.incompleteKept })}</div>}
               {result.unmatched.length > 0 && (
                 <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-normal text-amber-800">
                   <div className="font-bold">{t('modal.unmatchedTitle', { count: result.unmatched.length })}</div>
@@ -141,6 +145,48 @@ function ImportModal({ open, onClose, onImported }: { open: boolean; onClose: ()
                 <div className="text-xs font-bold text-slate-500">{t('modal.summarySheets')}</div>
                 <div className="mt-1 text-sm font-black text-slate-900">{sheetsProcessed}</div>
               </div>
+            </div>
+          )}
+
+          {!result && issues && parsedRows.length > 0 && (
+            <div className="space-y-2 text-xs">
+              {issues.incompleteRows > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 font-bold text-amber-800">
+                  {t('modal.issueIncomplete', { count: issues.incompleteRows })}
+                </div>
+              )}
+              {issues.mergedDuplicates > 0 && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 p-2 text-sky-800">
+                  {t('modal.issueMerged', { count: issues.mergedDuplicates })}
+                </div>
+              )}
+              {issues.excluded.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800">
+                  <div className="font-bold">{t('modal.issueExcluded', { count: issues.excluded.length })}</div>
+                  <ul className="mt-1 list-inside list-disc space-y-0.5 font-normal">
+                    {issues.excluded.slice(0, 5).map((e, i) => (
+                      <li key={`${e.fingerprintCode}-${i}`}>
+                        {e.fingerprintCode} — {e.nameInFile} — {e.attendanceDate} ({t('modal.sheetLabel')} {e.sheetName})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {issues.longShiftRows > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-amber-800">
+                  {t('modal.issueLongShift', { count: issues.longShiftRows })}
+                </div>
+              )}
+              {issues.emptySheets.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600">
+                  {t('modal.issueEmptySheets', { count: issues.emptySheets.length, sheets: issues.emptySheets.join('، ') })}
+                </div>
+              )}
+              {issues.unreadableSheets.length > 0 && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 font-bold text-rose-700">
+                  {t('modal.issueUnreadable', { sheets: issues.unreadableSheets.join('، ') })}
+                </div>
+              )}
             </div>
           )}
 

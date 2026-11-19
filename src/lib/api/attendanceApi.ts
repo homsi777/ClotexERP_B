@@ -26,6 +26,7 @@ export interface AttendanceImportResultDto {
   imported: number;
   updated: number;
   protectedSkipped: number;
+  incompleteKept?: number;
   unmatched: Array<{ fingerprintCode: string; nameInFile: string; count: number }>;
 }
 

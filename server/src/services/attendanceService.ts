@@ -25,6 +25,8 @@ export type AttendanceImportResult = {
   imported: number;
   updated: number;
   protectedSkipped: number;
+  /** صفوف ناقصة (حضور بلا انصراف أو العكس) لم تُستبدَل بها سجلات كاملة مستوردة سابقاً. */
+  incompleteKept: number;
   unmatched: Array<{ fingerprintCode: string; nameInFile: string; count: number }>;
 };
 
@@ -47,6 +49,7 @@ export async function importAttendanceRows(
   let imported = 0;
   let updated = 0;
   let protectedSkipped = 0;
+  let incompleteKept = 0;
   const unmatchedCounts = new Map<string, { nameInFile: string; count: number }>();
 
   for (const row of input.rows) {
@@ -58,12 +61,21 @@ export async function importAttendanceRows(
       continue;
     }
 
-    const existingRecord = await client.query<{ id: string; source: string }>(
-      `SELECT id, source FROM attendance_daily_records WHERE company_id=$1 AND employee_id=$2 AND attendance_date=$3::date`,
+    const existingRecord = await client.query<{ id: string; source: string; check_in_time: string | null; check_out_time: string | null }>(
+      `SELECT id, source, check_in_time, check_out_time FROM attendance_daily_records WHERE company_id=$1 AND employee_id=$2 AND attendance_date=$3::date`,
       [input.companyId, employeeId, row.attendanceDate],
     );
     if (existingRecord.rows.length && existingRecord.rows[0].source === 'MANUAL') {
       protectedSkipped++;
+      continue;
+    }
+
+    // ملف جزئي/ناقص لا يستبدل سجلاً كاملاً مستورداً سابقاً (حضور وانصراف معاً) بسجل ناقص.
+    const incomingIncomplete = !(row.checkInTime && row.checkOutTime);
+    const existingComplete = existingRecord.rows.length
+      && existingRecord.rows[0].check_in_time && existingRecord.rows[0].check_out_time;
+    if (incomingIncomplete && existingComplete) {
+      incompleteKept++;
       continue;
     }
 
@@ -89,6 +101,7 @@ export async function importAttendanceRows(
     imported,
     updated,
     protectedSkipped,
+    incompleteKept,
     unmatched: Array.from(unmatchedCounts.entries()).map(([fingerprintCode, v]) => ({
       fingerprintCode,
       nameInFile: v.nameInFile,
