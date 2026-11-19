@@ -314,11 +314,16 @@ function WorkOrdersPanel({ t, canManage, canRelease }: { t: any; canManage: bool
       setBusy(false);
     }
   };
-  const action = async (row: ManufacturingWorkOrderSummary, target: "RELEASED" | "IN_PROGRESS" | "CANCELLED") => {
+  const action = async (row: ManufacturingWorkOrderSummary, target: "RELEASED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED") => {
     let reason: string | null = null;
     if (target === "CANCELLED") {
       reason = window.prompt(t("workOrders.cancelReason"))?.trim() || null;
       if (!reason) return;
+    }
+    if (target === "COMPLETED") {
+      const entered = window.prompt(t("workOrders.closureReason", { defaultValue: "ملاحظات الإغلاق وسبب أي نقص في الإنتاج المقبول" }));
+      if (entered === null) return;
+      reason = entered.trim() || null;
     }
     setBusy(true);
     setError("");
@@ -438,6 +443,11 @@ function WorkOrdersPanel({ t, canManage, canRelease }: { t: any; canManage: bool
                     {canManage && row.status === "RELEASED" && (
                       <button disabled={busy} onClick={() => void action(row, "IN_PROGRESS")} className="text-emerald-700 hover:underline">
                         {t("workOrders.start")}
+                      </button>
+                    )}
+                    {canManage && row.status === "IN_PROGRESS" && (
+                      <button disabled={busy} onClick={() => void action(row, "COMPLETED")} className="text-emerald-700 hover:underline">
+                        {t("workOrders.complete", { defaultValue: "إغلاق أمر الإنتاج" })}
                       </button>
                     )}
                     {canManage && ["DRAFT", "RELEASED", "IN_PROGRESS"].includes(row.status) && (

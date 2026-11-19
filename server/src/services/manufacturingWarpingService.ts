@@ -4,7 +4,7 @@ import type { ManufacturingSpecificationWorkbookPreview } from './manufacturingS
 async function nextNumber(client: PoolClient, companyId: string, table: string, column: string, prefix: string, lock: string): Promise<string> {
   await client.query(`SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`, [companyId, lock]);
   const result = await client.query<{ max_seq: string | null }>(
-    `SELECT MAX((substring(${column} from $2))::int)::text AS max_seq FROM ${table}
+    `SELECT MAX((substring(${column} from $2::int))::int)::text AS max_seq FROM ${table}
      WHERE company_id=$1 AND ${column} ~ $3`,
     [companyId, prefix.length + 1, `^${prefix}[0-9]{7}$`],
   );

@@ -176,6 +176,17 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
       if (balance.exceedsApproved) {
         await client.query("ROLLBACK"); return sendError(reply, 400, "مجموع الرولات يتجاوز الكمية النظيفة المعتمدة", "QUANTITY_EXCEEDED");
       }
+      const rollNumbers = parsed.data.rolls.map((roll) => roll.rollNo);
+      const duplicate = await client.query(
+        `SELECT id FROM manufacturing_raw_roll_outputs WHERE company_id=$1 AND weaving_run_id=$2 AND roll_no=ANY($3::text[]) LIMIT 1`,
+        [req.user!.companyId, batch.rows[0].weaving_run_id, rollNumbers],
+      );
+      if (new Set(rollNumbers).size !== rollNumbers.length || duplicate.rows.length) {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "أحد أرقام الرولات سبق استلامه أو تكرر في الطلب", "DUPLICATE_ROLL");
+      }
+      // Serialise manufacturing receipts across batches sharing the barcode range.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1),hashtext('MANUFACTURING_ROLL_RECEIPT'))", [req.user!.companyId]);
       for (const roll of parsed.data.rolls) {
         const barcode = await generateBarcode(client, req.user!.companyId);
         const fabricRoll = await client.query<{ id: string }>(

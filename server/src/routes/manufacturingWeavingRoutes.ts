@@ -123,6 +123,15 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
           "INVALID_STATE",
         );
       }
+      const assigned = await client.query(
+        `SELECT id FROM manufacturing_weaving_runs WHERE company_id=$1
+         AND (warp_beam_id=$2 OR sized_beam_id=$2) AND status IN ('DRAFT','IN_PROGRESS','PAUSED')`,
+        [req.user!.companyId, p.data.beamId],
+      );
+      if (assigned.rows.length) {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "المطواة مرتبطة بالفعل بتشغيل نسج غير مغلق", "BEAM_ALREADY_ASSIGNED");
+      }
       const loom = await client.query(
         `SELECT id FROM manufacturing_machines WHERE id=$1 AND company_id=$2 AND machine_type='LOOM' AND is_active AND operational_status='ACTIVE'`,
         [p.data.loomId, req.user!.companyId],
@@ -179,13 +188,18 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply, 409, "التشغيل ليس مسودة", "INVALID_STATE");
       }
       const x = r.rows[0];
+      const claimedBeam = await client.query(
+        `UPDATE ${x.warp_beam_id ? "manufacturing_warp_beams" : "manufacturing_sized_beams"}
+         SET status='IN_WEAVING',updated_at=now() WHERE id=$1 AND company_id=$2 AND status='READY_FOR_WEAVING' RETURNING id`,
+        [x.warp_beam_id ?? x.sized_beam_id, req.user!.companyId],
+      );
+      if (!claimedBeam.rows.length) {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "المطواة لم تعد متاحة للنسج", "INVALID_STATE");
+      }
       await client.query(
         `UPDATE manufacturing_weaving_runs SET status='IN_PROGRESS',started_at=now(),version=version+1,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [id, req.user!.companyId],
-      );
-      await client.query(
-        `UPDATE ${x.warp_beam_id ? "manufacturing_warp_beams" : "manufacturing_sized_beams"} SET status='IN_WEAVING',updated_at=now() WHERE id=$1 AND company_id=$2`,
-        [x.warp_beam_id ?? x.sized_beam_id, req.user!.companyId],
       );
       await client.query("COMMIT");
       return reply.send({ ok: true });
@@ -223,7 +237,7 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
       p.data.counterStart,
       p.data.counterEnd,
     );
-    if (produced === null)
+    if (produced === null || produced <= 0)
       return sendError(reply, 400, "عداد النهاية أقل من البداية", "VALIDATION");
     const client = await getPool().connect();
     try {
@@ -232,13 +246,18 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
         status: string;
         produced_length_m: string;
         run_no: string;
+        current_counter: string | null;
       }>(
-        `SELECT status,produced_length_m,run_no FROM manufacturing_weaving_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        `SELECT status,produced_length_m,run_no,current_counter FROM manufacturing_weaving_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,
         [id, req.user!.companyId],
       );
       if (!run.rows.length || run.rows[0].status !== "IN_PROGRESS") {
         await client.query("ROLLBACK");
         return sendError(reply, 409, "التشغيل ليس قيد العمل", "INVALID_STATE");
+      }
+      if (run.rows[0].current_counter != null && Math.abs(Number(run.rows[0].current_counter) - p.data.counterStart) > 0.0005) {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "عداد البداية لا يطابق آخر قراءة؛ حدّث البيانات لتجنب تكرار الإنتاج", "COUNTER_CONFLICT");
       }
       const shiftLog = await client.query<{ id: string }>(
         `INSERT INTO manufacturing_weaving_shift_logs(company_id,weaving_run_id,operator_employee_id,shift_type_id,production_date,counter_start,counter_end,produced_length_m,downtime_minutes,downtime_reason_id,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,

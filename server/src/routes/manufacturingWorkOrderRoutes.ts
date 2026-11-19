@@ -298,7 +298,7 @@ export const manufacturingWorkOrderRoutes: FastifyPluginAsync = async (app) => {
   app.post('/:id/transition', async (req, reply) => {
     if (!hasPermission(req.user, 'manufacturing.work_orders.manage')) return sendError(reply,403,'ليست لديك صلاحية تحديث أمر الإنتاج','FORBIDDEN');
     const { id } = req.params as { id: string };
-    const parsed = z.object({ targetStatus: z.enum(['IN_PROGRESS','CANCELLED']), version: z.number().int().positive(), reason: z.string().trim().max(2000).nullable().optional() }).safeParse(req.body);
+    const parsed = z.object({ targetStatus: z.enum(['IN_PROGRESS','COMPLETED','CANCELLED']), version: z.number().int().positive(), reason: z.string().trim().max(2000).nullable().optional() }).safeParse(req.body);
     if (!z.string().uuid().safeParse(id).success || !parsed.success) return sendError(reply,400,'بيانات الانتقال غير صالحة','VALIDATION');
     if (parsed.data.targetStatus === 'CANCELLED' && !parsed.data.reason) return sendError(reply,400,'سبب الإلغاء مطلوب','VALIDATION');
     const client = await getPool().connect();
@@ -314,9 +314,39 @@ export const manufacturingWorkOrderRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply,403,'إلغاء أمر صادر أو قيد التشغيل يتطلب صلاحية إصدار أوامر الإنتاج','FORBIDDEN');
       }
       if (!canTransitionManufacturingWorkOrder(current.rows[0].status, parsed.data.targetStatus)) { await client.query('ROLLBACK'); return sendError(reply,409,'انتقال حالة أمر الإنتاج غير مسموح','INVALID_STATE'); }
-      const eventType = parsed.data.targetStatus === 'IN_PROGRESS' ? 'STARTED' : 'CANCELLED';
+      if (parsed.data.targetStatus === 'CANCELLED') {
+        const children = await client.query(`SELECT id FROM manufacturing_warping_orders WHERE work_order_id=$1 AND company_id=$2 AND status<>'CANCELLED' LIMIT 1`, [id,req.user!.companyId]);
+        if (children.rows.length) {
+          await client.query('ROLLBACK');
+          return sendError(reply,409,'يجب إغلاق أو إلغاء مراحل الإنتاج التابعة قبل إلغاء أمر الإنتاج', 'OPEN_PRODUCTION');
+        }
+      }
+      if (parsed.data.targetStatus === 'COMPLETED') {
+        const check = await client.query<{ blocked: boolean; accepted: string; target: string }>(`
+          SELECT w.target_length_m target,
+          COALESCE((SELECT SUM(o.length_m) FROM manufacturing_raw_roll_outputs o JOIN manufacturing_weaving_runs r ON r.id=o.weaving_run_id AND r.company_id=o.company_id WHERE r.work_order_id=w.id AND r.company_id=w.company_id AND o.inspection_status='ACCEPTED'),0) accepted,
+          (NOT EXISTS(SELECT 1 FROM manufacturing_weaving_runs r WHERE r.work_order_id=w.id AND r.company_id=w.company_id AND r.status='COMPLETED')
+           OR EXISTS(SELECT 1 FROM manufacturing_warping_orders x WHERE x.work_order_id=w.id AND x.company_id=w.company_id AND x.status NOT IN ('COMPLETED','REJECTED','CANCELLED'))
+           OR EXISTS(SELECT 1 FROM manufacturing_warping_yarn_issues i JOIN manufacturing_warping_orders x ON x.id=i.warping_order_id AND x.company_id=i.company_id WHERE x.work_order_id=w.id AND x.company_id=w.company_id AND i.status<>'CLOSED')
+           OR EXISTS(SELECT 1 FROM manufacturing_warp_beams b JOIN manufacturing_warping_orders x ON x.id=b.warping_order_id AND x.company_id=b.company_id WHERE x.work_order_id=w.id AND x.company_id=w.company_id AND b.status NOT IN ('CONSUMED','REJECTED'))
+           OR EXISTS(SELECT 1 FROM manufacturing_sized_beams b JOIN manufacturing_sizing_orders s ON s.id=b.sizing_order_id AND s.company_id=b.company_id JOIN manufacturing_warp_beams i ON i.id=s.input_beam_id AND i.company_id=s.company_id JOIN manufacturing_warping_orders x ON x.id=i.warping_order_id AND x.company_id=i.company_id WHERE x.work_order_id=w.id AND x.company_id=w.company_id AND b.status NOT IN ('CONSUMED','REJECTED'))
+           OR EXISTS(SELECT 1 FROM manufacturing_weaving_runs r WHERE r.work_order_id=w.id AND r.company_id=w.company_id AND r.status NOT IN ('COMPLETED','CANCELLED'))
+           OR EXISTS(SELECT 1 FROM manufacturing_production_batches b JOIN manufacturing_weaving_runs r ON r.id=b.weaving_run_id AND r.company_id=b.company_id WHERE r.work_order_id=w.id AND r.company_id=w.company_id AND (b.status<>'CLOSED' OR b.pending_length_m>0 OR b.rework_length_m>0))) blocked
+          FROM manufacturing_work_orders w WHERE w.id=$1 AND w.company_id=$2`, [id,req.user!.companyId]);
+        if (check.rows[0].blocked) {
+          await client.query('ROLLBACK');
+          return sendError(reply,409,'يجب إغلاق المراحل وتسوية عهد الخيط والجودة واستلام الرولات قبل إغلاق الأمر', 'OPEN_PRODUCTION');
+        }
+        if (Number(check.rows[0].accepted) < Number(check.rows[0].target) && !parsed.data.reason) {
+          await client.query('ROLLBACK');
+          return sendError(reply,400,'سبب الإغلاق مطلوب عند نقص الإنتاج المقبول عن الكمية المستهدفة', 'CLOSURE_REASON_REQUIRED');
+        }
+      }
+      const eventType = parsed.data.targetStatus === 'IN_PROGRESS' ? 'STARTED' : parsed.data.targetStatus === 'COMPLETED' ? 'COMPLETED' : 'CANCELLED';
       await client.query(
         `UPDATE manufacturing_work_orders SET status=$3,version=version+1,updated_by_user_id=$4,updated_at=now(),
+           completed_by_user_id=CASE WHEN $3='COMPLETED' THEN $4 ELSE completed_by_user_id END,
+           completed_at=CASE WHEN $3='COMPLETED' THEN now() ELSE completed_at END,
            cancelled_by_user_id=CASE WHEN $3='CANCELLED' THEN $4 ELSE cancelled_by_user_id END,
            cancelled_at=CASE WHEN $3='CANCELLED' THEN now() ELSE cancelled_at END,
            cancellation_reason=CASE WHEN $3='CANCELLED' THEN $5 ELSE cancellation_reason END
