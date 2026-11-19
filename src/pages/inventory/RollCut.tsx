@@ -14,6 +14,7 @@ import {
 import { previewCutLabels, type RollLabelPreviewDto, type LabelTemplateDto } from '../../lib/api/labelsApi';
 import { printRollLabels, repeatRollLabel } from '../../lib/printing/printRollLabels';
 import { useToast } from '../../components/NonBlockingToast';
+import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
 
 const num = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -30,7 +31,8 @@ export const RollCut: React.FC = () => {
   const [customers, setCustomers] = useState<ApiCustomer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  // عملة البيع = العملة الافتراضية للفرع (مصر=الجنيه)، لا عملة تكلفة التوب؛ تُغيَّر يدوياً.
+  const [currency, setCurrency] = useCurrencyWithBranchDefault();
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);
   const [cashboxes, setCashboxes] = useState<CashboxDto[]>([]);
   const [cashboxId, setCashboxId] = useState('');
@@ -117,7 +119,6 @@ export const RollCut: React.FC = () => {
         showToast({ type: 'warning', message: t('notAvailable') });
       }
       setRoll(exact);
-      if (exact.currency_code) setCurrency(exact.currency_code);
     } catch (e) {
       showToast({ type: 'error', message: e instanceof Error ? e.message : t('lookupFailed') });
     } finally {

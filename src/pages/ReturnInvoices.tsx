@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { useTranslation } from 'react-i18next';
 import { Search, Filter, Plus, ArrowLeftRight, Loader2, Eye, Pencil, Ban, Printer, Share2 } from 'lucide-react';
 import {
@@ -162,7 +163,7 @@ export const ReturnInvoices = () => {
     {},
   );
 
-  const [formCurrencyCode, setFormCurrencyCode] = useState<SupportedCurrencyCode>('USD');
+  const [formCurrencyCode, setFormCurrencyCode] = useCurrencyWithBranchDefault<SupportedCurrencyCode>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [formExchangeRateToUsd, setFormExchangeRateToUsd] = useState('1');
   const [formDiscount, setFormDiscount] = useState('0');
   const [formTax, setFormTax] = useState('0');

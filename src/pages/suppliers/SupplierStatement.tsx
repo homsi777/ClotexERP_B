@@ -1149,11 +1149,11 @@ export const SupplierStatement = () => {
                       <td className="px-4 py-3 font-mono text-slate-700">
                         {row.fabric ? (
                           <>
-                            {row.fabric.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {row.fabric.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {row.currency || 'USD'}
                             <span className="block text-xs text-slate-500">
                               {row.fabric.rollsCount} {t('itemsTable.colRollsCount')} ·{' '}
                               {row.fabric.totalQuantity.toLocaleString('ar')} {t('statementTable.meterAbbr')} ×{' '}
-                              {row.fabric.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              {row.fabric.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })} {row.currency || 'USD'}
                             </span>
                           </>
                         ) : row.debit > 0 ? (

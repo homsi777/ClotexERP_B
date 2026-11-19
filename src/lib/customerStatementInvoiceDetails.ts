@@ -77,6 +77,8 @@ export type AccountStatementSourceRow = {
   type?: string;
   sourceId?: string;
   notes?: string | null;
+  /** عملة الحركة الأصلية (الفاتورة/السند) كما يرسلها الخادم. */
+  currency?: string;
 };
 
 export type AccountStatementDisplayRow = {
@@ -89,6 +91,8 @@ export type AccountStatementDisplayRow = {
   credit: number;
   balance: number;
   isCustomerDiscount?: boolean;
+  /** عملة الحركة الأصلية — أسعار البنود وإجمالي الفاتورة تُعرض بها لا بعملة عرض الكشف. */
+  currency?: string;
   /** يُمرَّر من صف المصدر الخام — يتيح فتح المستند الأصلي من الواجهة. */
   sourceType?: string;
   sourceId?: string;
@@ -145,6 +149,7 @@ export function flattenAccountStatementDisplayRows(args: {
         for (const line of expanded) {
           pending.push({
             ...line,
+            currency: row.currency,
             balance: 0,
             sortDate: line.date,
             sortKey: `${line.documentNo}:${line.fabric.fabricName}`,
@@ -159,6 +164,7 @@ export function flattenAccountStatementDisplayRows(args: {
         documentNo: String(row.documentNo ?? ''),
         typeLabel: row.typeLabel || row.description || defaultTypeLabel,
         fabric,
+        currency: row.currency,
         debit: invoiceRows.reduce((sum, r) => sum + Number(r.debit || 0), 0),
         credit: invoiceRows.reduce((sum, r) => sum + Number(r.credit || 0), 0),
         balance: 0,
@@ -179,6 +185,7 @@ export function flattenAccountStatementDisplayRows(args: {
           : row.typeLabel || row.description || '',
       detailText: row.type === 'CUSTOMER_DISCOUNT' ? String(row.description || row.notes || '').trim() || undefined : undefined,
       fabric: null,
+      currency: row.currency,
       debit: Number(row.debit || 0),
       credit: Number(row.credit || 0),
       sourceType: row.sourceType,
@@ -456,4 +463,21 @@ export async function loadCustomerSaleInvoiceDetails(
   console.log('[invoiceDetails] total invoices loaded:', invoices.length, 'with items:', invoices.reduce((s, inv) => s + (inv.items?.length ?? 0), 0));
   const { invoiceDetailsBySourceId, invoiceDetailsByDocumentNo } = buildInvoiceDetailsMaps(invoices);
   return { invoices, invoiceDetailsBySourceId, invoiceDetailsByDocumentNo };
+}
+
+/**
+ * مجموع إجمالي بنود الفواتير لكل عملة أصلية على حدة — لا يُجمع الجنيه مع الدولار أبداً.
+ * يُستعمل بتذييل جدول الكشف (ولا يتضمن سطوراً بلا بنود).
+ */
+export function sumFabricAmountsByCurrency(
+  rows: Array<{ fabric: { totalAmount: number } | null; currency?: string }>,
+  fallbackCurrency: string,
+): Array<{ currency: string; total: number }> {
+  const totals = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.fabric) continue;
+    const cur = (r.currency || fallbackCurrency || 'USD').trim().toUpperCase();
+    totals.set(cur, (totals.get(cur) ?? 0) + Number(r.fabric.totalAmount || 0));
+  }
+  return Array.from(totals.entries()).map(([currency, total]) => ({ currency, total: Math.round(total * 100) / 100 }));
 }

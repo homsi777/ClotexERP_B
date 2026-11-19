@@ -10,7 +10,6 @@
   "nav.backup": "قواعد البيانات (النسخ الاحتياطي)",
   "nav.themes": "الثيمات و عرض",
   "nav.activation": "تفعيل النظام",
-
   "activation.title": "تفعيل النظام",
   "activation.description": "التفعيل يدار من الخادم فقط: التوليد من لوحة المسؤول أدناه، التخزين في قاعدة البيانات كـ hash، ولا يُستخدم ملف محلي مثل activation-keys.txt. الجدول يعرض لاحقة المفتاح والحالة فقط.",
   "activation.refresh": "تحديث",
@@ -42,7 +41,6 @@
   "activation.keyFormatError": "صيغة المفتاح يجب أن تكون XXXX.XXXX.XXXX.XXXX",
   "activation.activationSuccess": "تم تفعيل النظام بنجاح.",
   "activation.activationFailed": "تعذر تفعيل النظام. تحقق من المفتاح وحاول مجدداً.",
-
   "toast.exchangeRatesLoadFailed": "تعذر تحميل أسعار الصرف",
   "toast.purgeAdminOnly": "هذا الإجراء متاح لمدير النظام فقط.",
   "toast.purgeNeedsAck": "يجب تأكيد فهمك للتحذير أولاً.",
@@ -60,19 +58,15 @@
   "toast.userCreateFailed": "تعذر إضافة المستخدم.",
   "toast.userUpdated": "تم تحديث المستخدم.",
   "toast.userUpdateFailed": "تعذر تحديث المستخدم.",
-
   "status.loadSettingsFailed": "تعذر تحميل إعدادات الخادم. يمكن متابعة ضبط الواجهة محليا.",
   "status.saving": "جاري حفظ الإعدادات...",
   "status.saved": "تم حفظ الإعدادات في قاعدة البيانات.",
   "status.saveFailedLocal": "تعذر الحفظ في قاعدة البيانات، وتم الاحتفاظ بنسخة محلية مؤقتة.",
-
   "page.title": "إعدادات النظام",
   "page.subtitle": "إدارة الإعدادات العامة والتفضيلات والصلاحيات",
   "page.saveAll": "حفظ كافة التغييرات",
-
   "stub.title": "قسم قيد الإعداد",
   "stub.body": "هذا القسم سيُفعَّل لاحقاً ضمن خطة التطوير. استخدم «{{themesLabel}}» لتخصيص المظهر الآن.",
-
   "general.title": "الإعدادات العامة",
   "general.description": "تشغيل النظام اليومي، اللغة، المخزون، وسلوك الحفظ.",
   "general.defaultLanguage": "اللغة الافتراضية",
@@ -81,7 +75,6 @@
   "general.lowStockThreshold": "حد التنبيه للمخزون المنخفض",
   "general.autoSaveDrafts": "حفظ المسودات تلقائيا",
   "general.requireWarehouseOnSale": "إلزام تحديد المستودع في البيع",
-
   "invoice.title": "الفوترة والضرائب",
   "invoice.description": "أرقام الفواتير، الضريبة، QR، وسياسات المخزون أثناء الفوترة.",
   "invoice.salesPrefix": "بادئة فواتير البيع",
@@ -89,7 +82,6 @@
   "invoice.taxRate": "نسبة الضريبة %",
   "invoice.showQr": "إظهار QR على الفاتورة",
   "invoice.allowNegativeStock": "السماح بالبيع على مخزون سالب",
-
   "backup.title": "قواعد البيانات والنسخ الاحتياطي",
   "backup.description": "سياسة النسخ الاحتياطي والاحتفاظ بدون عرض كلمات مرور أو مفاتيح اتصال.",
   "backup.autoBackup": "تفعيل النسخ الاحتياطي التلقائي",
@@ -100,7 +92,6 @@
   "backup.manualBody": "ينشئ نسخة من قاعدة البيانات ثم يحمّلها إلى هاتفك أو جهازك (متصفح الجوال أو الكمبيوتر). على الهاتف اختر «حفظ في الملفات» أو أرسل الملف إلى واتساب/بريدك للحفظ الآمن.",
   "backup.downloading": "جاري إنشاء وتنزيل النسخة...",
   "backup.downloadNow": "تنزيل نسخة احتياطية الآن",
-
   "purge.title": "منطقة خطرة — مسح بيانات الأعمال",
   "purge.explanation": "يحذف هذا الإجراء الأقمشة والمخزون والفواتير والعملاء والموردين والسندات وحركات الصندوق والقيود المحاسبية المرتبطة بها، وسجل الكارتيلات (الملصقات وأنواع الألياف). يُبقي المستخدمين والمستودعات الفارغة وإعدادات النظام والرواتب وقالب اللصاقات.",
   "purge.irreversible": "لا يمكن التراجع عن هذا الإجراء — خذ نسخة احتياطية أولاً.",
@@ -110,7 +101,6 @@
   "purge.passwordLabel": "كلمة مرور حسابك الحالي",
   "purge.purging": "جاري المسح...",
   "purge.purgeButton": "مسح بيانات الأعمال نهائياً",
-
   "users.title": "المستخدمين والصلاحيات",
   "users.description": "إنشاء مستخدمين وربطهم بأدوار وصلاحيات محفوظة في قاعدة البيانات.",
   "users.refresh": "تحديث",
@@ -141,7 +131,6 @@
   "users.rolePermissionsTitle": "صلاحيات الدور",
   "users.rolePermissionsHelp": "عدّلي الصلاحيات بالنقر على المربعات — يُحفظ التعديل مباشرة. تعديل الأدوار عام لكل الحسابات، لذا متاح لمدير المنصة فقط.",
   "users.noPermissionsLoaded": "لا توجد صلاحيات محملة من الخادم.",
-
   "company.basicInfoTitle": "المعلومات الأساسية للمنشأة",
   "company.mockNameAr": "مؤسسة الخياطة الذهبية",
   "company.mockAddress": "الملز، شارع جرير، مبنى رقم 45، الرياض، المملكة العربية السعودية",
@@ -188,7 +177,6 @@
   "company.labelPreviewLengthValue": "150 متر",
   "company.labelPreviewWeightField": "الوزن:",
   "company.labelPreviewBarcodeCaption": "الباركود: ABC-123456",
-
   "editUserModal.title": "تعديل مستخدم",
   "editUserModal.usernamePlaceholder": "اسم المستخدم",
   "editUserModal.fullNamePlaceholder": "الاسم الكامل",
@@ -198,7 +186,6 @@
   "editUserModal.cancel": "إلغاء",
   "editUserModal.saving": "جاري الحفظ...",
   "editUserModal.save": "حفظ التعديل",
-
   "mail.title": "إعدادات المراسلة",
   "mail.description": "بيانات البريد والإرسال الخارجي مع إبقاء الأسرار خارج الواجهة.",
   "mail.senderNameLabel": "اسم المرسل",
@@ -224,7 +211,6 @@
   "mail.telegramRecentChatsTitle": "آخر المحادثات الواردة للبوت",
   "mail.telegramColName": "الاسم",
   "mail.telegramColLastMessage": "آخر رسالة",
-
   "desktop.header.title": "تطبيق سطح المكتب",
   "desktop.header.subtitle": "تهيئة الاتصال، الطابعات، والطباعة الصامتة",
   "desktop.browserNotice.label": "ملاحظة:",
@@ -282,7 +268,6 @@
   "desktop.security.sshVpnCreds": "بيانات اعتماد SSH أو VPS",
   "desktop.security.telegramToken": "توكن Telegram",
   "desktop.security.serverSideOnly": "الاتصال بـ PostgreSQL يتم فقط من جانب الخادم (Backend API).",
-
   "companyManagement.title": "الحسابات",
   "companyManagement.description": "كل حساب معزول تماماً عن الحسابات الأخرى (مستودعات، فواتير، عملاء، خزينة...). هذا القسم يظهر فقط لمدير المنصة.",
   "companyManagement.addBranch": "إضافة فرع جديد",
@@ -322,7 +307,6 @@
   "companyManagement.createSuccess": "تم إنشاء الحساب بنجاح.",
   "companyManagement.createFailed": "تعذر إنشاء الحساب.",
   "companyManagement.editSaveFailed": "تعذر حفظ التعديل.",
-
   "telegramBot.targetUser": "مستخدم",
   "telegramBot.targetCustomer": "عميل",
   "telegramBot.targetSupplier": "مورد",
@@ -394,7 +378,6 @@
   "telegramBot.notesLabel": "ملاحظات",
   "telegramBot.cancelButton": "إلغاء",
   "telegramBot.saveLinkButton": "حفظ الربط",
-
   "activeDevices.loadFailed": "تعذر تحميل الأجهزة النشطة",
   "activeDevices.currentSessionLabel": "جلستك الحالية",
   "activeDevices.accountLabel": "حساب {{username}}",
@@ -422,7 +405,6 @@
   "activeDevices.loggingOut": "جاري...",
   "activeDevices.logoutButton": "تسجيل خروج",
   "activeDevices.footerNote": "يُحدَّث النشاط تلقائياً كل 45 ثانية لكل مستخدم داخل النظام. تُزال الجلسة بعد 5 دقائق بدون نشاط.",
-
   "themeDisplay.title": "الثيمات والعرض",
   "themeDisplay.subtitle": "تخصيص ألوان الواجهة والخط العربي مع الحفاظ على تناسق الجداول والبطاقات الحالية في النظام.",
   "themeDisplay.autoSaveBadge": "يُحفظ تلقائياً على هذا المتصفح",
@@ -443,5 +425,8 @@
   "themeDisplay.letterSpacingLabel": "تباعد الأحرف ({{sign}}{{value}} em)",
   "themeDisplay.letterSpacingNarrow": "أضيق −0.04",
   "themeDisplay.letterSpacingWide": "أوسع +0.09",
-  "themeDisplay.letterSpacingHelp": "يتحكم في مسافة الحروف العربية أفقيًا؛ استخدم قيمًا صغيرة لتجنّب تشويش القراءة في الجداول."
+  "themeDisplay.letterSpacingHelp": "يتحكم في مسافة الحروف العربية أفقيًا؛ استخدم قيمًا صغيرة لتجنّب تشويش القراءة في الجداول.",
+  "companyManagement.defaultCurrencyForBranchLabel": "العملة الافتراضية للمعاملات المالية لهذا الفرع",
+  "companyManagement.defaultCurrencyUnset": "غير مضبوطة (USD كالسابق)",
+  "companyManagement.defaultCurrencyHelp": "قيمة ابتدائية بنماذج الفواتير والمصروفات…، ويظل تغييرها يدوياً مسموحاً بكل معاملة. لا تغيّر عملة الأساس المحاسبية (USD)."
 }

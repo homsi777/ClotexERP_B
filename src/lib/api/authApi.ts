@@ -10,6 +10,8 @@ export type AuthUser = {
   companyName: string;
   /** لغة الواجهة الافتراضية للفرع الحالي (سوريا=ar، تركيا=tr) — تُطبَّق تلقائياً ما لم يبدّل المستخدم يدوياً. */
   companyDefaultLanguage: 'ar' | 'tr';
+  /** العملة الافتراضية للمعاملات المالية بالفرع الحالي (مصر=EGP) — قيمة ابتدائية للنماذج، وتغييرها يدوياً مسموح. USD إن لم تُضبط. */
+  companyDefaultCurrency: string;
   /** حساب المستخدم الأصلي في قاعدة البيانات — لا يتغيّر بتبديل الحساب. */
   homeCompanyId: string;
   role: string;

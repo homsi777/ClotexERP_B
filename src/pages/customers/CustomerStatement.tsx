@@ -1692,9 +1692,10 @@ export const CustomerStatement = () => {
                         {row.fabric
                           ? (
                               <>
-                                {row.fabric.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {statementCurrency}
+                                {/* إجمالي الفاتورة وسعر المتر بعملة الفاتورة الأصلية، لا بعملة عرض الكشف */}
+                                {row.fabric.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {row.currency || statementCurrency}
                                 <span className="block text-xs text-slate-600">
-                                  {row.fabric.totalQuantity.toLocaleString('ar')} {t('statementTable.meterAbbr')} × {row.fabric.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  {row.fabric.totalQuantity.toLocaleString('ar')} {t('statementTable.meterAbbr')} × {row.fabric.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })} {row.currency || statementCurrency}
                                 </span>
                               </>
                             )

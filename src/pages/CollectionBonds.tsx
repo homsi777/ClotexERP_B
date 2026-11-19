@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { useTranslation } from 'react-i18next';
 import { Printer, FileText, Search, CreditCard, Loader2, Plus, Trash2 } from 'lucide-react';
 import { createVoucher, confirmVoucher, getVoucher, type VoucherLineInput, type VoucherLinePaymentMethod, type VoucherRow } from '../lib/api/vouchersApi';
@@ -51,7 +52,7 @@ export const CollectionBonds = () => {
   const [partyName, setPartyName] = useState('');
   const [purpose, setPurpose] = useState<VoucherPurpose>('INVOICE_PAYMENT');
   const [description, setDescription] = useState('');
-  const [currencyCode, setCurrencyCode] = useState<'USD' | 'SYP' | 'TRY' | 'EGP'>('USD');
+  const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
   const [splitMode, setSplitMode] = useState(false);
   const [splitLines, setSplitLines] = useState<SplitLine[]>([]);

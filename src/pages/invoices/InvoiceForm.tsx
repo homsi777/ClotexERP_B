@@ -1,4 +1,5 @@
 import React, { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
 import { createPortal, flushSync } from 'react-dom';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
@@ -579,7 +580,8 @@ export const InvoiceForm = () => {
   const [warehouse, setWarehouse] = useState('');
   const [apiWarehouses, setApiWarehouses] = useState<ApiWarehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(true);
-  const [currency, setCurrency] = useState('USD');
+  // العملة الافتراضية للفرع (مصر=الجنيه) فقط كقيمة ابتدائية؛ يغيّرها المستخدم متى شاء.
+  const [currency, setCurrency] = useCurrencyWithBranchDefault();
   const [exchangeRates, setExchangeRates] = useState<ExchangeRateDto[]>([]);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
   const [items, setItems] = useState<InvoiceFormItem[]>([emptyItem()]);
