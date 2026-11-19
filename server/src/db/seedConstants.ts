@@ -35,6 +35,8 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'manufacturing.warping.manage', name: 'إدارة وتنفيذ أوامر التسدية', category: 'manufacturing' },
   { code: 'manufacturing.warping.quality', name: 'فحص واعتماد المطاوي', category: 'manufacturing' },
   { code: 'manufacturing.yarn_issue.approve', name: 'اعتماد وصرف الخيط لأوامر التسدية', category: 'manufacturing' },
+  { code: 'manufacturing.sizing.view', name: 'عرض أوامر التصميغ والمطاوي', category: 'manufacturing' },
+  { code: 'manufacturing.sizing.manage', name: 'إدارة وتنفيذ أوامر التصميغ', category: 'manufacturing' },
   { code: 'manufacturing.machines.manage', name: 'إدارة الماكينات', category: 'manufacturing' },
   { code: 'manufacturing.maintenance.manage', name: 'إدارة أعطال وصيانة الماكينات', category: 'manufacturing' },
   { code: 'manufacturing.quality.catalog.manage', name: 'إدارة مكتبة عيوب الجودة', category: 'manufacturing' },

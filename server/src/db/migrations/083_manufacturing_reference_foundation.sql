@@ -15,6 +15,8 @@ INSERT INTO permissions (code, name, category) VALUES
   ('manufacturing.warping.manage', 'إدارة وتنفيذ أوامر التسدية', 'manufacturing'),
   ('manufacturing.warping.quality', 'فحص واعتماد المطاوي', 'manufacturing'),
   ('manufacturing.yarn_issue.approve', 'اعتماد وصرف الخيط لأوامر التسدية', 'manufacturing'),
+  ('manufacturing.sizing.view', 'عرض أوامر التصميغ والمطاوي', 'manufacturing'),
+  ('manufacturing.sizing.manage', 'إدارة وتنفيذ أوامر التصميغ', 'manufacturing'),
   ('manufacturing.machines.manage', 'إدارة الماكينات', 'manufacturing'),
   ('manufacturing.maintenance.manage', 'إدارة أعطال وصيانة الماكينات', 'manufacturing'),
   ('manufacturing.quality.catalog.manage', 'إدارة مكتبة عيوب الجودة', 'manufacturing')
@@ -37,6 +39,8 @@ JOIN permissions p ON p.code IN (
   'manufacturing.warping.manage',
   'manufacturing.warping.quality',
   'manufacturing.yarn_issue.approve',
+  'manufacturing.sizing.view',
+  'manufacturing.sizing.manage',
   'manufacturing.machines.manage',
   'manufacturing.maintenance.manage',
   'manufacturing.quality.catalog.manage'
@@ -320,6 +324,38 @@ CREATE TABLE manufacturing_warp_beams (
 );
 CREATE INDEX manufacturing_warp_beams_status ON manufacturing_warp_beams(company_id,status,created_at DESC);
 
+CREATE TABLE manufacturing_sizing_orders (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ sizing_order_no text NOT NULL, input_beam_id uuid NOT NULL, sizing_machine_id uuid, operator_employee_id uuid, shift_type_id uuid,
+ status text NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','IN_PROGRESS','COMPLETED','REJECTED','CANCELLED')),
+ recipe jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(recipe)='object'), planned_length_m numeric(14,3) NOT NULL CHECK(planned_length_m>0),
+ actual_length_m numeric(14,3), input_weight_kg numeric(12,3), output_weight_kg numeric(12,3), waste_weight_kg numeric(12,3),
+ moisture_percent numeric(7,3), stretch_percent numeric(7,3), quality_status text NOT NULL DEFAULT 'PENDING' CHECK(quality_status IN ('PENDING','ACCEPTED','CONDITIONAL','REJECTED')),
+ quality_notes text, notes text, version integer NOT NULL DEFAULT 1, started_at timestamptz, completed_at timestamptz,
+ created_by_user_id uuid REFERENCES users(id), updated_by_user_id uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(company_id,sizing_order_no), UNIQUE(company_id,id),
+ FOREIGN KEY(company_id,input_beam_id) REFERENCES manufacturing_warp_beams(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,operator_employee_id) REFERENCES payroll_employees(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,shift_type_id) REFERENCES attendance_shift_types(company_id,id) ON DELETE RESTRICT
+);
+CREATE INDEX manufacturing_sizing_orders_status ON manufacturing_sizing_orders(company_id,status,created_at DESC);
+
+CREATE TABLE manufacturing_sized_beams (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ sizing_order_id uuid NOT NULL, input_beam_id uuid NOT NULL, beam_no text NOT NULL, barcode text NOT NULL,
+ length_m numeric(14,3) NOT NULL CHECK(length_m>=0), weight_kg numeric(12,3), status text NOT NULL DEFAULT 'READY_FOR_WEAVING' CHECK(status IN ('READY_FOR_WEAVING','IN_WEAVING','REJECTED','CONSUMED')),
+ quality_status text NOT NULL CHECK(quality_status IN ('ACCEPTED','CONDITIONAL','REJECTED')), notes text, created_by_user_id uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(company_id,beam_no),UNIQUE(company_id,barcode),UNIQUE(company_id,id),
+ FOREIGN KEY(company_id,sizing_order_id) REFERENCES manufacturing_sizing_orders(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,input_beam_id) REFERENCES manufacturing_warp_beams(company_id,id) ON DELETE RESTRICT
+);
+
+CREATE TABLE manufacturing_sizing_events (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,sizing_order_id uuid NOT NULL,
+ event_type text NOT NULL CHECK(event_type IN ('CREATED','STARTED','COMPLETED','REJECTED','CANCELLED')),details jsonb NOT NULL DEFAULT '{}',created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(company_id,sizing_order_id) REFERENCES manufacturing_sizing_orders(company_id,id) ON DELETE CASCADE
+);
+
 CREATE TABLE manufacturing_warping_yarn_issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   warping_order_id uuid NOT NULL, issue_no text NOT NULL,
@@ -428,6 +464,7 @@ ALTER TABLE manufacturing_warping_orders
   ADD CONSTRAINT manufacturing_warping_orders_loom_fk
     FOREIGN KEY (company_id, target_loom_id)
     REFERENCES manufacturing_machines(company_id, id) ON DELETE RESTRICT;
+ALTER TABLE manufacturing_sizing_orders ADD CONSTRAINT manufacturing_sizing_orders_machine_fk FOREIGN KEY(company_id,sizing_machine_id) REFERENCES manufacturing_machines(company_id,id) ON DELETE RESTRICT;
 
 CREATE TABLE manufacturing_machine_status_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
