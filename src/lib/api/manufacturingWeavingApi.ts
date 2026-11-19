@@ -29,7 +29,4 @@ export const createWeavingRun = (body: Record<string, unknown>) =>
 export const startWeavingRun = (id: string) => apiFetch(`${base}/${id}/start`, { method: "POST", body: "{}" });
 export const addWeavingShiftLog = (id: string, body: Record<string, unknown>) =>
   apiFetch(`${base}/${id}/shift-logs`, { method: "POST", body: JSON.stringify(body) });
-export type RawRollOutput={id:string;run_no:string;production_batch_no:string;roll_no:string;production_barcode:string;length_m:number;inspection_status:string;loom_code:string;result_fabric_roll_id:string|null};
-export const completeWeavingRun=(id:string,rolls:Array<{rollNo:string;lengthM:number}>)=>apiFetch(`${base}/${id}/complete`,{method:'POST',body:JSON.stringify({rolls})});
-export const listRawRollOutputs=()=>apiFetch<{ok:true;data:RawRollOutput[]}>(`${base}/raw-rolls/pending`).then(r=>r.data);
-export const inspectRawRoll=(id:string,body:Record<string,unknown>)=>apiFetch(`${base}/raw-rolls/${id}/inspect`,{method:'POST',body:JSON.stringify(body)});
+export const completeWeavingRun=(id:string)=>apiFetch(`${base}/${id}/complete`,{method:'POST',body:'{}'});

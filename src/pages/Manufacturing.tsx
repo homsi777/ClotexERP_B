@@ -7,7 +7,7 @@ import { createManufacturingWorkOrder, listManufacturingWorkOrders, releaseManuf
 import { WarpingOrdersPanel } from "../components/manufacturing/WarpingOrdersPanel";
 import { SizingOrdersPanel } from "../components/manufacturing/SizingOrdersPanel";
 import { WeavingRunsPanel } from "../components/manufacturing/WeavingRunsPanel";
-import { RawRollInspectionPanel } from "../components/manufacturing/RawRollInspectionPanel";
+import { ProductionQualityPanel } from "../components/manufacturing/ProductionQualityPanel";
 
 type Tab = "machines" | "departments" | "downtime" | "defects" | "specifications" | "workOrders" | "warping" | "sizing" | "weaving" | "rawInspection";
 const input = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
@@ -48,6 +48,7 @@ export const Manufacturing = () => {
   const canSizingManage=has("manufacturing.sizing.manage");
   const canWeavingManage=has("manufacturing.weaving.manage");
   const canRawInspection=has("manufacturing.raw_inspection.manage");
+  const canInventoryManage=has("inventory.manage");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -168,7 +169,7 @@ export const Manufacturing = () => {
           ) : tab === "weaving" ? (
             <WeavingRunsPanel canManage={canWeavingManage} />
           ) : tab === "rawInspection" ? (
-            <RawRollInspectionPanel canManage={canRawInspection} defects={defects} />
+            <ProductionQualityPanel canInspect={canRawInspection} canReceive={canInventoryManage} defects={defects} />
           ) : loading ? (
             <div className="p-12 text-center text-slate-500">{t("loading")}</div>
           ) : tab === "machines" ? (

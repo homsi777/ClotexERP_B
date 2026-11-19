@@ -189,7 +189,7 @@ export function WeavingRunsPanel({ canManage }: { canManage: boolean }) {
                       }}
                     >
                       تسجيل وردية
-                    </button><button className={cls} onClick={()=>{const value=prompt("أطوال الرولات الناتجة مفصولة بفاصلة",String(r.produced_length_m));if(!value)return;const lengths=value.split(',').map(x=>Number(x.trim()));if(lengths.length&&lengths.every(x=>Number.isFinite(x)&&x>0))void run(()=>completeWeavingRun(r.id,lengths.map((lengthM,index)=>({rollNo:`${r.run_no}-R${index+1}`,lengthM}))));}}>إغلاق وإنتاج رولات</button></>
+                    </button><button className={cls} onClick={()=>{if(confirm("إغلاق تشغيل النسج وإرسال دفعات الورديات المسجلة إلى الجودة؟"))void run(()=>completeWeavingRun(r.id));}}>إغلاق التشغيل</button></>
                   )}
                 </td>
               </tr>

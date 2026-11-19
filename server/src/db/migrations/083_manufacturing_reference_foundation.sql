@@ -383,19 +383,47 @@ CREATE TABLE manufacturing_weaving_shift_logs (
  operator_employee_id uuid,shift_type_id uuid,production_date date NOT NULL,counter_start numeric(16,3) NOT NULL,counter_end numeric(16,3) NOT NULL,
  produced_length_m numeric(14,3) NOT NULL CHECK(produced_length_m>=0),downtime_minutes integer NOT NULL DEFAULT 0 CHECK(downtime_minutes>=0),
  downtime_reason_id uuid,notes text,created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(company_id,id),
  FOREIGN KEY(company_id,weaving_run_id) REFERENCES manufacturing_weaving_runs(company_id,id) ON DELETE RESTRICT,
  FOREIGN KEY(company_id,operator_employee_id) REFERENCES payroll_employees(company_id,id) ON DELETE RESTRICT,
  FOREIGN KEY(company_id,shift_type_id) REFERENCES attendance_shift_types(company_id,id) ON DELETE RESTRICT
 );
 
+CREATE TABLE manufacturing_production_batches (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ batch_no text NOT NULL,weaving_run_id uuid NOT NULL,shift_log_id uuid NOT NULL,
+ produced_length_m numeric(14,3) NOT NULL CHECK(produced_length_m>=0),
+ clean_length_m numeric(14,3) NOT NULL DEFAULT 0 CHECK(clean_length_m>=0),
+ rework_length_m numeric(14,3) NOT NULL DEFAULT 0 CHECK(rework_length_m>=0),
+ rejected_length_m numeric(14,3) NOT NULL DEFAULT 0 CHECK(rejected_length_m>=0),
+ pending_length_m numeric(14,3) NOT NULL CHECK(pending_length_m>=0),
+ status text NOT NULL DEFAULT 'PENDING_INSPECTION' CHECK(status IN ('PENDING_INSPECTION','INSPECTED','APPROVED','CLOSED')),
+ inspection_notes text,inspected_by_user_id uuid REFERENCES users(id),inspected_at timestamptz,
+ approved_by_user_id uuid REFERENCES users(id),approved_at timestamptz,
+ created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(company_id,batch_no),UNIQUE(company_id,shift_log_id),UNIQUE(company_id,id),
+ FOREIGN KEY(company_id,weaving_run_id) REFERENCES manufacturing_weaving_runs(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,shift_log_id) REFERENCES manufacturing_weaving_shift_logs(company_id,id) ON DELETE RESTRICT,
+ CHECK(clean_length_m+rework_length_m+rejected_length_m+pending_length_m<=produced_length_m)
+);
+CREATE INDEX manufacturing_production_batches_status ON manufacturing_production_batches(company_id,status,created_at DESC);
+
+CREATE TABLE manufacturing_production_batch_defects (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ production_batch_id uuid NOT NULL,defect_id uuid NOT NULL,position_m numeric(14,3),quantity integer NOT NULL DEFAULT 1 CHECK(quantity>0),
+ severity text CHECK(severity IN ('MINOR','MAJOR','CRITICAL')),notes text,created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(company_id,production_batch_id) REFERENCES manufacturing_production_batches(company_id,id) ON DELETE CASCADE
+);
+
 CREATE TABLE manufacturing_raw_roll_outputs (
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,weaving_run_id uuid NOT NULL,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,weaving_run_id uuid NOT NULL,production_batch_id uuid,
  production_batch_no text NOT NULL,roll_no text NOT NULL,production_barcode text NOT NULL,length_m numeric(14,3) NOT NULL CHECK(length_m>0),width_cm numeric(14,2),actual_weight_kg numeric(14,3),gsm numeric(14,2),
  inspection_status text NOT NULL DEFAULT 'PENDING' CHECK(inspection_status IN ('PENDING','ACCEPTED','CONDITIONAL','REJECTED')),
  grade text,inspection_notes text,result_fabric_roll_id uuid REFERENCES fabric_rolls(id),inspected_by_user_id uuid REFERENCES users(id),inspected_at timestamptz,
  created_by_user_id uuid REFERENCES users(id),created_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(company_id,production_barcode),UNIQUE(company_id,weaving_run_id,roll_no),UNIQUE(company_id,id),
- FOREIGN KEY(company_id,weaving_run_id) REFERENCES manufacturing_weaving_runs(company_id,id) ON DELETE RESTRICT
+ FOREIGN KEY(company_id,weaving_run_id) REFERENCES manufacturing_weaving_runs(company_id,id) ON DELETE RESTRICT,
+ FOREIGN KEY(company_id,production_batch_id) REFERENCES manufacturing_production_batches(company_id,id) ON DELETE RESTRICT
 );
 CREATE INDEX manufacturing_raw_roll_outputs_status ON manufacturing_raw_roll_outputs(company_id,inspection_status,created_at DESC);
 
@@ -615,6 +643,7 @@ CREATE TABLE manufacturing_quality_defect_catalog (
 CREATE INDEX manufacturing_quality_defect_lookup
   ON manufacturing_quality_defect_catalog(company_id, inspection_type, is_active, name);
 ALTER TABLE manufacturing_raw_roll_defects ADD CONSTRAINT manufacturing_raw_roll_defects_catalog_fk FOREIGN KEY(company_id,defect_id) REFERENCES manufacturing_quality_defect_catalog(company_id,id) ON DELETE RESTRICT;
+ALTER TABLE manufacturing_production_batch_defects ADD CONSTRAINT manufacturing_production_batch_defects_catalog_fk FOREIGN KEY(company_id,defect_id) REFERENCES manufacturing_quality_defect_catalog(company_id,id) ON DELETE RESTRICT;
 
 -- Preserve every movement type introduced by earlier migrations, including CUT.
 ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_movement_type_check;

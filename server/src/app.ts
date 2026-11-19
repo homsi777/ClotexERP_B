@@ -56,6 +56,7 @@ import { manufacturingWorkOrderRoutes } from './routes/manufacturingWorkOrderRou
 import { manufacturingWarpingRoutes } from './routes/manufacturingWarpingRoutes.js';
 import { manufacturingSizingRoutes } from './routes/manufacturingSizingRoutes.js';
 import { manufacturingWeavingRoutes } from './routes/manufacturingWeavingRoutes.js';
+import { manufacturingQualityRoutes } from './routes/manufacturingQualityRoutes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -184,6 +185,7 @@ export async function buildApp() {
   await app.register(manufacturingWarpingRoutes, { prefix: '/api/manufacturing/warping' });
   await app.register(manufacturingSizingRoutes, { prefix: '/api/manufacturing/sizing' });
   await app.register(manufacturingWeavingRoutes, { prefix: '/api/manufacturing/weaving' });
+  await app.register(manufacturingQualityRoutes, { prefix: '/api/manufacturing/quality' });
 
   return app;
 }

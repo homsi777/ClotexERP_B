@@ -10,6 +10,7 @@ import {
 import { generateBarcode } from "../utils/rollHelpers.js";
 const has = (u: JwtPayload | undefined, p: string) =>
   Boolean(u && (u.role === "admin" || u.permissions.includes(p)));
+const legacyRawRollWorkflowDisabled = () => true;
 export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticateRequest);
   app.get("/", async (req, reply) => {
@@ -230,16 +231,17 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
       const run = await client.query<{
         status: string;
         produced_length_m: string;
+        run_no: string;
       }>(
-        `SELECT status,produced_length_m FROM manufacturing_weaving_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        `SELECT status,produced_length_m,run_no FROM manufacturing_weaving_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,
         [id, req.user!.companyId],
       );
       if (!run.rows.length || run.rows[0].status !== "IN_PROGRESS") {
         await client.query("ROLLBACK");
         return sendError(reply, 409, "التشغيل ليس قيد العمل", "INVALID_STATE");
       }
-      await client.query(
-        `INSERT INTO manufacturing_weaving_shift_logs(company_id,weaving_run_id,operator_employee_id,shift_type_id,production_date,counter_start,counter_end,produced_length_m,downtime_minutes,downtime_reason_id,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      const shiftLog = await client.query<{ id: string }>(
+        `INSERT INTO manufacturing_weaving_shift_logs(company_id,weaving_run_id,operator_employee_id,shift_type_id,production_date,counter_start,counter_end,produced_length_m,downtime_minutes,downtime_reason_id,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
         [
           req.user!.companyId,
           id,
@@ -255,6 +257,18 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
           req.user!.sub,
         ],
       );
+      const batchNo = `${run.rows[0].run_no}-B-${shiftLog.rows[0].id.slice(0, 8).toUpperCase()}`;
+      await client.query(
+        `INSERT INTO manufacturing_production_batches(company_id,batch_no,weaving_run_id,shift_log_id,produced_length_m,pending_length_m,created_by_user_id) VALUES($1,$2,$3,$4,$5,$5,$6)`,
+        [
+          req.user!.companyId,
+          batchNo,
+          id,
+          shiftLog.rows[0].id,
+          produced,
+          req.user!.sub,
+        ],
+      );
       await client.query(
         `UPDATE manufacturing_weaving_runs SET produced_length_m=produced_length_m+$3,current_counter=$4,version=version+1,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [id, req.user!.companyId, produced, p.data.counterEnd],
@@ -266,6 +280,7 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
           producedLengthM: produced,
           totalProducedLengthM:
             Number(run.rows[0].produced_length_m) + produced,
+          productionBatchNo: batchNo,
         },
       });
     } catch (e) {
@@ -285,26 +300,6 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
         "FORBIDDEN",
       );
     const { id } = req.params as { id: string };
-    const p = z
-      .object({
-        rolls: z
-          .array(
-            z.object({
-              rollNo: z.string().trim().min(1).max(100),
-              lengthM: z.number().positive(),
-            }),
-          )
-          .min(1)
-          .max(200),
-      })
-      .safeParse(req.body);
-    if (!p.success)
-      return sendError(
-        reply,
-        400,
-        "بيانات رولات الإنتاج غير صالحة",
-        "VALIDATION",
-      );
     const client = await getPool().connect();
     try {
       await client.query("BEGIN");
@@ -327,30 +322,10 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
           "INVALID_STATE",
         );
       }
-      const total = p.data.rolls.reduce((s, x) => s + x.lengthM, 0);
-      if (total > Number(run.rows[0].produced_length_m) + 0.0005) {
+      if (Number(run.rows[0].produced_length_m) <= 0) {
         await client.query("ROLLBACK");
-        return sendError(
-          reply,
-          400,
-          "إجمالي أطوال الرولات يتجاوز الإنتاج المسجل",
-          "VALIDATION",
-        );
+        return sendError(reply, 400, "لا يمكن إغلاق تشغيل بلا إنتاج مسجل", "VALIDATION");
       }
-      const batch = `${run.rows[0].run_no}-B1`;
-      for (const roll of p.data.rolls)
-        await client.query(
-          `INSERT INTO manufacturing_raw_roll_outputs(company_id,weaving_run_id,production_batch_no,roll_no,production_barcode,length_m,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7)`,
-          [
-            req.user!.companyId,
-            id,
-            batch,
-            roll.rollNo,
-            `RAW-${crypto.randomUUID()}`,
-            roll.lengthM,
-            req.user!.sub,
-          ],
-        );
       await client.query(
         `UPDATE manufacturing_weaving_runs SET status='COMPLETED',completed_at=now(),version=version+1,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [id, req.user!.companyId],
@@ -365,7 +340,7 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
       await client.query("COMMIT");
       return reply.send({
         ok: true,
-        data: { id, status: "COMPLETED", productionBatchNo: batch },
+        data: { id, status: "COMPLETED" },
       });
     } catch (e) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -433,6 +408,9 @@ export const manufacturingWeavingRoutes: FastifyPluginAsync = async (app) => {
       .safeParse(req.body);
     if (!p.success)
       return sendError(reply, 400, "بيانات الفحص غير صالحة", "VALIDATION");
+    if (legacyRawRollWorkflowDisabled())
+      return sendError(reply, 410, "تم نقل فحص الخام إلى دورة جودة دفعات الإنتاج", "QUALITY_BATCH_WORKFLOW_REQUIRED");
+    /* Legacy handler retained temporarily for migration readability; it is unreachable. */
     if (p.data.result !== "REJECTED" && (!p.data.itemId || !p.data.warehouseId))
       return sendError(
         reply,
