@@ -56,9 +56,18 @@ export const warehouseZoneRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/group-rolls', auth, async (req, reply) => {
-    const body = z.object({ rollIds: z.array(z.string().uuid()).max(5000) }).safeParse(req.body);
+    const body = z.object({ rollIds: z.array(z.string().uuid()).max(5000).default([]), barcodes:z.array(z.string().trim().min(1).max(200)).max(5000).optional() }).safeParse(req.body);
     if (!body.success) return sendError(reply, 400, 'بيانات غير صالحة', 'VALIDATION');
-    return reply.send({ ok: true, data: await groupRollsByZone(getPool(), req.user!.companyId, body.data.rollIds) });
+    let ids=body.data.rollIds;
+    if(body.data.barcodes?.length){
+      const codes=[...new Set(body.data.barcodes)];
+      const rows=await getPool().query<{id:string;barcode:string}>('SELECT id,barcode FROM fabric_rolls WHERE company_id=$1 AND barcode=ANY($2::text[])',[req.user!.companyId,codes]);
+      const found=new Set(rows.rows.map(r=>r.barcode));const missing=codes.filter(c=>!found.has(c));
+      if(missing.length)return sendError(reply,400,`باركود غير موجود: ${missing.slice(0,10).join('، ')}`,'VALIDATION');
+      ids=[...new Set([...ids,...rows.rows.map(r=>r.id)])];
+    }
+    if(ids.length>5000)return sendError(reply,400,'الحد الأقصى خمسة آلاف رول في كشف التجهيز','VALIDATION');
+    return reply.send({ ok: true, data: await groupRollsByZone(getPool(), req.user!.companyId, ids) });
   });
 
   app.post('/assign', auth, async (req, reply) => {

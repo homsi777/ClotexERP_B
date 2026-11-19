@@ -1,6 +1,8 @@
 import { apiFetch } from './client';
 
 export interface ZoneRoll {
+  warehouse_id: string;
+  warehouse_name: string;
   id: string;
   barcode: string;
   item_id: string;
@@ -17,6 +19,8 @@ export interface ZoneRoll {
 }
 
 export interface ZoneTotals { count: number; meters: number; weightKg: number }
+export interface ZoneRollGroup {warehouseId:string;warehouseName:string;zoneId:string|null;zoneName:string;rolls:ZoneRoll[];totals:ZoneTotals}
+export async function groupZoneBarcodes(barcodes:string[]):Promise<ZoneRollGroup[]>{return(await apiFetch<{ok:true;data:ZoneRollGroup[]}>(`${B}/group-rolls`,{method:'POST',body:JSON.stringify({barcodes})})).data;}
 
 export interface ZoneSummary {
   warehouseId: string;

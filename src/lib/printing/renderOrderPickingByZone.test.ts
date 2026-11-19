@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { renderOrderPickingByZone } from './renderOrderPickingByZone';
+import type { ZoneRollGroup } from '../api/warehouseZonesApi';
+const group:ZoneRollGroup={warehouseId:'w',warehouseName:'Warehouse <A>',zoneId:null,zoneName:'عنبر غير محدد',totals:{count:1,meters:1.123,weightKg:0},rolls:[{id:'r',barcode:'0000001',warehouse_id:'w',warehouse_name:'Warehouse <A>',item_id:'i',item_name:'<script>bad()</script>',color_id:null,color_name:null,color_code:null,length_m:1.123,weight_kg:null,created_at:'2026-11-19',location_id:null,zone_name:null,status:'AVAILABLE'}]};
+const html=renderOrderPickingByZone({orderNumber:'<img src=x onerror=bad()>',customerName:'A&B',groups:[group],createdAt:'2026-11-19'});
+assert.ok(html.includes('Warehouse &lt;A&gt;'));
+assert.ok(html.includes('A&amp;B'));
+assert.ok(!html.includes('<script>'));
+assert.ok(!html.includes('<img src=x'));
+assert.ok(html.includes('1.123'));
+assert.ok(html.includes('0000001'));
+assert.ok(html.includes('عنبر غير محدد'));
+assert.ok(html.includes('☐'));
+assert.ok(html.includes('لا تثبت حجزاً'));
+console.log('renderOrderPickingByZone: safe HTML, barcode, quantities and picking layout passed');

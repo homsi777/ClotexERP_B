@@ -13,6 +13,7 @@ import { useToast } from '../NonBlockingToast';
 import { TelegramSendButton } from '../telegram/TelegramSendButton';
 import { sendTelegramCustomerOrder } from '../../lib/telegramOrder';
 import i18n from '../../i18n/config';
+import { OrderPickingByZonePanel } from './OrderPickingByZonePanel';
 
 export interface OrderDetailModalProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
   const [pdfBusy, setPdfBusy] = useState(false);
   const [printBusy, setPrintBusy] = useState(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [showPicking,setShowPicking]=useState(false);
   const party = customer ?? FALLBACK_CUSTOMER;
   const statusLabel = order ? ORDER_STATUS_LABELS[order.status] : '';
 
@@ -117,6 +119,9 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
             <p className="text-lg font-black text-slate-900 font-mono truncate">{order.orderNumber}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={()=>setShowPicking(v=>!v)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-800">
+              {showPicking?'عرض الطلبية':'تجهيز حسب العنبر'}
+            </button>
             <button
               type="button"
               disabled={pdfBusy}
@@ -170,10 +175,11 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
         </div>
 
         <div className="flex-1 overflow-hidden min-h-0 bg-slate-100">
+          <div className={showPicking?'h-full':'hidden'}><OrderPickingByZonePanel key={order.id} order={order} customerName={party.name}/></div>
           <iframe
             title={i18n.t('orderDetail.previewIframeTitle', { ns: 'terminology' })}
             srcDoc={previewSrcDoc}
-            className="w-full h-full border-0 bg-slate-100"
+            className={showPicking?'hidden':"w-full h-full border-0 bg-slate-100"}
           />
         </div>
       </div>

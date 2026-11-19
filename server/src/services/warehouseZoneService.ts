@@ -20,14 +20,17 @@ const ASSIGNABLE = `('AVAILABLE','RESERVED')`;
 
 const ROLL_SELECT = `
   SELECT fr.id, fr.barcode, fr.item_id, fi.name AS item_name, fr.color_id, fc.name_ar AS color_name, fc.color_code,
+         fr.warehouse_id, wh.name AS warehouse_name,
          fr.length_m::float AS length_m, COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg)::float AS weight_kg,
          fr.created_at, fr.location_id, wl.name AS zone_name, fr.status
     FROM fabric_rolls fr
     JOIN fabric_items fi ON fi.id = fr.item_id
+    JOIN warehouses wh ON wh.id=fr.warehouse_id AND wh.company_id=fr.company_id
     LEFT JOIN fabric_colors fc ON fc.id = fr.color_id
     LEFT JOIN warehouse_locations wl ON wl.id = fr.location_id`;
 
 export type ZoneRoll = {
+  warehouse_id: string; warehouse_name: string;
   id: string; barcode: string; item_id: string; item_name: string; color_id: string | null; color_name: string | null; color_code: string | null;
   length_m: number; weight_kg: number | null; created_at: string; location_id: string | null; zone_name: string | null; status: string;
 };
@@ -231,12 +234,12 @@ export async function itemDistribution(db: Db, companyId: string, warehouseId: s
 /** لقائمة العزل/الطباعة: أتواب معيّنة مجمّعة حسب العنبر («عنبر غير محدد» لمن بلا عنبر). */
 export async function groupRollsByZone(db: Db, companyId: string, rollIds: string[]) {
   if (!rollIds.length) return [];
-  const r = await db.query(`${ROLL_SELECT} WHERE fr.company_id = $1 AND fr.id = ANY($2::uuid[]) ORDER BY wl.name NULLS LAST, fi.name, fr.barcode`, [companyId, [...new Set(rollIds)]]);
-  const groups = new Map<string, { zoneId: string | null; zoneName: string; rolls: ZoneRoll[] }>();
+  const r = await db.query(`${ROLL_SELECT} WHERE fr.company_id = $1 AND fr.id = ANY($2::uuid[]) ORDER BY wh.name, wl.name NULLS LAST, fi.name, fr.barcode`, [companyId, [...new Set(rollIds)]]);
+  const groups = new Map<string, { warehouseId: string; warehouseName: string; zoneId: string | null; zoneName: string; rolls: ZoneRoll[] }>();
   for (const row of r.rows as ZoneRoll[]) {
-    const k = row.location_id ?? 'none';
+    const k = `${row.warehouse_id}:${row.location_id ?? 'none'}`;
     let g = groups.get(k);
-    if (!g) { g = { zoneId: row.location_id, zoneName: row.zone_name ?? 'عنبر غير محدد', rolls: [] }; groups.set(k, g); }
+    if (!g) { g = { warehouseId:row.warehouse_id,warehouseName:row.warehouse_name,zoneId: row.location_id, zoneName: row.zone_name ?? 'عنبر غير محدد', rolls: [] }; groups.set(k, g); }
     g.rolls.push(row);
   }
   return [...groups.values()].map((g) => ({ ...g, totals: totalsOf(g.rolls) }));

@@ -36,6 +36,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
   const { manufacturingQualityRoutes } = await import('../routes/manufacturingQualityRoutes.js');
   const { manufacturingCostRoutes } = await import('../routes/manufacturingCostRoutes.js');
   const { externalJobRoutes } = await import('../routes/externalJobRoutes.js');
+  const { warehouseZoneRoutes } = await import('../routes/warehouseZoneRoutes.js');
   const app = Fastify();
   try {
     await app.register(manufacturingWorkOrderRoutes, { prefix: '/orders' });
@@ -45,6 +46,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
     await app.register(manufacturingQualityRoutes, { prefix: '/quality' });
     await app.register(manufacturingCostRoutes, { prefix: '/cost' });
     await app.register(externalJobRoutes, { prefix: '/external' });
+    await app.register(warehouseZoneRoutes, { prefix: '/zones' });
     const company = randomUUID(), user = randomUUID(), warehouse = randomUUID(), item = randomUUID(), yarn = randomUUID();
     const spec = randomUUID(), version = randomUUID();
     const warpMachine = randomUUID(), loom = randomUUID(), sizingMachine = randomUUID();
@@ -183,6 +185,18 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       await call('POST',`/cost/${order.id}/finalize`,{});
       const allocated=await admin.query('SELECT SUM(allocated_usd) amount FROM manufacturing_cost_allocations WHERE company_id=$1 AND work_order_id=$2',[company,order.id]);
       assert.equal(Number(allocated.rows[0].amount),report.totalUsd);
+      if(!withSizing){
+        const wh2=randomUUID(),manualRoll=randomUUID();
+        await admin.query("INSERT INTO warehouses(id,company_id,code,name) VALUES($1,$2,'SECOND','Second warehouse')",[wh2,company]);
+        await admin.query("INSERT INTO fabric_rolls(id,company_id,roll_no,barcode,item_id,warehouse_id,length_m,status) VALUES($1,$2,'PICK-2','0999002',$3,$4,1.123,'AVAILABLE')",[manualRoll,company,item,wh2]);
+        const code=(await admin.query('SELECT barcode FROM fabric_rolls WHERE id=$1',[costRoll])).rows[0].barcode;
+        const grouping=await call('POST','/zones/group-rolls',{barcodes:[code,'0999002',code]});
+        assert.equal(grouping.length,2);
+        assert.equal(new Set(grouping.map((g:{warehouseId:string})=>g.warehouseId)).size,2);
+        assert.equal(grouping.flatMap((g:{rolls:unknown[]})=>g.rolls).length,2);
+        await call('POST','/zones/group-rolls',{barcodes:[code]},400,tenantToken);
+        await call('POST','/zones/group-rolls',{barcodes:['missing-barcode']},400);
+      }
       await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'ENERGY',amount:1,currencyCode:'USD',notes:'Forbidden after cost closure'},400);
     }
     assert.equal(Number((await getPool().query('SELECT weight_kg FROM yarn_lots WHERE id=$1', [yarn])).rows[0].weight_kg), 64);
