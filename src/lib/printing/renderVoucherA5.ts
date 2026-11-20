@@ -39,6 +39,8 @@ export type VoucherPrintData = {
   purpose?: string | null;
   description?: string | null;
   representative?: string | null;
+  /** شيكات استُلمت/دُفعت بهذا السند — تظهر بالطباعة كإثبات (رقم، بنك، استحقاق). */
+  checks?: { checkNo: string; bankName: string; dueDate?: string | null; holder?: string | null }[];
 };
 
 export type VoucherRenderOptions = {
@@ -597,7 +599,10 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
   const voucherNo = esc(`#${shortNumericVoucherNo(data.voucherNo)}`);
   const voucherDate = esc(normalizeVoucherDate(data.voucherDate));
   const partyName = displayField(data.partyName);
-  const cashboxName = displayField(data.cashboxName);
+  const cashboxName = displayField(data.cashboxName ?? (data.checks?.length ? t('voucher.checkMethod') : undefined));
+  const checksHtml = (data.checks ?? [])
+    .map((c) => esc(`${t('voucher.checkNoShort')} ${c.checkNo} — ${c.bankName}${c.dueDate ? ` — ${t('voucher.checkDueShort')} ${normalizeVoucherDate(c.dueDate)}` : ''}${c.holder ? ` — ${c.holder}` : ''}`))
+    .join('<br/>');
   const invoiceNo = displayField(data.referenceDocumentNo);
   const purposeLabel = displayField(voucherPurposeAr(data.purpose));
   const metaStatement = displayField(buildVoucherMetaStatement(narrativeInput(data)));
@@ -643,6 +648,7 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
                   ${metaRow(iconSvg('calendar'), t('voucher.dateLabel'), `<span class="ltr">${voucherDate}</span>`)}
                   ${metaRow(iconSvg('receipt'), t('voucher.voucherTypeLabel'), `<span class="type-pill">${typeLabel}</span>`)}
                   ${metaRow(iconSvg('wallet'), t('voucher.cashboxLabel'), cashboxName)}
+                  ${checksHtml ? metaRow(iconSvg('receipt'), t('voucher.checkLabel'), checksHtml) : ''}
                 </table>
               </div>
             </td>
@@ -710,7 +716,20 @@ export function voucherRowToPrintData(voucher: {
   purpose?: string | null;
   description?: string | null;
   reference_document_no?: string | null;
+  lines?: Array<{
+    check_no?: string | null;
+    check_bank_name?: string | null;
+    check_details?: { checkNo?: string; bankName?: string; accountHolderName?: string | null; dueDate?: string | null } | null;
+  }>;
 }): VoucherPrintData {
+  const checks = (voucher.lines ?? [])
+    .map((l) => ({
+      checkNo: l.check_no ?? l.check_details?.checkNo ?? '',
+      bankName: l.check_bank_name ?? l.check_details?.bankName ?? '',
+      dueDate: l.check_details?.dueDate ?? null,
+      holder: l.check_details?.accountHolderName ?? null,
+    }))
+    .filter((c) => c.checkNo);
   return {
     voucherNo: voucher.voucher_no,
     voucherType: voucher.voucher_type,
@@ -726,5 +745,6 @@ export function voucherRowToPrintData(voucher: {
     purpose: voucher.purpose ?? undefined,
     description: voucher.description,
     referenceDocumentNo: voucher.reference_document_no ?? undefined,
+    checks: checks.length ? checks : undefined,
   };
 }

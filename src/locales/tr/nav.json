@@ -68,5 +68,6 @@
   "cartelaMenu.library": "Kartela kütüphanesi",
   "cartelaMenu.stock": "Kartela stoğu",
   "cartelaMenu.delivery": "Kartela teslimi",
-  "cartelaMenu.custody": "Kartela zimmeti"
+  "cartelaMenu.custody": "Kartela zimmeti",
+  "cartelaMenu.generate": "Kartela Oluştur"
 }

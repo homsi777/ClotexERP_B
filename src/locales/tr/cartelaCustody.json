@@ -95,5 +95,8 @@
   "stock.colorHint": "Renge özel adet: bu rengin barkodu kendi adedinden, yoksa kartelanın toplam adedinden düşer.",
   "stock.empty": "Eşleşen kartela yok",
   "stock.loadFailed": "Stok yüklenemedi",
-  "stock.goDelivery": "Teslim fişi"
+  "stock.goDelivery": "Teslim fişi",
+  "delivery.previewPrint": "Fişi önizle ve yazdır",
+  "delivery.close": "Kapat",
+  "delivery.totalQty": "Toplam adet"
 }

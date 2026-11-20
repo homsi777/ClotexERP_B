@@ -5,6 +5,8 @@ import { Loader2, Printer, Save, Trash2 } from 'lucide-react';
 import { listCustomers, type ApiCustomer } from '../../lib/api/customersApi';
 import { createDeliveryVoucher, scanCartelaCopy, type DeliveryResult, type ScannedCopy } from '../../lib/api/cartelaCustodyApi';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
+import { renderCartelaDeliveryVoucherHtml } from '../../lib/printing/renderCartelaDeliveryVoucher';
+import { BRAND } from '../../branding';
 import { useToast } from '../../components/NonBlockingToast';
 
 type Line = { copy: ScannedCopy; qty: number; days: string; dueDate: string };
@@ -12,7 +14,6 @@ const poolKey = (c: ScannedCopy) => `${c.cartelaId}|${c.levelColorId ?? ''}`;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export const CartelaDelivery: React.FC = () => {
   const { t } = useTranslation('cartelaCustody');
@@ -27,6 +28,8 @@ export const CartelaDelivery: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<DeliveryResult | null>(null);
+  /** معاينة السند قبل الطباعة (تفتح تلقائياً بعد الحفظ). */
+  const [voucherPreview, setVoucherPreview] = useState<{ html: string; title: string } | null>(null);
 
   useEffect(() => {
     void listCustomers({ status: 'active', pageSize: 500 }).then((r) => setCustomers(r.data ?? [])).catch(() => undefined);
@@ -89,6 +92,7 @@ export const CartelaDelivery: React.FC = () => {
         lines: lines.map((l) => ({ barcode: l.copy.barcode, quantity: l.qty, dueDate: l.dueDate || null })),
       });
       setResult(res);
+      setVoucherPreview(buildVoucher(res, lines));
       showToast({ type: 'success', message: t('delivery.saved', { no: res.voucherNo }) });
       setLines([]);
       setNotes('');
@@ -99,17 +103,42 @@ export const CartelaDelivery: React.FC = () => {
     }
   };
 
-  const printVoucher = (r: DeliveryResult, copies: Line[]) => {
-    const rows = copies.map((l) => `<tr><td>${esc(l.copy.barcode)}</td><td>${esc(l.copy.cartelaTitle)}</td><td>${esc(l.copy.artCode)}</td><td>${esc(l.copy.colorName || l.copy.colorCode || '—')}</td><td>${l.qty}</td><td>${l.dueDate || t('status.dueUndefined')}</td></tr>`).join('');
-    void r.lines;
-    const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;padding:24px">
-      <h2>${esc(t('delivery.voucherTitle'))} ${esc(r.voucherNo)}</h2>
-      <p>${esc(t('delivery.customer'))}: <b>${esc(r.customerName)}</b> — ${esc(t('delivery.date'))}: <b>${esc(r.deliveryDate)}</b></p>
-      <table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;font-size:13px">
-        <thead><tr><th>${esc(t('cols.barcode'))}</th><th>${esc(t('cols.cartela'))}</th><th>${esc(t('cols.code'))}</th><th>${esc(t('cols.color'))}</th><th>${esc(t('delivery.qty'))}</th><th>${esc(t('cols.dueDate'))}</th></tr></thead>
-        <tbody>${rows}</tbody></table>
-      <p style="margin-top:48px">${esc(t('delivery.receiverSignature'))}: ____________________</p></div>`;
-    openDocumentPrintWindow(html, `${t('delivery.voucherTitle')} ${r.voucherNo}`);
+  const buildVoucher = (r: DeliveryResult, copies: Line[]) => {
+    const title = `${t('delivery.voucherTitle')} ${r.voucherNo}`;
+    const html = renderCartelaDeliveryVoucherHtml(
+      {
+        voucherNo: r.voucherNo,
+        customerName: r.customerName,
+        deliveryDate: r.deliveryDate,
+        notes: notes || null,
+        logoSrc: BRAND.logoInline,
+        brandName: BRAND.name,
+        rows: copies.map((l) => ({
+          barcode: l.copy.barcode,
+          cartelaTitle: l.copy.cartelaTitle,
+          artCode: l.copy.artCode,
+          colorName: l.copy.colorName || l.copy.colorCode || null,
+          qty: l.qty,
+          dueDate: l.dueDate || null,
+        })),
+      },
+      {
+        title: t('delivery.voucherTitle'),
+        customer: t('delivery.customer'),
+        deliveryDate: t('delivery.date'),
+        barcode: t('cols.barcode'),
+        cartela: t('cols.cartela'),
+        code: t('cols.code'),
+        color: t('cols.color'),
+        qty: t('delivery.qty'),
+        dueDate: t('cols.dueDate'),
+        dueUndefined: t('status.dueUndefined'),
+        notes: t('delivery.notes'),
+        receiverSignature: t('delivery.receiverSignature'),
+        total: t('delivery.totalQty'),
+      },
+    );
+    return { html, title };
   };
 
   // نسخ الأسطر عند الحفظ للطباعة بعد تفريغ القائمة
@@ -200,11 +229,33 @@ export const CartelaDelivery: React.FC = () => {
       {result && (
         <section className="rounded-xl border border-emerald-200 bg-white p-5 shadow-sm flex flex-wrap items-center justify-between gap-3">
           <p className="font-bold text-slate-900">{t('delivery.saved', { no: result.voucherNo })} — {result.customerName}</p>
-          <button type="button" onClick={() => printVoucher(result, printable)}
+          <button type="button" onClick={() => setVoucherPreview(buildVoucher(result, printable))}
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-black">
-            <Printer className="h-4 w-4" />{t('delivery.print')}
+            <Printer className="h-4 w-4" />{t('delivery.previewPrint')}
           </button>
         </section>
+      )}
+
+      {voucherPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3" role="dialog" aria-modal="true">
+          <div className="flex max-h-[94vh] w-full max-w-4xl flex-col gap-3 rounded-xl bg-white p-4">
+            <h3 className="text-base font-bold text-slate-900">{voucherPreview.title}</h3>
+            <iframe title={voucherPreview.title} srcDoc={voucherPreview.html} className="h-[62vh] w-full rounded-lg border border-slate-200 bg-white" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setVoucherPreview(null)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">
+                {t('delivery.close')}
+              </button>
+              <button
+                type="button"
+                onClick={() => openDocumentPrintWindow(voucherPreview.html, voucherPreview.title)}
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-black"
+              >
+                <Printer className="h-4 w-4" />
+                {t('delivery.print')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

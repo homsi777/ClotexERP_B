@@ -17,6 +17,9 @@ export interface CheckDto {
   image_data: string | null;
   /** القوائم لا تحمل الصورة؛ تُجلب بـ getCheckImage. */
   has_image?: boolean;
+  /** سند القبض الذي استُلم به الشيك (إن كان بسند). */
+  voucher_no?: string | null;
+  voucher_id?: string | null;
   status: CheckStatus;
   needs_review: boolean;
   created_at: string;

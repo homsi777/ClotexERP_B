@@ -30,7 +30,7 @@
   "toast.selectAtLeastOne": "Toplu yazdırma için en az bir kartela seçin.",
   "toast.batchPrintFailed": "Toplu yazdırma başarısız oldu",
   "toast.fontSizeSaved": "Varsayılan yazı tipi boyutu kaydedildi: {{value}} pt — yeni kartelalara uygulanır.",
-  "header.title": "Kartela",
+  "header.title": "Kartela Oluştur",
   "header.subtitle": "80×50 mm etiket + renk kartelası (Code128) — QR içermeyen termal baskı.",
   "tab.generate": "Kartela Oluştur",
   "tab.registry": "Kartela Kayıtları",
@@ -227,5 +227,9 @@
   "siblings.confirm": "{{count}} kartela oluştur",
   "siblings.created": "{{count}} kartela aynı özelliklerle oluşturuldu",
   "siblings.partial": "{{created}} oluşturuldu, {{failed}} başarısız: {{reason}}",
-  "siblings.failed": "Kartelalar oluşturulamadı"
+  "siblings.failed": "Kartelalar oluşturulamadı",
+  "header.libraryTitle": "Kartela Kütüphanesi",
+  "header.librarySubtitle": "Tüm kartelaların kaydı: arama, önizleme, tek ve toplu yazdırma, düzenleme.",
+  "registry.bulkPreview": "Seçilenleri önizle",
+  "registry.bulkPreviewTitle": "Toplu baskı önizlemesi ({{count}} etiket)"
 }

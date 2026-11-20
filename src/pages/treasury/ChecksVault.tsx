@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Loader2, AlertTriangle, Banknote, CheckCircle2, Undo2, Printer, ArrowUp, ArrowDown, X, LayoutGrid, Table2 } from 'lucide-react';
 import {
   listChecks,
@@ -35,6 +36,7 @@ type PartyKind = 'CUSTOMER' | 'SUPPLIER' | 'OTHER';
 
 export const ChecksVault: React.FC = () => {
   const { t, i18n } = useTranslation('checksVault');
+  const navigate = useNavigate();
   const { showToast } = useToast();
 
   const [rows, setRows] = useState<CheckDto[]>([]);
@@ -238,11 +240,18 @@ export const ChecksVault: React.FC = () => {
         </div>
         <button
           type="button"
-          onClick={() => setAddOpen(true)}
+          onClick={() => navigate('/bonds/collection?method=check')}
           className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700"
         >
           <Plus className="w-4 h-4" />
-          {t('addButton')}
+          {t('receiveButton')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="border border-slate-300 bg-white text-slate-700 px-3 py-2 rounded-lg text-sm hover:bg-slate-50"
+        >
+          {t('addWithoutVoucher')}
         </button>
       </div>
 
@@ -339,6 +348,7 @@ export const ChecksVault: React.FC = () => {
                     <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${STATUS_BADGE[c.status]}`}>{t(`status.${c.status}`)}</span>
                   </div>
                   <div className="text-slate-600">{c.bank_name}{c.party_name ? ` · ${c.party_name}` : ''}</div>
+                  {c.voucher_id && <Link to={`/bonds/records/${c.voucher_id}`} className="block text-xs font-bold text-indigo-700 hover:underline">{t('col.voucher')}: {c.voucher_no}</Link>}
                   <div className="font-mono font-bold text-slate-900">{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {c.currency_code}</div>
                   <div className="flex items-center justify-between text-xs">
                     <span className={isOverdue(c) ? 'font-bold text-rose-700' : isDueSoon(c) ? 'font-bold text-amber-700' : 'text-slate-500'}>{t('gallery.due')}: {c.due_date}</span>
@@ -362,6 +372,7 @@ export const ChecksVault: React.FC = () => {
               <div><span className="text-slate-500">{t('col.amount')}: </span><b className="font-mono">{Number(viewing.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {viewing.currency_code}</b></div>
               <div><span className="text-slate-500">{t('gallery.received')}: </span><b>{viewing.received_date}</b></div>
               <div><span className="text-slate-500">{t('gallery.due')}: </span><b>{viewing.due_date}</b></div>
+              {viewing.voucher_id && <div className="col-span-2"><span className="text-slate-500">{t('col.voucher')}: </span><Link to={`/bonds/records/${viewing.voucher_id}`} className="font-bold text-indigo-700 hover:underline">{viewing.voucher_no}</Link></div>}
             </div>
             <div className="flex justify-end"><button type="button" onClick={() => setViewing(null)} className="rounded-lg border px-4 py-2 text-sm">{t('gallery.close')}</button></div>
           </div>
@@ -381,15 +392,16 @@ export const ChecksVault: React.FC = () => {
                 <th className="p-3 text-right font-bold">{t('col.receivedDate')}</th>
                 <th className="p-3 text-right font-bold">{t('col.dueDate')}</th>
                 <th className="p-3 text-right font-bold">{t('col.status')}</th>
+                <th className="p-3 text-right font-bold">{t('col.voucher')}</th>
                 <th className="p-3 text-right font-bold">{t('col.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={9} className="p-6 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline ml-2" />{t('loading')}</td></tr>
+                <tr><td colSpan={10} className="p-6 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline ml-2" />{t('loading')}</td></tr>
               )}
               {!loading && rows.length === 0 && (
-                <tr><td colSpan={9} className="p-6 text-center text-slate-500">{t('emptyState')}</td></tr>
+                <tr><td colSpan={10} className="p-6 text-center text-slate-500">{t('emptyState')}</td></tr>
               )}
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50">
@@ -413,6 +425,13 @@ export const ChecksVault: React.FC = () => {
                       {isOverdue(c) && <span className="mr-1">· {t('status.overdueTag')}</span>}
                       {isDueSoon(c) && !isOverdue(c) && <span className="mr-1">· {t('status.dueSoonTag')}</span>}
                     </span>
+                  </td>
+                  <td className="p-3 text-xs">
+                    {c.voucher_id ? (
+                      <Link to={`/bonds/records/${c.voucher_id}`} className="font-mono font-bold text-indigo-700 hover:underline" dir="ltr">{c.voucher_no}</Link>
+                    ) : (
+                      <span className="text-slate-400">{t('noVoucher')}</span>
+                    )}
                   </td>
                   <td className="p-3">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -469,6 +488,12 @@ export const ChecksVault: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-3 border border-slate-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold">{t('form.title')}</h3>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
+              <p>{t('form.noVoucherWarning')}</p>
+              <button type="button" onClick={() => navigate('/bonds/collection?method=check')} className="font-bold text-indigo-700 underline">
+                {t('receiveButton')}
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('form.checkNo')}</label>

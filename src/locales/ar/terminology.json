@@ -10,11 +10,9 @@
   "documentStatus.partial": "مدفوع جزئياً",
   "documentStatus.paid": "مدفوع",
   "documentStatus.unpaid": "غير مدفوع",
-
   "paymentStatusTable.paid": "مدفوع",
   "paymentStatusTable.partial": "جزئي",
   "paymentStatusTable.unpaid": "غير مدفوع",
-
   "invoiceStatement.printTitle": "إشعار تسليم تفصيلي",
   "invoiceStatement.printSubtitle": "كشف الفاتورة",
   "invoiceStatement.customerSupplier": "العميل / المورد",
@@ -45,22 +43,17 @@
   "invoiceStatement.deliveredBy": "سلّمها",
   "invoiceStatement.receivedBy": "استلمها",
   "invoiceStatement.draftBanner": "مسودة غير مؤكدة",
-
   "paymentProgress.paid": "مدفوع",
   "paymentProgress.unpaid": "غير مدفوع",
   "paymentProgress.partial": "مدفوع جزئياً",
   "paymentProgress.dash": "—",
-
   "saleTerms.cashPaidFull": "نقدي / مدفوع بالكامل",
   "saleTerms.credit": "آجل",
   "saleTerms.creditWithPartial": "آجل مع دفعة جزئية",
   "saleTerms.dash": "—",
-
   "cashPartyFallback": "عميل / مورد نقدي",
-
   "accounting.creditSide": "دائن",
   "accounting.debitSide": "مدين",
-
   "invoiceStatement.typePurchase": "شراء",
   "invoiceStatement.typeSale": "بيع",
   "invoiceStatement.supplierNameLabel": "اسم المورد",
@@ -130,7 +123,6 @@
   "accountStatement.signatureField": "التوقيع:",
   "accountStatement.noMovementsInPeriod": "لا توجد حركات ضمن الفترة المحددة",
   "accountStatement.partnershipSlogan": "شراكتنا لا تُقاس بالأرقام فقط، بل بالثقة التي نبنيها معاً",
-
   "fabricStatement.customerAccountStatement": "كشف حساب عميل",
   "fabricStatement.supplierAccountStatement": "كشف حساب مورد",
   "fabricStatement.customerLabel": "العميل",
@@ -156,14 +148,12 @@
   "fabricStatement.colUnitPrice": "السعر الواحد",
   "fabricStatement.colTotal": "المجموع",
   "fabricStatement.footerGeneratedBy": "تم إنشاء هذا الكشف بواسطة {{descriptionAr}}",
-
   "accountStatement.customerAccountStatement": "كشف حساب عميل",
   "accountStatement.supplierAccountStatementWithMovements": "كشف حساب مورد (حركات مالية)",
   "accountStatement.customerDetailLine": "جوال: {{phone}} | العنوان: {{address}}",
   "accountStatement.supplierDetailLine": "ممثل الشركة: {{name}} | رقم الاتصال: {{phone}}",
   "accountStatement.creditToSupplier": "دائن للمورد",
   "accountStatement.debitToUs": "مدين لنا",
-
   "brandDescriptionSub": "إدارة مستودعات الأقمشة",
   "errors.pdfPrepareFailed": "تعذر تجهيز PDF",
   "unspecifiedMaterial": "خامة غير محددة",
@@ -172,7 +162,6 @@
   "documentFooter.invoiceSlogan": "ننسج الجودة، ونبني الثقة.",
   "documentFooter.voucherReceiptSlogan": "ثقتكم رأسمالنا الحقيقي.",
   "documentFooter.voucherPaymentSlogan": "الالتزام في التعامل أساس الثقة بيننا",
-
   "voucher.typeReceipt": "قبض",
   "voucher.typePayment": "صرف",
   "voucher.docTitleReceipt": "سند قبض",
@@ -197,7 +186,6 @@
   "voucher.cashboxLabel": "الصندوق",
   "voucher.statementColon": "البيان:",
   "voucher.cashierTitle": "أمين الصندوق",
-
   "voucherNarrative.cashOnly": "نقداً",
   "voucherNarrative.viaBankTransfer": "عبر تحويل بنكي",
   "voucherNarrative.viaTransfer": "عبر حوالة",
@@ -238,7 +226,6 @@
   "voucherNarrative.paragraphPaymentWithDescNoRef": "تم صرف مبلغ {{amount}} إلى {{party}} من {{cashbox}} — {{desc}}.",
   "voucherNarrative.paragraphPaymentWithRef": "تم صرف مبلغ {{amount}} إلى {{party}} من {{cashbox}} مقابل {{ref}}.",
   "voucherNarrative.paragraphPaymentPlain": "تم صرف مبلغ {{amount}} إلى {{party}} من {{cashbox}}.",
-
   "soldMaterialsReport.title": "تقرير خامات مباعة",
   "soldMaterialsReport.searchResults": "نتائج البحث: {{query}}",
   "soldMaterialsReport.allSoldItemsSubtitle": "جميع بنود الخامات المباعة من فواتير البيع المؤكدة فقط",
@@ -257,7 +244,6 @@
   "soldMaterialsReport.colInvoiceNo": "رقم الفاتورة",
   "soldMaterialsReport.colDate": "التاريخ",
   "soldMaterialsReport.totalSales": "إجمالي البيع: {{amount}}",
-
   "inventoryAudit.title": "كشف جرد أتواب الأقمشة",
   "inventoryAudit.searchResults": "نتائج البحث: {{query}}",
   "inventoryAudit.allVisibleRolls": "جميع الأتواب الظاهرة حسب الفلتر الحالي",
@@ -280,7 +266,6 @@
   "inventoryAudit.colStatus": "الحالة",
   "inventoryAudit.totalWithCount": "الإجمالي ({{count}} ثوب)",
   "inventoryAudit.printNote": "يُطبع هذا الكشف حسب نتائج البحث والفلاتر الظاهرة على الشاشة — وليس كامل المخزون.",
-
   "reservationOrder.tagline": "أقمشة بجودة تصنع الفرق",
   "reservationOrder.supplyDateLabel": "موعد التوريد",
   "reservationOrder.orderDateLabel": "تاريخ الطلب",
@@ -312,7 +297,6 @@
   "reservationOrder.amountDueLabel": "المبلغ المطلوب",
   "reservationOrder.notesLabel": "ملاحظات",
   "reservationOrder.meterAbbrev": "م",
-
   "printReport.totalMaterials": "مجموع الخامات",
   "printReport.totalRolls": "مجموع الاتواب",
   "printReport.totalLengthM": "مجموع اطوال",
@@ -330,7 +314,6 @@
   "printReport.errorPdfLoadFailed": "تعذر تحميل تقرير PDF",
   "printReport.errorReadFailed": "تعذر قراءة التقرير للتصدير",
   "printReport.errorPagePrepFailed": "فشل تجهيز الصفحة للتصدير",
-
   "orderExport.printFailed": "تعذرت الطباعة",
   "orderExport.allowPopups": "اسمح بالنوافذ المنبثقة ثم أعد المحاولة",
   "orderExport.excelReservationOrder": "طلبية حجز",
@@ -371,7 +354,6 @@
   "orderExport.whatsappItemsHeader": "بنود مختصرة:",
   "orderExport.whatsappMoreItems": "… و{{count}} بنداً إضافياً",
   "orderExport.whatsappFooter": "— من نظام {{brand}} ({{tagline}}) —",
-
   "duesReport.customerTitle": "كشف ذمم العملاء",
   "duesReport.supplierTitle": "كشف ذمم الموردين",
   "duesReport.customerCount": "عدد العملاء:",
@@ -396,7 +378,6 @@
   "duesReport.colLastPaymentDate": "تاريخ آخر دفعة",
   "duesReport.colNote": "ملاحظة",
   "duesReport.noData": "لا توجد بيانات",
-
   "whatsapp.customerStatementHeader": "كشف حساب عميل: {{name}}",
   "whatsapp.periodRange": "الفترة: من {{from}} إلى {{to}}",
   "whatsapp.itemsLineCount": "عدد الخامات (أسطر الكشف): {{count}}",
@@ -423,7 +404,6 @@
   "whatsapp.supplierLabel": "المورد: {{party}}",
   "whatsapp.returnPdfAttached": "تم إرفاق فاتورة المرتجع PDF.",
   "whatsapp.invoiceShareText": "فاتورة: {{invoiceNo}}%0Aالتاريخ: {{date}}%0Aالإجمالي: {{total}}",
-
   "telegramInvoice.titleSaleDraft": "مسودة فاتورة بيع للمراجعة",
   "telegramInvoice.titlePurchaseDraft": "مسودة فاتورة شراء للمراجعة",
   "telegramInvoice.titleSaleNew": "فاتورة بيع جديدة",
@@ -466,7 +446,6 @@
   "telegramInvoice.captionPurchase": "فاتورة شراء PDF",
   "telegramInvoice.customerFallback": "عميل",
   "telegramInvoice.supplierFallback": "مورد",
-
   "orderStatus.draft": "مسودة",
   "orderStatus.pendingSupply": "بانتظار التوريد",
   "orderStatus.partialReady": "جزئياً جاهز",
@@ -474,7 +453,6 @@
   "orderStatus.completed": "مكتمل",
   "orderStatus.cancelled": "ملغى",
   "orderExport.telegramCaption": "طلبية حجز PDF",
-
   "telegramStatement.customerTitle": "كشف حساب عميل",
   "telegramStatement.supplierTitle": "كشف حساب مورد",
   "telegramStatement.customerTitleWithMovements": "كشف حساب عميل (حركات مالية)",
@@ -491,7 +469,6 @@
   "telegramStatement.totalCredit": "إجمالي الدائن: {{amount}} {{currency}}",
   "telegramStatement.finalBalanceWithLabel": "الرصيد النهائي ({{label}}): {{amount}} {{currency}}",
   "telegramStatement.pdfAttached": "تم إرفاق ملف PDF الخاص بالكشف.",
-
   "telegramVoucher.titleAndNo": "{{title}}: {{no}}",
   "telegramVoucher.dateLine": "التاريخ: {{date}}",
   "telegramVoucher.partyLine": "الطرف: {{party}}",
@@ -500,7 +477,6 @@
   "telegramVoucher.statementLine": "البيان: {{statement}}",
   "telegramVoucher.pdfAttachedFromBrand": "تم إرفاق ملف PDF من {{brand}}.",
   "telegramVoucher.captionPdf": "{{title}} PDF",
-
   "batchExport.unitMeter": "متر",
   "batchExport.unitYard": "يارد",
   "batchExport.titleCustomers": "تصدير كشوفات عملاء جماعية",
@@ -526,7 +502,6 @@
   "batchExport.selectAll": "اختيار الكل",
   "batchExport.exportPdf": "تصدير PDF",
   "batchExport.exportAndSendTelegram": "تصدير وإرسال تيليغرام",
-
   "orderDetail.unknownCustomer": "عميل غير معروف",
   "orderDetail.printFailed": "تعذرت الطباعة",
   "orderDetail.printWindowOpened": "تم فتح نافذة الطباعة",
@@ -542,7 +517,6 @@
   "orderDetail.sendTelegramLabel": "إرسال تيليغرام",
   "orderDetail.close": "إغلاق",
   "orderDetail.previewIframeTitle": "معاينة طلبية الحجز",
-
   "voucherPrintModal.printedToPrinterSuccess": "تم إرسال السند إلى الطابعة بنجاح",
   "voucherPrintModal.printError": "خطأ في الطباعة: {{error}}",
   "voucherPrintModal.unknownError": "خطأ غير معروف",
@@ -564,16 +538,18 @@
   "voucherPrintModal.typeField": "النوع: {{type}}",
   "voucherPrintModal.dateField": "التاريخ: {{date}}",
   "voucherPrintModal.amountField": "المبلغ: {{amount}} {{currency}}",
-
   "smartPartySearch.selected": "تم اختيار: {{name}}",
   "smartPartySearch.noNameFallback": "بدون اسم",
   "smartPartySearch.noMatchingResults": "لا توجد نتائج مطابقة",
-
   "invoiceStatement.managerNotes": [
     "يرجى التأكد من أرقام الأطوال وأرقام اللوطات قبل القص.",
     "يرجى مطابقة اللون ورقم اللون قبل تنفيذ القص.",
     "يفضل أن يتم القص من نفس اللوط لتجنب اختلافات اللون.",
     "الأقمشة المقصوصة أو المفتوحة لا تقبل الإرجاع.",
     "لا تقبل أي مطالبة بعد مرور 15 يوماً من تاريخ التسليم."
-  ]
+  ],
+  "voucher.checkLabel": "الشيك",
+  "voucher.checkMethod": "شيك",
+  "voucher.checkNoShort": "رقم",
+  "voucher.checkDueShort": "استحقاق"
 }

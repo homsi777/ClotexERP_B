@@ -7,7 +7,8 @@ export type VoucherStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
 export type VoucherLinePaymentMethod = 'CASH' | 'BANK' | 'WALLET' | 'CHECK';
 
 export interface VoucherLineInput {
-  cashboxId: string;
+  /** اختياري لبند الشيك الجديد: يُحدِّد الخادم خزينة الشيكات بعملة السند (وينشئها إن لزم). */
+  cashboxId?: string | null;
   paymentMethod?: VoucherLinePaymentMethod;
   amount: number;
   transactionRef?: string | null;

@@ -275,7 +275,8 @@ export default function App() {
             <Route path="inventory/labels" element={<StickerPrinting />} />
             <Route path="inventory/roll-cut" element={<RollCut />} />
             <Route path="inventory/custom-label" element={<CustomStickerPrinting />} />
-            <Route path="cartela" element={<CartelaLabels />} />
+            <Route path="cartela" element={<CartelaLabels key="cartela-generate" />} />
+            <Route path="cartela/library" element={<CartelaLabels key="cartela-library" mode="library" />} />
             <Route path="cartela/delivery" element={<CartelaDelivery />} />
             <Route path="cartela/custody" element={<CartelaCustody />} />
             <Route path="cartela/stock" element={<CartelaStock />} />

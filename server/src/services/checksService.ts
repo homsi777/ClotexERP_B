@@ -30,6 +30,9 @@ export type CheckRow = {
   image_data: string | null;
   /** للقوائم: وجود صورة دون إرسالها (تُجلب عند الطلب). */
   has_image?: boolean;
+  /** سند القبض الذي استُلم به الشيك (إن كان بسند). */
+  voucher_no?: string | null;
+  voucher_id?: string | null;
   status: CheckStatus;
   needs_review: boolean;
   created_at: string;
@@ -38,7 +41,10 @@ export type CheckRow = {
 
 const CHECK_SELECT = `
   SELECT id, check_no, bank_name, account_holder_name, party_type, party_id, party_name,
-         amount, currency_code, received_date, due_date, NULL::text AS image_data, (image_data IS NOT NULL) AS has_image, status, needs_review,
+         amount, currency_code, received_date, due_date, NULL::text AS image_data, (image_data IS NOT NULL) AS has_image,
+         (SELECT v.voucher_no FROM voucher_lines vl JOIN vouchers v ON v.id = vl.voucher_id WHERE vl.id = checks.source_voucher_line_id) AS voucher_no,
+         (SELECT v.id FROM voucher_lines vl JOIN vouchers v ON v.id = vl.voucher_id WHERE vl.id = checks.source_voucher_line_id) AS voucher_id,
+         status, needs_review,
          created_at, updated_at
   FROM checks
 `;
@@ -185,8 +191,8 @@ export async function depositCheck(
   if (check.status !== 'RECEIVED') fail('لا يمكن إيداع شيك إلا بحالة «مستلم»', 'INVALID_STATE');
 
   const checksBox = await client.query<{ id: string; account_kind: string; current_balance: string; currency_code: string }>(
-    `SELECT id, account_kind, current_balance, currency_code FROM cashboxes WHERE company_id=$1 AND account_kind='CHECKS' FOR UPDATE`,
-    [input.companyId],
+    `SELECT id, account_kind, current_balance, currency_code FROM cashboxes WHERE company_id=$1 AND account_kind='CHECKS' ORDER BY (currency_code = $2) DESC, created_at ASC LIMIT 1 FOR UPDATE`,
+    [input.companyId, check.currency_code],
   );
   if (!checksBox.rows.length) fail('لا توجد خزينة شيكات مُعرَّفة بعد — أنشئيها أولاً من شاشة الصناديق', 'VALIDATION');
   const bankBox = await client.query<{ id: string; account_kind: string; current_balance: string; currency_code: string }>(
@@ -289,8 +295,8 @@ export async function returnCheck(
     if (!fromCashboxId) fail('تعذّر تحديد الحساب الذي أُودع به الشيك', 'VALIDATION');
   } else {
     const checksBox = await client.query<{ id: string }>(
-      `SELECT id FROM cashboxes WHERE company_id=$1 AND account_kind='CHECKS'`,
-      [input.companyId],
+      `SELECT id FROM cashboxes WHERE company_id=$1 AND account_kind='CHECKS' ORDER BY (currency_code = $2) DESC, created_at ASC LIMIT 1`,
+      [input.companyId, check.currency_code],
     );
     if (!checksBox.rows.length) fail('لا توجد خزينة شيكات مُعرَّفة', 'VALIDATION');
     fromCashboxId = checksBox.rows[0].id;

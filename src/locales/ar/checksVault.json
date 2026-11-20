@@ -84,5 +84,10 @@
   "currency.USD": "دولار (USD)",
   "currency.EGP": "جنيه مصري (EGP)",
   "currency.TRY": "ليرة تركية (TRY)",
-  "currency.SYP": "ليرة سورية (SYP)"
+  "currency.SYP": "ليرة سورية (SYP)",
+  "receiveButton": "استلام شيك من عميل (سند قبض)",
+  "addWithoutVoucher": "تسجيل شيك بدون سند",
+  "form.noVoucherWarning": "هذا التسجيل لا ينشئ سند قبض ولا يظهر في كشف العميل ولا يؤثر على الحسابات. لاستلام شيك من عميل استخدم سند القبض.",
+  "col.voucher": "سند القبض",
+  "noVoucher": "بدون سند"
 }

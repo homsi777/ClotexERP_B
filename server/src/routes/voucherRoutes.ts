@@ -34,7 +34,8 @@ const purposeSchema = z.enum(VOUCHER_PURPOSES).default('INVOICE_PAYMENT');
 /** بند تقسيم السند على أكثر من حساب/وسيلة — اختياري بالكامل. عند إرساله، يجب
  * أن يساوي مجموع مبالغه إجمالي السند (amount) تماماً، وإلا يُرفَض الحفظ. */
 const voucherLineSchema = z.object({
-  cashboxId: z.string().uuid(),
+  /** اختياري لبند الشيك الجديد: يُحدَّد خزينة الشيكات بعملة السند تلقائياً (تُنشأ إن لم توجد). */
+  cashboxId: z.string().uuid().optional().nullable(),
   paymentMethod: z.enum(['CASH', 'BANK', 'WALLET', 'CHECK']).default('CASH'),
   amount: z.coerce.number().positive(),
   transactionRef: z.string().optional().nullable(),
@@ -88,6 +89,50 @@ function computeUsd(amountOriginal: number, exchangeRateToUsd: number): number {
 
 type ParsedVoucherLine = z.infer<typeof voucherLineSchema>;
 
+/**
+ * خزينة الشيكات (أوراق القبض / «شيكات تحت التحصيل» محاسبياً) بعملة معينة: تُستعمل إن وُجدت وإلا تُنشأ تلقائياً
+ * برصيد افتتاحي صفر، فلا يتوقف استلام الشيك على إعداد يدوي مسبق. الربط المحاسبي بحسب نوع الحساب لا بكل صندوق.
+ */
+async function ensureChecksCashbox(
+  client: import('pg').PoolClient,
+  companyId: string,
+  currencyCode: string,
+  userId: string | null,
+): Promise<string> {
+  const currency = String(currencyCode || 'USD').trim().toUpperCase();
+  const existing = await client.query<{ id: string }>(
+    `SELECT id FROM cashboxes WHERE company_id=$1 AND account_kind='CHECKS' AND currency_code=$2 AND is_active
+      ORDER BY created_at ASC LIMIT 1`,
+    [companyId, currency],
+  );
+  if (existing.rows.length) return existing.rows[0].id;
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`${companyId}:checks_cashbox:${currency}`]);
+  const again = await client.query<{ id: string }>(
+    `SELECT id FROM cashboxes WHERE company_id=$1 AND account_kind='CHECKS' AND currency_code=$2 AND is_active
+      ORDER BY created_at ASC LIMIT 1`,
+    [companyId, currency],
+  );
+  if (again.rows.length) return again.rows[0].id;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const code = attempt === 0 ? `CHK-${currency}` : `CHK-${currency}-${attempt + 1}`;
+    try {
+      await client.query('SAVEPOINT ensure_checks_cashbox');
+      const ins = await client.query<{ id: string }>(
+        `INSERT INTO cashboxes (company_id, code, name, currency_code, opening_balance, current_balance,
+                                is_default, is_active, notes, created_by_user_id, account_kind)
+         VALUES ($1,$2,$3,$4,0,0,false,true,$5,$6,'CHECKS') RETURNING id`,
+        [companyId, code, `خزينة الشيكات (${currency})`, currency, 'أُنشئت تلقائياً عند أول استلام شيك بسند قبض', userId],
+      );
+      await client.query('RELEASE SAVEPOINT ensure_checks_cashbox');
+      return ins.rows[0].id;
+    } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT ensure_checks_cashbox');
+      if ((err as { code?: string }).code !== '23505') throw err;
+    }
+  }
+  throw Object.assign(new Error('تعذّر إنشاء خزينة الشيكات تلقائياً'), { code: 'VALIDATION' });
+}
+
 /** يستبدل بنود السند بالكامل (حذف ثم إعادة إدخال) — نمط نماذج البنود الفرعية
  * الموجود أصلاً بالمشروع (سطور الفاتورة مثلاً)، بسيط وآمن لعدد بنود صغير كهذا. */
 async function replaceVoucherLines(
@@ -98,12 +143,21 @@ async function replaceVoucherLines(
   headerCurrencyCode: string,
   headerExchangeRateToUsd: number,
   voucherType: 'RECEIPT' | 'PAYMENT',
+  userId: string | null = null,
 ): Promise<void> {
   await client.query(`DELETE FROM voucher_lines WHERE company_id=$1 AND voucher_id=$2`, [companyId, voucherId]);
   let sortOrder = 0;
   const seenNewChecks = new Set<string>();
   for (const line of lines) {
     const amountUsd = computeUsd(line.amount, headerExchangeRateToUsd);
+
+    let lineCashboxId = line.cashboxId ?? null;
+    if (!lineCashboxId) {
+      if (!line.checkDetails || voucherType !== 'RECEIPT') {
+        throw Object.assign(new Error('الصندوق مطلوب لكل بند'), { code: 'VALIDATION' });
+      }
+      lineCashboxId = await ensureChecksCashbox(client, companyId, headerCurrencyCode, userId);
+    }
 
     if (line.checkDetails) {
       if (voucherType !== 'RECEIPT') {
@@ -112,7 +166,7 @@ async function replaceVoucherLines(
       if (line.checkId) {
         throw Object.assign(new Error('لا يمكن الجمع بين شيك جديد وشيك موجود في البند نفسه'), { code: 'VALIDATION' });
       }
-      const box = await client.query<{ account_kind: string }>(`SELECT account_kind FROM cashboxes WHERE id=$1 AND company_id=$2`, [line.cashboxId, companyId]);
+      const box = await client.query<{ account_kind: string }>(`SELECT account_kind FROM cashboxes WHERE id=$1 AND company_id=$2`, [lineCashboxId, companyId]);
       if (!box.rows.length || box.rows[0].account_kind !== 'CHECKS') {
         throw Object.assign(new Error('الشيك يُستلَم على خزينة الشيكات فقط'), { code: 'VALIDATION' });
       }
@@ -160,7 +214,7 @@ async function replaceVoucherLines(
       [
         companyId,
         voucherId,
-        line.cashboxId,
+        lineCashboxId,
         line.paymentMethod,
         line.amount,
         headerCurrencyCode,
@@ -378,7 +432,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
       );
 
       if (d.lines && d.lines.length > 0) {
-        await replaceVoucherLines(client, companyId, ins.rows[0].id, d.lines, currencyCode, exchangeRateToUsd, d.voucherType);
+        await replaceVoucherLines(client, companyId, ins.rows[0].id, d.lines, currencyCode, exchangeRateToUsd, d.voucherType, userId);
       }
 
       await client.query('COMMIT');
@@ -480,7 +534,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
 
       // استبدال كامل للبنود دائماً عند التعديل (حتى لو أُرسلت فارغة — يعني
       // رجوعاً لسند أحادي الخزينة) — السند لا يزال DRAFT هنا فقط، لا أثر مالي بعد.
-      await replaceVoucherLines(client, companyId, id, d.lines ?? [], currencyCode, exchangeRateToUsd, d.voucherType);
+      await replaceVoucherLines(client, companyId, id, d.lines ?? [], currencyCode, exchangeRateToUsd, d.voucherType, userId);
 
       await client.query('COMMIT');
       return reply.send({ ok: true, data: row.rows[0] });

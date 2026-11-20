@@ -19,7 +19,7 @@ import {
   Link2,
   Unlink,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   sanitizeManualCartelaSerialInput,
@@ -134,9 +134,14 @@ function activeCompositionLines(lines: CartelaCompositionLine[]): CartelaComposi
   return lines.filter((line) => line.percent > 0 && line.fiberName.trim());
 }
 
-export const CartelaLabels: React.FC = () => {
+/**
+ * generate = توليد كارتيلة (النموذج)؛ library = مكتبة الكارتيلات (السجل: بحث ومعاينة وطباعة فردية وجماعية).
+ * الفصل ملاحظة بشير: السجل خرج من صفحة التوليد إلى قائمة مستقلة.
+ */
+export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mode = 'generate' }) => {
   const { t, i18n } = useTranslation('cartelaLabels');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
   const { settings } = useElectronSettings();
   const canSilent = canUseSilentLabelPrinting({
@@ -158,7 +163,7 @@ export const CartelaLabels: React.FC = () => {
   const [qrSvg, setQrSvg] = useState('');
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<PrintMode | null>(null);
-  const [activeTab, setActiveTab] = useState<CartelaTab>('form');
+  const [activeTab, setActiveTab] = useState<CartelaTab>(mode === 'library' ? 'registry' : 'form');
   const [registryPrintingId, setRegistryPrintingId] = useState<string | null>(null);
   const [registryPreview, setRegistryPreview] = useState<{ id: string; html: string } | null>(null);
   /** بعد إنشاء كارتيلة مرتبطة: سؤال إنشاء كارتيلات بقية ألوان نفس كود الدسان (يُسأل دائماً). */
@@ -166,6 +171,8 @@ export const CartelaLabels: React.FC = () => {
   const [siblingBusy, setSiblingBusy] = useState(false);
   const [selectedCartelaIds, setSelectedCartelaIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState<PrintMode | null>(null);
+  /** معاينة الطباعة الجماعية قبل الإرسال (ملاحظة بشير). */
+  const [bulkPreview, setBulkPreview] = useState<{ html: string; previews: { id: string; title: string; html: string }[] } | null>(null);
 
   // ربط الكارتيله الجديدة بخامة حقيقية موجودة بالنظام — بدل نص كود تصميم حر.
   const [cartelaMode, setCartelaMode] = useState<'linked' | 'external'>('linked');
@@ -757,6 +764,40 @@ export const CartelaLabels: React.FC = () => {
     }
   };
 
+  /** من المكتبة: التعديل يفتح صفحة التوليد بالكارتيلة المختارة. */
+  const openForEdit = (id: string) => {
+    if (mode === 'library') navigate(`/cartela?id=${id}`);
+    else void loadOne(id);
+  };
+
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (mode === 'generate' && id) void loadOne(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** يبني معاينة كل اللصاقات المحددة (بالترتيب) ثم يعرضها قبل الطباعة الجماعية. */
+  const handleBulkPreview = async () => {
+    if (selectedCartelaIds.size === 0) {
+      showToast({ type: 'warning', message: t('toast.selectAtLeastOne') });
+      return;
+    }
+    const picked = items.filter((item) => selectedCartelaIds.has(item.id));
+    setBulkBusy('dialog');
+    try {
+      const data: CartelaLabelData[] = [];
+      for (const item of picked) data.push(await prepareCartelaLabelData(item.id));
+      setBulkPreview({
+        html: buildCartelaLabelsBatchHtml(data),
+        previews: data.map((d, i) => ({ id: picked[i].id, title: cartelaListLabel(picked[i]), html: buildCartelaLabelPreviewHtml(d) })),
+      });
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('toast.batchPrintFailed') });
+    } finally {
+      setBulkBusy(null);
+    }
+  };
+
   const inputCls =
     'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
@@ -774,34 +815,14 @@ export const CartelaLabels: React.FC = () => {
           <div>
             <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
               <ScrollText className="w-6 h-6 text-indigo-600" />
-              {t('header.title')}
+              {t(mode === 'library' ? 'header.libraryTitle' : 'header.title')}
             </h2>
             <p className="text-slate-500 mt-1 text-sm">
-              {t('header.subtitle')}
+              {t(mode === 'library' ? 'header.librarySubtitle' : 'header.subtitle')}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('form')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition ${
-              activeTab === 'form' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            {t('tab.generate')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('registry')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition ${
-              activeTab === 'registry' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200'
-            }`}
-          >
-            <List className="w-4 h-4" />
-            {t('tab.registry')}
-          </button>
           <button
             type="button"
             onClick={() => patchForm({ showLogo: !form.showLogo })}
@@ -865,7 +886,7 @@ export const CartelaLabels: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={startNew}
+                onClick={() => (mode === 'library' ? navigate('/cartela') : startNew())}
                 className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -883,7 +904,7 @@ export const CartelaLabels: React.FC = () => {
                 items={items}
                 searchActive={search.trim().length > 0}
                 printingId={registryPrintingId}
-                onEdit={(id) => void loadOne(id)}
+                onEdit={(id) => openForEdit(id)}
                 onPrintCartela={(id) => void handleRegistryPrint(id)}
                 onPreviewCartela={(id) => void handleRegistryPreview(id)}
               />
@@ -906,6 +927,14 @@ export const CartelaLabels: React.FC = () => {
                 {items.length > 0 && items.every((item) => selectedCartelaIds.has(item.id))
                   ? t('registry.deselectAll')
                   : t('registry.selectAll')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkPreview()}
+                disabled={selectedCartelaIds.size === 0 || Boolean(bulkBusy)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-4 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                {t('registry.bulkPreview')}
               </button>
               <button
                 type="button"
@@ -1017,7 +1046,7 @@ export const CartelaLabels: React.FC = () => {
                       <div className="flex flex-wrap gap-1.5">
                         <button
                           type="button"
-                          onClick={() => void loadOne(item.id)}
+                          onClick={() => openForEdit(item.id)}
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-white"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -1667,6 +1696,41 @@ export const CartelaLabels: React.FC = () => {
                 className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
               >
                 {t('siblings.confirm', { count: siblingPrompt.picked.size })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-base font-bold text-slate-900">{t('registry.bulkPreviewTitle', { count: bulkPreview.previews.length })}</h3>
+              <span className="font-mono text-xs text-slate-500" dir="ltr">{CARTELA_WIDTH_MM}×{CARTELA_HEIGHT_MM} mm</span>
+            </div>
+            <div className="grid flex-1 grid-cols-1 gap-3 overflow-auto sm:grid-cols-2">
+              {bulkPreview.previews.map((p) => (
+                <div key={p.id} className="space-y-1">
+                  <div className="truncate text-xs font-bold text-slate-600">{p.title}</div>
+                  <CartelaPreviewFrame html={p.html} />
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" onClick={() => setBulkPreview(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                {t('tree.previewClose')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const html = bulkPreview.html;
+                  setBulkPreview(null);
+                  void printHtml(html, 'dialog', `cartela-batch-${new Date().toISOString().slice(0, 10)}`);
+                }}
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white"
+              >
+                {t('registry.bulkPrint')}
               </button>
             </div>
           </div>

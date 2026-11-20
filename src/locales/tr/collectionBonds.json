@@ -49,5 +49,8 @@
   "check.sectionTitle": "Çek bilgileri",
   "check.incomplete": "Çek bilgilerini tamamlayın: numara, banka ve vade tarihi",
   "check.singleHint": "Çek, fiş kaydedilince «alındı» durumuyla çek kasasına girer ve cari hesaptan diğer ödemeler gibi düşülür.",
-  "check.lineLabel": "Çek"
+  "check.lineLabel": "Çek",
+  "check.methodCashbox": "Nakit / Banka / Cüzdan",
+  "check.methodCheck": "Çek",
+  "check.autoBoxHint": "Ödeme, fiş para biriminde çek kasasına (alacak çekleri) işlenir; ilk çekte otomatik oluşturulur."
 }

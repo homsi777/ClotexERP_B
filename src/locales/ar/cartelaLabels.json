@@ -30,7 +30,7 @@
   "toast.selectAtLeastOne": "اختر كارتيلة واحدة على الأقل للطباعة الجماعية.",
   "toast.batchPrintFailed": "تعذر الطباعة الجماعية",
   "toast.fontSizeSaved": "تم حفظ قياس الخط الافتراضي: {{value}} pt — تُطبَّق على الكارتيلات الجديدة.",
-  "header.title": "كارتيله",
+  "header.title": "توليد كارتيلة",
   "header.subtitle": "لصاقة 80×50 مم + كارتيلة ألوان (Code128) — طباعة حرارية بدون QR.",
   "tab.generate": "توليد كارتيلا",
   "tab.registry": "سجل الكارتيلات",
@@ -227,5 +227,9 @@
   "siblings.confirm": "إنشاء {{count}} كارتيلة",
   "siblings.created": "تم إنشاء {{count}} كارتيلة بنفس المواصفات",
   "siblings.partial": "أُنشئت {{created}} وتعذّرت {{failed}}: {{reason}}",
-  "siblings.failed": "تعذّر إنشاء الكارتيلات"
+  "siblings.failed": "تعذّر إنشاء الكارتيلات",
+  "header.libraryTitle": "مكتبة الكارتيلات",
+  "header.librarySubtitle": "سجل كل الكارتيلات: بحث ومعاينة وطباعة فردية وجماعية وتعديل.",
+  "registry.bulkPreview": "معاينة المحدد",
+  "registry.bulkPreviewTitle": "معاينة الطباعة الجماعية ({{count}} لصاقة)"
 }

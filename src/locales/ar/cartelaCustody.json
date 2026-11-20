@@ -95,5 +95,8 @@
   "stock.colorHint": "عدد خاص بلون: يُخصم باركود هذا اللون من عدده، وإلا من عدد الكارتيلة كلها.",
   "stock.empty": "لا كارتيلات مطابقة",
   "stock.loadFailed": "تعذّر تحميل المخزون",
-  "stock.goDelivery": "سند تسليم"
+  "stock.goDelivery": "سند تسليم",
+  "delivery.previewPrint": "معاينة وطباعة السند",
+  "delivery.close": "إغلاق",
+  "delivery.totalQty": "إجمالي العدد"
 }

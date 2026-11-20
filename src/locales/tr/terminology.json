@@ -10,11 +10,9 @@
   "documentStatus.partial": "Kısmen Ödendi",
   "documentStatus.paid": "Ödendi",
   "documentStatus.unpaid": "Ödenmedi",
-
   "paymentStatusTable.paid": "Ödendi",
   "paymentStatusTable.partial": "Kısmi",
   "paymentStatusTable.unpaid": "Ödenmedi",
-
   "invoiceStatement.printTitle": "Detaylı Teslimat Bildirimi",
   "invoiceStatement.printSubtitle": "Fatura Özeti",
   "invoiceStatement.customerSupplier": "Müşteri / Tedarikçi",
@@ -45,22 +43,17 @@
   "invoiceStatement.deliveredBy": "Teslim Eden",
   "invoiceStatement.receivedBy": "Teslim Alan",
   "invoiceStatement.draftBanner": "Onaylanmamış Taslak",
-
   "paymentProgress.paid": "Ödendi",
   "paymentProgress.unpaid": "Ödenmedi",
   "paymentProgress.partial": "Kısmen Ödendi",
   "paymentProgress.dash": "—",
-
   "saleTerms.cashPaidFull": "Peşin / Tamamen Ödendi",
   "saleTerms.credit": "Vadeli",
   "saleTerms.creditWithPartial": "Vadeli (Kısmi Ödeme ile)",
   "saleTerms.dash": "—",
-
   "cashPartyFallback": "Nakit Müşteri / Tedarikçi",
-
   "accounting.creditSide": "Alacak",
   "accounting.debitSide": "Borç",
-
   "invoiceStatement.typePurchase": "Alış",
   "invoiceStatement.typeSale": "Satış",
   "invoiceStatement.supplierNameLabel": "Tedarikçi Adı",
@@ -130,7 +123,6 @@
   "accountStatement.signatureField": "İmza:",
   "accountStatement.noMovementsInPeriod": "Belirtilen dönemde hareket bulunmuyor",
   "accountStatement.partnershipSlogan": "Ortaklığımız sadece sayılarla değil, birlikte inşa ettiğimiz güvenle ölçülür",
-
   "fabricStatement.customerAccountStatement": "Müşteri Hesap Özeti",
   "fabricStatement.supplierAccountStatement": "Tedarikçi Hesap Özeti",
   "fabricStatement.customerLabel": "Müşteri",
@@ -156,14 +148,12 @@
   "fabricStatement.colUnitPrice": "Birim Fiyat",
   "fabricStatement.colTotal": "Toplam",
   "fabricStatement.footerGeneratedBy": "Bu özet {{descriptionAr}} tarafından oluşturulmuştur",
-
   "accountStatement.customerAccountStatement": "Müşteri Hesap Özeti",
   "accountStatement.supplierAccountStatementWithMovements": "Tedarikçi Hesap Özeti (Finansal Hareketler)",
   "accountStatement.customerDetailLine": "Telefon: {{phone}} | Adres: {{address}}",
   "accountStatement.supplierDetailLine": "Şirket Temsilcisi: {{name}} | İletişim No: {{phone}}",
   "accountStatement.creditToSupplier": "Tedarikçiye Alacak",
   "accountStatement.debitToUs": "Bize Borç",
-
   "brandDescriptionSub": "Kumaş Depo Yönetimi",
   "errors.pdfPrepareFailed": "PDF hazırlanamadı",
   "unspecifiedMaterial": "Belirtilmemiş Malzeme",
@@ -172,7 +162,6 @@
   "documentFooter.invoiceSlogan": "Kaliteyi dokuyoruz, güveni inşa ediyoruz.",
   "documentFooter.voucherReceiptSlogan": "Güveniniz gerçek sermayemizdir.",
   "documentFooter.voucherPaymentSlogan": "İşlerimizde bağlılık, aramızdaki güvenin temelidir",
-
   "voucher.typeReceipt": "Tahsilat",
   "voucher.typePayment": "Ödeme",
   "voucher.docTitleReceipt": "Tahsilat Fişi",
@@ -197,7 +186,6 @@
   "voucher.cashboxLabel": "Kasa",
   "voucher.statementColon": "Açıklama:",
   "voucher.cashierTitle": "Kasa Sorumlusu",
-
   "voucherNarrative.cashOnly": "nakit olarak",
   "voucherNarrative.viaBankTransfer": "banka havalesi yoluyla",
   "voucherNarrative.viaTransfer": "havale yoluyla",
@@ -238,7 +226,6 @@
   "voucherNarrative.paragraphPaymentWithDescNoRef": "{{amount}} tutar {{cashbox}}'dan {{party}}'ye ödenmiştir — {{desc}}.",
   "voucherNarrative.paragraphPaymentWithRef": "{{amount}} tutar {{cashbox}}'dan {{party}}'ye {{ref}} karşılığında ödenmiştir.",
   "voucherNarrative.paragraphPaymentPlain": "{{amount}} tutar {{cashbox}}'dan {{party}}'ye ödenmiştir.",
-
   "soldMaterialsReport.title": "Satılan Malzeme Raporu",
   "soldMaterialsReport.searchResults": "Arama sonuçları: {{query}}",
   "soldMaterialsReport.allSoldItemsSubtitle": "Yalnızca onaylanmış satış faturalarındaki satılan malzeme kalemleri",
@@ -257,7 +244,6 @@
   "soldMaterialsReport.colInvoiceNo": "Fatura No",
   "soldMaterialsReport.colDate": "Tarih",
   "soldMaterialsReport.totalSales": "Toplam Satış: {{amount}}",
-
   "inventoryAudit.title": "Kumaş Topları Sayım Raporu",
   "inventoryAudit.searchResults": "Arama sonuçları: {{query}}",
   "inventoryAudit.allVisibleRolls": "Geçerli filtreye göre görünen tüm toplar",
@@ -280,7 +266,6 @@
   "inventoryAudit.colStatus": "Durum",
   "inventoryAudit.totalWithCount": "Toplam ({{count}} top)",
   "inventoryAudit.printNote": "Bu rapor, ekranda görünen arama sonuçlarına ve filtrelere göre yazdırılır — tüm stoğu kapsamaz.",
-
   "reservationOrder.tagline": "Farkı yaratan kalitede kumaşlar",
   "reservationOrder.supplyDateLabel": "Teslim Tarihi",
   "reservationOrder.orderDateLabel": "Sipariş Tarihi",
@@ -312,7 +297,6 @@
   "reservationOrder.amountDueLabel": "Ödenecek Tutar",
   "reservationOrder.notesLabel": "Notlar",
   "reservationOrder.meterAbbrev": "m",
-
   "printReport.totalMaterials": "Toplam Malzeme",
   "printReport.totalRolls": "Toplam Top",
   "printReport.totalLengthM": "Toplam Uzunluk",
@@ -330,7 +314,6 @@
   "printReport.errorPdfLoadFailed": "PDF raporu yüklenemedi",
   "printReport.errorReadFailed": "Dışa aktarım için rapor okunamadı",
   "printReport.errorPagePrepFailed": "Sayfa dışa aktarım için hazırlanamadı",
-
   "orderExport.printFailed": "Yazdırma başarısız oldu",
   "orderExport.allowPopups": "Lütfen açılır pencerelere izin verip tekrar deneyin",
   "orderExport.excelReservationOrder": "Rezervasyon Siparişi",
@@ -371,7 +354,6 @@
   "orderExport.whatsappItemsHeader": "Kısa kalem listesi:",
   "orderExport.whatsappMoreItems": "… ve {{count}} ek kalem",
   "orderExport.whatsappFooter": "— {{brand}} sisteminden ({{tagline}}) —",
-
   "duesReport.customerTitle": "Müşteri Alacakları Özeti",
   "duesReport.supplierTitle": "Tedarikçi Borçları Özeti",
   "duesReport.customerCount": "Müşteri Sayısı:",
@@ -396,7 +378,6 @@
   "duesReport.colLastPaymentDate": "Son Ödeme Tarihi",
   "duesReport.colNote": "Not",
   "duesReport.noData": "Veri bulunmuyor",
-
   "whatsapp.customerStatementHeader": "Müşteri Hesap Özeti: {{name}}",
   "whatsapp.periodRange": "Dönem: {{from}} - {{to}}",
   "whatsapp.itemsLineCount": "Malzeme Sayısı (Özet Satırı): {{count}}",
@@ -423,7 +404,6 @@
   "whatsapp.supplierLabel": "Tedarikçi: {{party}}",
   "whatsapp.returnPdfAttached": "İade faturası PDF'i eklendi.",
   "whatsapp.invoiceShareText": "Fatura: {{invoiceNo}}%0ATarih: {{date}}%0AToplam: {{total}}",
-
   "telegramInvoice.titleSaleDraft": "İncelenecek Satış Faturası Taslağı",
   "telegramInvoice.titlePurchaseDraft": "İncelenecek Alış Faturası Taslağı",
   "telegramInvoice.titleSaleNew": "Yeni Satış Faturası",
@@ -466,7 +446,6 @@
   "telegramInvoice.captionPurchase": "Alış Faturası PDF",
   "telegramInvoice.customerFallback": "Müşteri",
   "telegramInvoice.supplierFallback": "Tedarikçi",
-
   "orderStatus.draft": "Taslak",
   "orderStatus.pendingSupply": "Tedarik Bekliyor",
   "orderStatus.partialReady": "Kısmen Hazır",
@@ -474,7 +453,6 @@
   "orderStatus.completed": "Tamamlandı",
   "orderStatus.cancelled": "İptal Edildi",
   "orderExport.telegramCaption": "Rezervasyon Siparişi PDF",
-
   "telegramStatement.customerTitle": "Müşteri Hesap Özeti",
   "telegramStatement.supplierTitle": "Tedarikçi Hesap Özeti",
   "telegramStatement.customerTitleWithMovements": "Müşteri Hesap Özeti (Finansal Hareketler)",
@@ -491,7 +469,6 @@
   "telegramStatement.totalCredit": "Toplam Alacak: {{amount}} {{currency}}",
   "telegramStatement.finalBalanceWithLabel": "Nihai Bakiye ({{label}}): {{amount}} {{currency}}",
   "telegramStatement.pdfAttached": "Özet PDF dosyası eklendi.",
-
   "telegramVoucher.titleAndNo": "{{title}}: {{no}}",
   "telegramVoucher.dateLine": "Tarih: {{date}}",
   "telegramVoucher.partyLine": "Taraf: {{party}}",
@@ -500,7 +477,6 @@
   "telegramVoucher.statementLine": "Açıklama: {{statement}}",
   "telegramVoucher.pdfAttachedFromBrand": "{{brand}} tarafından PDF dosyası eklendi.",
   "telegramVoucher.captionPdf": "{{title}} PDF",
-
   "batchExport.unitMeter": "metre",
   "batchExport.unitYard": "yarda",
   "batchExport.titleCustomers": "Toplu Müşteri Özeti Dışa Aktarımı",
@@ -526,7 +502,6 @@
   "batchExport.selectAll": "Tümünü Seç",
   "batchExport.exportPdf": "PDF Dışa Aktar",
   "batchExport.exportAndSendTelegram": "Dışa Aktar ve Telegram'a Gönder",
-
   "orderDetail.unknownCustomer": "Bilinmeyen Müşteri",
   "orderDetail.printFailed": "Yazdırma başarısız oldu",
   "orderDetail.printWindowOpened": "Yazdırma penceresi açıldı",
@@ -542,7 +517,6 @@
   "orderDetail.sendTelegramLabel": "Telegram'a Gönder",
   "orderDetail.close": "Kapat",
   "orderDetail.previewIframeTitle": "Rezervasyon Siparişi Önizleme",
-
   "voucherPrintModal.printedToPrinterSuccess": "Fiş yazıcıya başarıyla gönderildi",
   "voucherPrintModal.printError": "Yazdırma hatası: {{error}}",
   "voucherPrintModal.unknownError": "Bilinmeyen hata",
@@ -564,16 +538,18 @@
   "voucherPrintModal.typeField": "Tür: {{type}}",
   "voucherPrintModal.dateField": "Tarih: {{date}}",
   "voucherPrintModal.amountField": "Tutar: {{amount}} {{currency}}",
-
   "smartPartySearch.selected": "Seçildi: {{name}}",
   "smartPartySearch.noNameFallback": "İsimsiz",
   "smartPartySearch.noMatchingResults": "Eşleşen sonuç bulunmuyor",
-
   "invoiceStatement.managerNotes": [
     "Kesimden önce lütfen uzunlukları ve lot numaralarını kontrol ediniz.",
     "Kesim işleminden önce lütfen rengi ve renk numarasını eşleştiriniz.",
     "Renk farklılıklarını önlemek için aynı lottan kesim yapılması tercih edilir.",
     "Kesilmiş veya açılmış kumaşlar iade edilemez.",
     "Teslimattan itibaren 15 gün geçtikten sonra herhangi bir talep kabul edilmez."
-  ]
+  ],
+  "voucher.checkLabel": "Çek",
+  "voucher.checkMethod": "Çek",
+  "voucher.checkNoShort": "No",
+  "voucher.checkDueShort": "Vade"
 }
