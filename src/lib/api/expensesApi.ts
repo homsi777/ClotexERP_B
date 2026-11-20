@@ -37,6 +37,14 @@ export async function listExpenseCategories() {
   return apiFetch<{ ok: boolean; data: ExpenseCategoryDto[] }>('/api/expenses/categories');
 }
 
+/** يضيف تصنيفاً إلى القائمة الموحّدة، أو يعيد المطابق إملائياً (existing=true) دون تكرار. */
+export async function createExpenseCategory(name: string) {
+  return apiFetch<{ ok: boolean; data: ExpenseCategoryDto & { existing: boolean } }>('/api/expenses/categories', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
 export async function listOperatingExpenses(params: {
   search?: string;
   cashboxId?: string;

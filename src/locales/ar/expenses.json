@@ -50,5 +50,11 @@
   "filterTo": "إلى",
   "clearFilter": "مسح الفلتر",
   "customLabelLabel": "تسمية خاصة للمصروف (اختياري)",
-  "customLabelPlaceholder": "مثال: بنزين سيارة التوصيل"
+  "customLabelPlaceholder": "مثال: بنزين سيارة التوصيل",
+  "newCategoryOption": "＋ إضافة تصنيف جديد…",
+  "newCategoryPlaceholder": "اسم التصنيف الجديد",
+  "newCategoryAdd": "إضافة",
+  "newCategoryAdded": "أُضيف التصنيف إلى القائمة",
+  "newCategoryExisting": "هذا التصنيف موجود مسبقاً (مع اختلاف بسيط في الإملاء) وتم اختياره",
+  "newCategoryFailed": "تعذّرت إضافة التصنيف"
 }

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import {
@@ -8,11 +9,32 @@ import {
   listOperatingExpenses,
 } from '../services/operatingExpenseService.js';
 
+import { ExpenseCategoryError, createExpenseCategory } from '../services/expenseCategoryService.js';
+
 export const operatingExpenseRoutes: FastifyPluginAsync = async (app) => {
   app.get('/categories', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const data = await listExpenseCategories(companyId);
     return reply.send({ ok: true, data });
+  });
+
+  // إضافة تصنيف مصروف جديد إلى القائمة الموحّدة (أو إعادة المطابق إملائياً إن وُجد).
+  app.post('/categories', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const body = (req.body ?? {}) as { name?: unknown };
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const data = await createExpenseCategory(client, companyId, body.name);
+      await client.query('COMMIT');
+      return reply.status(data.existing ? 200 : 201).send({ ok: true, data });
+    } catch (e: unknown) {
+      await client.query('ROLLBACK');
+      if (e instanceof ExpenseCategoryError) return sendError(reply, 400, e.message, e.code);
+      throw e;
+    } finally {
+      client.release();
+    }
   });
 
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {

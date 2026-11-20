@@ -50,5 +50,11 @@
   "filterTo": "Bitiş",
   "clearFilter": "Filtreyi temizle",
   "customLabelLabel": "Gider için özel ad (isteğe bağlı)",
-  "customLabelPlaceholder": "Örnek: Teslimat aracı yakıtı"
+  "customLabelPlaceholder": "Örnek: Teslimat aracı yakıtı",
+  "newCategoryOption": "＋ Yeni kategori ekle…",
+  "newCategoryPlaceholder": "Yeni kategori adı",
+  "newCategoryAdd": "Ekle",
+  "newCategoryAdded": "Kategori listeye eklendi",
+  "newCategoryExisting": "Bu kategori zaten var (küçük yazım farkıyla) ve seçildi",
+  "newCategoryFailed": "Kategori eklenemedi"
 }

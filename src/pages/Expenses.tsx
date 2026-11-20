@@ -8,6 +8,7 @@ import {
   cancelOperatingExpense,
   createOperatingExpense,
   listExpenseCategories,
+  createExpenseCategory,
   listOperatingExpenses,
   type ExpenseCategoryDto,
   type OperatingExpenseDto,
@@ -40,7 +41,9 @@ export const Expenses = () => {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
-  const [customLabel, setCustomLabel] = useState('');
+  const NEW_CATEGORY = '__NEW__';
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [addingCategory, setAddingCategory] = useState(false);
   const [filterFrom, setFilterFrom] = useState('');
   const [filterTo, setFilterTo] = useState('');
   const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
@@ -105,7 +108,7 @@ export const Expenses = () => {
   const resetForm = () => {
     setExpenseDate(new Date().toISOString().slice(0, 10));
     setBeneficiaryName('');
-    setCustomLabel('');
+    setNewCategoryName('');
     setAmount('');
     setDescription('');
     setNotes('');
@@ -113,9 +116,29 @@ export const Expenses = () => {
     if (categories.length) setCategoryId(categories[0].id);
   };
 
+  /** يضيف التصنيف إلى القائمة الموحّدة ويختاره (أو يختار المطابق إملائياً إن وُجد). */
+  const addCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setAddingCategory(true);
+    setErr('');
+    try {
+      const res = await createExpenseCategory(name);
+      const fresh = await listExpenseCategories();
+      setCategories(fresh.data);
+      setCategoryId(res.data.id);
+      setNewCategoryName('');
+      showToast({ type: 'success', message: res.data.existing ? t('newCategoryExisting') : t('newCategoryAdded') });
+    } catch (e) {
+      setErr(e instanceof ApiRequestError ? e.message : t('newCategoryFailed'));
+    } finally {
+      setAddingCategory(false);
+    }
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!categoryId || !cashboxId) {
+    if (!categoryId || categoryId === NEW_CATEGORY || !cashboxId) {
       setErr(t('chooseCategoryAndCashbox'));
       return;
     }
@@ -137,7 +160,6 @@ export const Expenses = () => {
         categoryId,
         cashboxId,
         beneficiaryName: beneficiaryName.trim() || null,
-        customLabel: customLabel.trim() || null,
         amount: amountOriginal,
         currencyCode,
         exchangeRateToUsd: rate,
@@ -327,18 +349,6 @@ export const Expenses = () => {
             <form onSubmit={(e) => void handleAdd(e)} className="p-6 space-y-4">
               {err && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{err}</p>}
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">{t('customLabelLabel')}</label>
-                <input
-                  type="text"
-                  maxLength={120}
-                  placeholder={t('customLabelPlaceholder')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  value={customLabel}
-                  onChange={(e) => setCustomLabel(e.target.value)}
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('dateLabel')}</label>
@@ -362,7 +372,29 @@ export const Expenses = () => {
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
+                    <option value={NEW_CATEGORY}>{t('newCategoryOption')}</option>
                   </select>
+                  {categoryId === NEW_CATEGORY && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={80}
+                        autoFocus
+                        placeholder={t('newCategoryPlaceholder')}
+                        className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        disabled={addingCategory || !newCategoryName.trim()}
+                        onClick={() => void addCategory()}
+                        className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold disabled:opacity-50"
+                      >
+                        {t('newCategoryAdd')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
