@@ -16,11 +16,11 @@ import {
 } from '../../lib/inventory/createItemEditIdentity';
 import { createFabricRoll, getNextRollBarcode } from '../../lib/api/fabricRollsApi';
 import { createFabricColor, listFabricColors, type ApiFabricColor } from '../../lib/api/fabricColorsApi';
-import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
+import { listWarehouses, listLocations, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { getCategoryTree, type ApiCategory } from '../../lib/api/fabricCategoriesApi';
 import { resolveFabricClassification } from '../../lib/api/fabricClassificationApi';
 import { buildRollQrPayload } from '../../lib/labels/buildRollQrPayload';
-import { ExternalManufacturingLifecycle } from '../../components/purchases/ExternalManufacturingLifecycle';
+import { getManufacturing, manufacturingAction, type ManufacturingResponse } from '../../lib/api/externalManufacturingApi';
 import { getCategoryCode, getCategoryLabel } from '../../lib/fabricCategoryValues';
 import {ManufacturingRawReceiptAdapter} from '../../components/manufacturing/ProductionQualityPanel';
 
@@ -148,6 +148,8 @@ type DraftRoll = {
   /** عملية إدخال خامة بإجراء "مخزون" فقط — هذا التوب محدَّد للبيع فوراً
    * (فاتورة بيع واحدة لعميل واحد عند الحفظ النهائي)، وليس لإرسالية المخزون. */
   forSale: boolean;
+  /** استلام مصنعية خارجية فقط. */
+  receipt?: { itemId: string; colorName: string; colorCode: string; defective: boolean; defectReason: 'DYE_HOUSE' | 'INTERNAL_KNITTING' | 'OTHER'; responsibleParty: string; notes: string };
 };
 
 let draftRollIdCounter = 0;
@@ -161,11 +163,13 @@ export const CreateItem = () => {
   const jobId = query.get('externalJobId');
   const batchId=query.get('productionBatchId');
   if(batchId)return <ManufacturingRawReceiptAdapter key={batchId} batchId={batchId}/>;
-  return jobId ? <ExternalManufacturingLifecycle key={jobId} jobId={jobId} receiving /> : <CreateItemForm />;
+  return jobId ? <CreateItemForm key={jobId} receiptJobId={jobId} /> : <CreateItemForm />;
 };
 
-const CreateItemForm = () => {
+const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
   const { t } = useTranslation('createItem');
+  const { t: tj } = useTranslation('externalJobs');
+  const isReceipt = Boolean(receiptJobId);
   const { addFabric, updateFabric, inventory, warehouses } = useStore();
   const navigate = useNavigate();
   const { id } = useParams();
@@ -220,7 +224,7 @@ const CreateItemForm = () => {
   }, [categoryApiTree, catL3Id]);
 
   const [name, setName] = useState('');
-  const [warehouseId, setWarehouseId] = useState(activeWarehouses[0]?.id || '');
+  const [warehouseId, setWarehouseId] = useState(isReceipt ? '' : activeWarehouses[0]?.id || '');
   const [barcode, setBarcode] = useState('');
   const [lotNumber, setLotNumber] = useState('');
 
@@ -310,6 +314,54 @@ const CreateItemForm = () => {
   const [imageUrl, setImageUrl] = useState('');
   const lengthInputRef = React.useRef<HTMLInputElement>(null);
 
+  /* ─── وضع استلام دفعة من مصنعية خارجية: نفس هذه الشاشة، والمرجع هو الكمية الإجمالية للمهمة ─── */
+  const [receipt, setReceipt] = useState<ManufacturingResponse | null>(null);
+  const [receiptStep, setReceiptStep] = useState<1 | 2>(1);
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([]);
+  const [locationId, setLocationId] = useState('');
+  const [dyePaper, setDyePaper] = useState('');
+  const [receiptNotes, setReceiptNotes] = useState('');
+  const [completedServices, setCompletedServices] = useState<string[]>([]);
+  const [rItemId, setRItemId] = useState('');
+  const [rColorName, setRColorName] = useState('');
+  const [rColorCode, setRColorCode] = useState('');
+  const [rDefective, setRDefective] = useState(false);
+  const [rDefectReason, setRDefectReason] = useState<'DYE_HOUSE' | 'INTERNAL_KNITTING' | 'OTHER'>('DYE_HOUSE');
+  const [rResponsible, setRResponsible] = useState('');
+  const [rLineNotes, setRLineNotes] = useState('');
+  const retryRef = useRef<{ payload: string; id: string } | null>(null);
+
+  useEffect(() => {
+    if (!receiptJobId) return;
+    let active = true;
+    getManufacturing(receiptJobId).then((r) => {
+      if (!active) return;
+      setReceipt(r);
+      const w = Number(r.data.job.finished_width_cm);
+      const g = Number(r.data.job.finished_gsm);
+      setRollWidth(w > 0 ? w : '');
+      setWidthUnit('cm');
+      setWeightMultiplier(g > 0 ? g : '');
+    }).catch((e) => { if (active) setSaveError(e instanceof Error ? e.message : String(e)); });
+    return () => { active = false; };
+  }, [receiptJobId]);
+
+  useEffect(() => {
+    setLocationId(''); setLocations([]);
+    if (!isReceipt || !warehouseId) return;
+    let active = true;
+    listLocations(warehouseId).then((r) => { if (active) setLocations(r.filter((l) => l.is_active)); }).catch(() => {});
+    return () => { active = false; };
+  }, [warehouseId, isReceipt]);
+
+  const receiptOpenLines = receipt ? receipt.data.lines.filter((l) => Number(l.sent_length_m) - Number(l.returned_m) - Number(l.shortage_m) > 0.0005) : [];
+  const receiptItems = [...new Map(receiptOpenLines.map((l) => [String(l.sent_item_id ?? l.item_id ?? ''), `${l.item_name} / ${l.internal_code}`])).entries()].filter(([k]) => k);
+  const receiptRemaining = receipt
+    ? Math.max(0, receipt.data.lines.reduce((n, l) => n + Number(l.sent_length_m) - Number(l.returned_m) - Number(l.shortage_m) + Number(l.excess_m), 0))
+    : 0;
+  const toMeters = (d: DraftRoll) => (d.lengthType === 'meter' ? d.length : d.length * 0.9144);
+  const draftMeters = draftRolls.reduce((n, d) => n + toMeters(d), 0);
+
   useEffect(() => {
     if (!getApiBaseUrl() || !getStoredToken()) return;
     let cancelled = false;
@@ -318,7 +370,7 @@ const CreateItemForm = () => {
       .then((rows) => {
         if (cancelled) return;
         setApiWarehouses(rows);
-        if (!warehouseId && rows[0]?.id) setWarehouseId(rows[0].id);
+        if (!isReceipt && !warehouseId && rows[0]?.id) setWarehouseId(rows[0].id);
       })
       .catch(() => {
         if (!cancelled) setApiWarehouses([]);
@@ -718,6 +770,29 @@ const CreateItemForm = () => {
     setSaveError('');
     setPrintWarning('');
 
+    if (isReceipt) {
+      if (length === '' || !(Number(length) > 0)) { setSaveError(t('errors.lengthRequired')); return; }
+      if (receiptItems.length > 1 && !rItemId) { setSaveError(tj('receiptScreen.itemRequired')); return; }
+      if (rDefective && !rResponsible.trim()) { setSaveError(tj('lifecycle.missing.responsible')); return; }
+      const itemLabel = receiptItems.find(([k]) => k === rItemId)?.[1] ?? receiptItems[0]?.[1] ?? '';
+      const isEdit = Boolean(editingDraftId);
+      const draftR: DraftRoll = {
+        localId: editingDraftId ?? nextDraftRollId(), catL1Id: '', catL2Id: '', catL3Id: '', catL4Id: '',
+        name: rColorName.trim() ? `${itemLabel} — ${rColorName.trim()}` : itemLabel, barcode, lotNumber, lengthType, length: Number(length) || 0,
+        rollWidth: Number(rollWidth) || 0, widthUnit, weightMultiplier: Number(weightMultiplier) || 0, weight: Number(weight) || 0,
+        costPrice: 0, sellingPrice: 0, imageUrl: '', warehouseId, forSale: false,
+        receipt: { itemId: rItemId, colorName: rColorName.trim(), colorCode: rColorCode.trim(), defective: rDefective, defectReason: rDefectReason, responsibleParty: rResponsible.trim(), notes: rLineNotes.trim() },
+      };
+      setDraftRolls((prev) => (isEdit ? prev.map((d) => (d.localId === editingDraftId ? draftR : d)) : [...prev, draftR]));
+      setEditingDraftId(null);
+      setSuccessMessage(isEdit ? t('toast.updatedDraft') : t('toast.addedToDraft', { count: draftRolls.length + 1 }));
+      setTimeout(() => setSuccessMessage(''), 3000);
+      setRDefective(false); setRResponsible(''); setRLineNotes('');
+      if (!retainEntryFields) { setRColorName(''); setRColorCode(''); }
+      resetEntryFieldsForNextRoll();
+      return;
+    }
+
     if (!name?.trim()) {
       setSaveError(t('errors.nameRequired'));
       return;
@@ -891,6 +966,39 @@ const CreateItemForm = () => {
       return;
     }
 
+    if (isReceipt && receiptJobId) {
+      if (!warehouseId || !dyePaper.trim()) { setSaveError(tj('lifecycle.step1Hint')); setReceiptStep(1); return; }
+      if (draftMeters > receiptRemaining + 0.0005) { setSaveError(tj('lifecycle.missing.exceeds')); return; }
+      const payload = {
+        destinationWarehouseId: warehouseId, destinationLocationId: locationId || null, dyePaperNo: dyePaper.trim(),
+        notes: receiptNotes.trim() || undefined, attachments: [] as string[], completedServiceIds: completedServices,
+        lines: draftRolls.map((d) => ({
+          itemId: d.receipt?.itemId || undefined, lengthM: Number(toMeters(d).toFixed(3)),
+          weightKg: d.weight > 0 ? d.weight : null, barcode: d.barcode.trim() || undefined,
+          colorName: d.receipt?.colorName || undefined, colorCode: d.receipt?.colorCode || undefined,
+          widthCm: d.rollWidth > 0 ? Number((d.widthUnit === 'cm' ? d.rollWidth : d.rollWidth * 2.54).toFixed(2)) : null,
+          gsm: d.weightMultiplier > 0 ? d.weightMultiplier : null,
+          defective: Boolean(d.receipt?.defective), defectReason: d.receipt?.defective ? d.receipt.defectReason : undefined,
+          responsibleParty: d.receipt?.defective ? d.receipt.responsibleParty : undefined, notes: d.receipt?.notes || undefined,
+        })),
+      };
+      const signature = JSON.stringify(payload);
+      if (!retryRef.current || retryRef.current.payload !== signature) retryRef.current = { payload: signature, id: crypto.randomUUID() };
+      setSaving(true);
+      try {
+        await manufacturingAction(receiptJobId, 'returns', { ...payload, requestId: retryRef.current.id });
+        retryRef.current = null;
+        setDraftRolls([]);
+        setSuccessMessage(tj('lifecycle.returnSaved'));
+        setTimeout(() => navigate(`/purchases/external-jobs/${receiptJobId}`), 900);
+      } catch (error) {
+        setSaveError((error as { message?: string }).message ?? t('errors.saveFailedGeneric'));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const rollsForSale = draftRolls.filter((d) => d.forSale);
     if (intakeOperation?.action_type === 'STOCK' && rollsForSale.length > 0 && !saleCustomerId) {
       setSaveError(t('intakeContext.saleCustomerRequired'));
@@ -1006,6 +1114,11 @@ const CreateItemForm = () => {
     setSellingPrice(draft.sellingPrice);
     setImageUrl(draft.imageUrl);
     setWarehouseId(draft.warehouseId);
+    if (draft.receipt) {
+      setRItemId(draft.receipt.itemId); setRColorName(draft.receipt.colorName); setRColorCode(draft.receipt.colorCode);
+      setRDefective(draft.receipt.defective); setRDefectReason(draft.receipt.defectReason);
+      setRResponsible(draft.receipt.responsibleParty); setRLineNotes(draft.receipt.notes);
+    }
     setEditingDraftId(localId);
     setSaveError('');
     if (lengthInputRef.current) lengthInputRef.current.focus();
@@ -1074,14 +1187,14 @@ const CreateItemForm = () => {
             <ArrowRight className="w-5 h-5" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">{t('page.title')}</h2>
-            <p className="text-slate-500 mt-1">{t('page.subtitle')}</p>
+            <h2 className="text-2xl font-bold text-slate-900">{isReceipt ? tj('receiptScreen.title', { no: receipt?.data.job.job_no ?? '' }) : t('page.title')}</h2>
+            <p className="text-slate-500 mt-1">{isReceipt ? tj('receiptScreen.subtitle') : t('page.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button 
             type="button"
-            onClick={() => navigate('/inventory')}
+            onClick={() => navigate(isReceipt ? `/purchases/external-jobs/${receiptJobId}` : '/inventory')}
             className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm font-medium"
           >
             {t('page.cancel')}
@@ -1095,7 +1208,7 @@ const CreateItemForm = () => {
             <span>
               {finalizing
                 ? t('intakeContext.finalizing')
-                : saving ? t('page.saving') : (isEditMode ? t('page.saveItem') : t('page.saveAllRolls'))}
+                : saving ? t('page.saving') : (isEditMode ? t('page.saveItem') : isReceipt ? tj('receiptScreen.confirmAll') : t('page.saveAllRolls'))}
             </span>
           </button>
         </div>
@@ -1134,6 +1247,46 @@ const CreateItemForm = () => {
         </div>
       )}
 
+      {isReceipt && (
+        <div className="space-y-4 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+          <div className="grid grid-cols-3 gap-2 rounded-lg border bg-white p-3 text-center text-sm">
+            <div><div className="text-xs text-slate-500">{tj('lifecycle.totalSent')}</div><b>{receipt ? receipt.data.lines.reduce((n, l) => n + Number(l.sent_length_m) + Number(l.excess_m), 0).toFixed(3) : '—'}</b></div>
+            <div><div className="text-xs text-slate-500">{tj('lifecycle.totalReceived')}</div><b>{receipt ? receipt.data.lines.reduce((n, l) => n + Number(l.returned_m), 0).toFixed(3) : '—'}</b></div>
+            <div><div className="text-xs text-slate-500">{tj('lifecycle.totalRemaining')}</div><b className="text-amber-700">{Math.max(0, receiptRemaining - draftMeters).toFixed(3)}</b></div>
+          </div>
+          {receiptStep === 1 ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label className="text-sm font-bold text-slate-700">{tj('lifecycle.warehouse')}
+                  <select className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-3" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+                    <option value="">{tj('lifecycle.chooseWarehouse')}</option>
+                    {activeWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm font-bold text-slate-700">{tj('lifecycle.location')}
+                  <select className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-3" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                    <option value="">{tj('lifecycle.noLocation')}</option>
+                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm font-bold text-slate-700">{tj('lifecycle.dyePaper')}
+                  <input className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-3" value={dyePaper} onChange={(e) => setDyePaper(e.target.value)} />
+                </label>
+              </div>
+              <button type="button" disabled={!warehouseId || !dyePaper.trim()} onClick={() => setReceiptStep(2)}
+                className="rounded-lg bg-indigo-700 px-5 py-2 font-bold text-white disabled:opacity-40">{tj('lifecycle.continueToRolls')}</button>
+              {(!warehouseId || !dyePaper.trim()) && <p className="text-xs text-amber-700">{tj('lifecycle.step1Hint')}</p>}
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-2 text-sm">
+              <span>{activeWarehouses.find((w) => w.id === warehouseId)?.name}{locationId ? ` / ${locations.find((l) => l.id === locationId)?.name ?? ''}` : ''} — {tj('lifecycle.dyePaper')}: <b>{dyePaper}</b></span>
+              <button type="button" className="font-bold text-indigo-700" onClick={() => setReceiptStep(1)}>{tj('lifecycle.editHeader')}</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!(isReceipt && receiptStep === 1) && <>
       <ItemImageControl
         enabled={showImageUpload}
         imageUrl={imageUrl}
@@ -1175,7 +1328,7 @@ const CreateItemForm = () => {
                   ) : null}
               </div>
 
-              <div className={`border-2 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-4 transition-colors cursor-pointer select-none ${autoPrint ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`} onClick={() => setAutoPrint(!autoPrint)}>
+              {!isReceipt && <div className={`border-2 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-4 transition-colors cursor-pointer select-none ${autoPrint ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`} onClick={() => setAutoPrint(!autoPrint)}>
                  <div className="flex flex-col">
                    <label className={`text-base font-bold cursor-pointer ${autoPrint ? 'text-emerald-800' : 'text-slate-600'}`}>{t('autoPrint.label')}</label>
                    <span className={`text-xs mt-1 ${autoPrint ? 'text-emerald-600' : 'text-slate-400'}`}>
@@ -1198,7 +1351,7 @@ const CreateItemForm = () => {
                    <span className="sr-only">{t('autoPrint.srToggle')}</span>
                    <span aria-hidden="true" className={`pointer-events-none absolute h-6 w-6 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out ${autoPrint ? '-translate-x-3' : 'translate-x-3'}`} />
                  </button>
-              </div>
+              </div>}
 
 <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-6 shadow-sm">
                   <label className="block text-lg font-bold text-emerald-900 mb-4">{t('weightCard.title')}</label>
@@ -1352,7 +1505,7 @@ const CreateItemForm = () => {
                   onKeyDown={e => enterToNext(e, "name")}
                   value={warehouseId}
                   onChange={e => setWarehouseId(e.target.value)}
-                  disabled={Boolean(intakeOperation)}
+                  disabled={Boolean(intakeOperation) || isReceipt}
                   className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {activeWarehouses.length === 0 && <option value="" disabled>{t('form.noActiveWarehouseOption')}</option>}
@@ -1365,7 +1518,7 @@ const CreateItemForm = () => {
                 )}
               </div>
 
-              <div className="space-y-3 md:col-span-2">
+              {!isReceipt && <div className="space-y-3 md:col-span-2">
                 <label className="block text-sm font-bold text-slate-700">{t('form.materialNameLabel')}</label>
                   <input 
                     id="name"
@@ -1400,9 +1553,9 @@ const CreateItemForm = () => {
                       {t('form.linkedToTreeHint')}
                     </p>
                   ) : null}
-                </div>
+                </div>}
 
-              {!isEditMode && (
+              {!isEditMode && !isReceipt && (
                 <>
                   {treeLoadErr ? (
                     <p className="text-xs text-rose-600 md:col-span-2">{treeLoadErr}</p>
@@ -1524,6 +1677,47 @@ const CreateItemForm = () => {
                 </>
               )}
 
+              {isReceipt && (
+                <>
+                  {receiptItems.length > 1 && (
+                    <div className="space-y-3 md:col-span-2">
+                      <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.itemColumnShort')}</label>
+                      <select className="w-full rounded-lg border border-slate-300 bg-white p-3" value={rItemId} onChange={(e) => setRItemId(e.target.value)}>
+                        <option value="">{tj('lifecycle.chooseItem')}</option>
+                        {receiptItems.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.returnedColor')}</label>
+                    <input className="w-full rounded-lg border border-slate-300 bg-white p-3" value={rColorName} onChange={(e) => setRColorName(e.target.value)} />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.returnedColorCode')}</label>
+                    <input className="w-full rounded-lg border border-slate-300 bg-white p-3 font-mono" dir="ltr" value={rColorCode} onChange={(e) => setRColorCode(e.target.value)} />
+                  </div>
+                  <div className="space-y-3 md:col-span-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                    <label className="flex items-center gap-2 text-sm font-bold text-amber-900">
+                      <input type="checkbox" checked={rDefective} onChange={(e) => setRDefective(e.target.checked)} /> {tj('lifecycle.defectiveCheck')}
+                    </label>
+                    {rDefective && (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <select className="rounded-lg border border-slate-300 bg-white p-3" value={rDefectReason} onChange={(e) => setRDefectReason(e.target.value as typeof rDefectReason)}>
+                          <option value="DYE_HOUSE">{tj('lifecycle.dyeDefect')}</option>
+                          <option value="INTERNAL_KNITTING">{tj('lifecycle.knittingDefect')}</option>
+                          <option value="OTHER">{tj('lifecycle.otherDefect')}</option>
+                        </select>
+                        <input placeholder={tj('lifecycle.responsible')} className="rounded-lg border border-slate-300 bg-white p-3" value={rResponsible} onChange={(e) => setRResponsible(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3 md:col-span-2">
+                    <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.lineNotes')}</label>
+                    <input className="w-full rounded-lg border border-slate-300 bg-white p-3" value={rLineNotes} onChange={(e) => setRLineNotes(e.target.value)} />
+                  </div>
+                </>
+              )}
+
               <div className="space-y-3">
               <label className="block text-sm font-bold text-slate-700">{t('form.lengthTypeLabel')}</label>
               <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
@@ -1569,7 +1763,7 @@ const CreateItemForm = () => {
                    />
                 </div>
 
-<div className="space-y-3">
+{!isReceipt && <div className="space-y-3">
                    <label className="block text-sm font-bold text-slate-700">{t('form.costPriceLabel')}</label>
                    <div className="relative">
                      <input 
@@ -1585,9 +1779,9 @@ const CreateItemForm = () => {
                      />
                      <span className="absolute right-4 top-3 text-slate-400 font-bold">$</span>
                    </div>
-                 </div>
+                 </div>}
 
-                 <div className="space-y-3">
+                 {!isReceipt && <div className="space-y-3">
                    <label className="block text-sm font-bold text-slate-700">{t('form.sellingPriceLabel')}</label>
                    <div className="relative">
                      <input 
@@ -1603,7 +1797,7 @@ const CreateItemForm = () => {
                      />
                      <span className="absolute right-4 top-3 text-emerald-500 font-bold">$</span>
                   </div>
-                </div>
+                </div>}
 
               </div>
             </div>
@@ -1621,7 +1815,22 @@ const CreateItemForm = () => {
             onToggleAllForSale={handleToggleAllForSale}
           />
         )}
+        {isReceipt && receiptStep === 2 && (
+          <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-sm font-bold">{tj('lifecycle.completedServices')}</p>
+              {(receipt?.data.services ?? []).map((sv) => (
+                <label className="block text-sm" key={sv.id}>
+                  <input type="checkbox" checked={completedServices.includes(sv.id)}
+                    onChange={(e) => setCompletedServices((a) => (e.target.checked ? [...new Set([...a, sv.id])] : a.filter((id) => id !== sv.id)))} /> {sv.name}
+                </label>
+              ))}
+            </div>
+            <textarea placeholder={tj('lifecycle.receiptNotes')} className="w-full rounded-lg border border-slate-300 p-3 text-sm" value={receiptNotes} onChange={(e) => setReceiptNotes(e.target.value)} />
+          </div>
+        )}
       </div>
+      </>}
     </div>
   );
 };

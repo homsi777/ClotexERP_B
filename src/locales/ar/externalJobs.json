@@ -466,5 +466,9 @@
   "lifecycle.missing.lengths": "أدخل الأمتار الفعلية لكل رول",
   "lifecycle.missing.exceeds": "مجموع الأمتار المدخلة يتجاوز المتبقي من المهمة",
   "lifecycle.missing.responsible": "أدخل الجهة المسؤولة للرول المعيب",
-  "lifecycle.errors.itemRequired": "حدد الخامة للرول الراجع؛ في المهمة أكثر من خامة"
+  "lifecycle.errors.itemRequired": "حدد الخامة للرول الراجع؛ في المهمة أكثر من خامة",
+  "receiptScreen.title": "استلام دفعة — مهمة {{no}}",
+  "receiptScreen.subtitle": "نفس شاشة إدخال الأتواب — المرجع الكمية الإجمالية للمهمة",
+  "receiptScreen.confirmAll": "تأكيد الاستلام الفعلي",
+  "receiptScreen.itemRequired": "اختر الخامة للرول (في المهمة أكثر من خامة)"
 }

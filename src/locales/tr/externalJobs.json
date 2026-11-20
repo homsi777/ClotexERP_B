@@ -466,5 +466,9 @@
   "lifecycle.missing.lengths": "Her top için gerçek metreyi girin",
   "lifecycle.missing.exceeds": "Girilen metre toplamı işin kalanını aşıyor",
   "lifecycle.missing.responsible": "Hatalı top için sorumlu tarafı girin",
-  "lifecycle.errors.itemRequired": "Gelen top için kumaşı belirtin; işte birden fazla kumaş var"
+  "lifecycle.errors.itemRequired": "Gelen top için kumaşı belirtin; işte birden fazla kumaş var",
+  "receiptScreen.title": "Parti teslim alma — iş {{no}}",
+  "receiptScreen.subtitle": "Top giriş ekranıyla aynı — referans işin toplam miktarıdır",
+  "receiptScreen.confirmAll": "Fiili teslimi onayla",
+  "receiptScreen.itemRequired": "Top için kumaşı seçin (işte birden fazla kumaş var)"
 }
