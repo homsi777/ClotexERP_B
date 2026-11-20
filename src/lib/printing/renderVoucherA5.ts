@@ -601,7 +601,12 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
   const partyName = displayField(data.partyName);
   const cashboxName = displayField(data.cashboxName ?? (data.checks?.length ? t('voucher.checkMethod') : undefined));
   const checksHtml = (data.checks ?? [])
-    .map((c) => esc(`${t('voucher.checkNoShort')} ${c.checkNo} — ${c.bankName}${c.dueDate ? ` — ${t('voucher.checkDueShort')} ${normalizeVoucherDate(c.dueDate)}` : ''}${c.holder ? ` — ${c.holder}` : ''}`))
+    .map((c) => [
+      `${esc(t('voucher.checkNoShort'))} <b class="ltr">${esc(c.checkNo)}</b>`,
+      `${esc(t('voucher.checkBankLabel'))}: ${esc(c.bankName)}`,
+      c.dueDate ? `${esc(t('voucher.checkDueShort'))}: <span class="ltr">${esc(normalizeVoucherDate(c.dueDate))}</span>` : '',
+      c.holder ? `${esc(t('voucher.checkHolderLabel'))}: ${esc(c.holder)}` : '',
+    ].filter(Boolean).join(' — '))
     .join('<br/>');
   const invoiceNo = displayField(data.referenceDocumentNo);
   const purposeLabel = displayField(voucherPurposeAr(data.purpose));
@@ -648,6 +653,7 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
                   ${metaRow(iconSvg('calendar'), t('voucher.dateLabel'), `<span class="ltr">${voucherDate}</span>`)}
                   ${metaRow(iconSvg('receipt'), t('voucher.voucherTypeLabel'), `<span class="type-pill">${typeLabel}</span>`)}
                   ${metaRow(iconSvg('wallet'), t('voucher.cashboxLabel'), cashboxName)}
+                  ${checksHtml ? metaRow(iconSvg('check'), t('voucher.payMethodLabel'), `<span class="type-pill">${esc(t('voucher.checkMethod'))}</span>`) : ''}
                   ${checksHtml ? metaRow(iconSvg('receipt'), t('voucher.checkLabel'), checksHtml) : ''}
                 </table>
               </div>

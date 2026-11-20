@@ -551,5 +551,8 @@
   "voucher.checkLabel": "Çek",
   "voucher.checkMethod": "Çek",
   "voucher.checkNoShort": "No",
-  "voucher.checkDueShort": "Vade"
+  "voucher.checkDueShort": "Vade",
+  "voucher.payMethodLabel": "Ödeme yöntemi",
+  "voucher.checkBankLabel": "Banka",
+  "voucher.checkHolderLabel": "Hesap sahibi"
 }

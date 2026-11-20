@@ -1,7 +1,7 @@
 import { getPool } from '../db/pool.js';
 
 /** ملحق وصف كشف الحساب لسند فيه شيك: «— شيك رقم X / بنك Y» ليظهر استلام الشيك بوضوح. */
-const VOUCHER_CHECK_SUFFIX = `COALESCE((SELECT ' — شيك ' || string_agg(c.check_no || ' / ' || c.bank_name, '، ') FROM voucher_lines vl JOIN checks c ON c.id = vl.check_id WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id), '')`;
+const VOUCHER_CHECK_SUFFIX = `COALESCE((SELECT ' — شيك رقم ' || string_agg(c.check_no || ' / ' || c.bank_name || ' / استحقاق ' || to_char(c.due_date,'YYYY-MM-DD') || COALESCE(' / ' || NULLIF(c.account_holder_name,''), ''), '، ') FROM voucher_lines vl JOIN checks c ON c.id = vl.check_id WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id), '')`;
 
 
 type PartyKind = 'CUSTOMER' | 'SUPPLIER';
@@ -122,7 +122,7 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) AS type_label,
+            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
            v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
            0::numeric AS debit, v.amount AS credit, v.currency_code,
            0::numeric AS debit_usd,
@@ -140,7 +140,7 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) AS type_label,
+            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
            v.voucher_no AS document_no, COALESCE(v.description, 'سند دفع مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
            v.amount AS debit, 0::numeric AS credit, v.currency_code,
            COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS debit_usd,
@@ -237,7 +237,7 @@ function supplierRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) AS type_label,
+            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
            v.voucher_no AS document_no, COALESCE(v.description, 'سند دفع مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
            v.amount AS debit, 0::numeric AS credit, v.currency_code,
            COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS debit_usd,
@@ -255,7 +255,7 @@ function supplierRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) AS type_label,
+            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
            v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
            0::numeric AS debit, v.amount AS credit, v.currency_code,
            0::numeric AS debit_usd,

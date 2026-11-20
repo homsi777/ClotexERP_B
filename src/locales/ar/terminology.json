@@ -551,5 +551,8 @@
   "voucher.checkLabel": "الشيك",
   "voucher.checkMethod": "شيك",
   "voucher.checkNoShort": "رقم",
-  "voucher.checkDueShort": "استحقاق"
+  "voucher.checkDueShort": "استحقاق",
+  "voucher.payMethodLabel": "طريقة الدفع",
+  "voucher.checkBankLabel": "البنك",
+  "voucher.checkHolderLabel": "صاحب الحساب"
 }
