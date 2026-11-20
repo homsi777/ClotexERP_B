@@ -22,6 +22,7 @@ import { resolveFabricClassification } from '../../lib/api/fabricClassificationA
 import { buildRollQrPayload } from '../../lib/labels/buildRollQrPayload';
 import { ExternalManufacturingLifecycle } from '../../components/purchases/ExternalManufacturingLifecycle';
 import { getCategoryCode, getCategoryLabel } from '../../lib/fabricCategoryValues';
+import {ManufacturingRawReceiptAdapter} from '../../components/manufacturing/ProductionQualityPanel';
 
 const INVENTORY_SHOW_ITEM_IMAGE_KEY = 'inventory_show_item_image_upload';
 const INVENTORY_LOW_STOCK_THRESHOLD_KEY = 'inventory_low_stock_threshold';
@@ -158,6 +159,8 @@ function nextDraftRollId(): string {
 export const CreateItem = () => {
   const [query] = useSearchParams();
   const jobId = query.get('externalJobId');
+  const batchId=query.get('productionBatchId');
+  if(batchId)return <ManufacturingRawReceiptAdapter key={batchId} batchId={batchId}/>;
   return jobId ? <ExternalManufacturingLifecycle key={jobId} jobId={jobId} receiving /> : <CreateItemForm />;
 };
 

@@ -135,6 +135,12 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       await guarded.query('ROLLBACK');
     } finally {guarded.release();}
     console.log('Customer order identity, partial fulfillment, protected edits, audit, stale update and invoice quantity guards passed');
+    const {validateCustomerOrderVoucherLink}=await import('./customerOrderVoucherLink.js');
+    const linkDb=await getPool().connect();try{
+      await validateCustomerOrderVoucherLink(linkDb,company,{referenceDocumentType:'CUSTOMER_ORDER',referenceDocumentNo:customerOrder.orderNumber,voucherType:'RECEIPT',partyType:'CUSTOMER',partyId:customer});
+      await assert.rejects(validateCustomerOrderVoucherLink(linkDb,company,{referenceDocumentType:'CUSTOMER_ORDER',referenceDocumentNo:customerOrder.orderNumber,voucherType:'RECEIPT',partyType:'CUSTOMER',partyId:randomUUID()}));
+      await assert.rejects(validateCustomerOrderVoucherLink(linkDb,otherCompany,{referenceDocumentType:'CUSTOMER_ORDER',referenceDocumentNo:customerOrder.orderNumber,voucherType:'RECEIPT',partyType:'CUSTOMER',partyId:customer}));
+    }finally{linkDb.release();}
     const finishedWarehouse=randomUUID(),readyRoll=randomUUID(),rawRoll=randomUUID();
     await admin.query("INSERT INTO warehouses(id,company_id,code,name,fabric_stage) VALUES($1,$2,'FINISHED','Finished','FINISHED')",[finishedWarehouse,company]);
     await admin.query("INSERT INTO fabric_rolls(id,company_id,barcode,item_id,warehouse_id,length_m) VALUES($1,$3,'READY-400',$4,$5,400),($2,$3,'RAW-300',$4,$6,300)",[readyRoll,rawRoll,company,item,finishedWarehouse,warehouse]);
@@ -211,6 +217,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
     await call('PUT','/customer-orders/notifications/routing',{phase:'partial_ready',userId:user},403,readonly);
     await call('PUT','/customer-orders/notifications/routing',{phase:'ready_pickup',userId:randomUUID()},400);
     await call('PUT','/customer-orders/notifications/routing',{phase:'partial_ready',userId:null});
+    await call('PUT','/customer-orders/notifications/routing',{phase:'WEAVING',userId:user});
     await admin.query("UPDATE customer_orders SET follow_up_user_id=$2,expected_date='2026-11-22' WHERE id=$1",[reserveOrder.id,user]);
     assert.equal(dueNotificationKind('2026-11-22',new Date('2026-11-19T12:00:00Z'),'UTC'),'due_soon');
     assert.equal(dueNotificationKind('2026-11-19',new Date('2026-11-19T12:00:00Z'),'UTC'),'due_today');
@@ -264,7 +271,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
         await call('POST', `/sizing/${sizing.id}/complete`, { actualLengthM: 100, qualityStatus: 'ACCEPTED' },400);
         const chemicalIssue=await call('POST',`/cost/${order.id}/materials`,{requestId:randomUUID(),stage:'SIZING',stageId:sizing.id,lotId:chemical,kind:'ISSUE',weightKg:5,wasteKg:0.5,notes:'Sizing recipe materials'});
         await call('POST',`/cost/${order.id}/materials`,{requestId:randomUUID(),stage:'SIZING',stageId:sizing.id,lotId:chemical,kind:'RETURN',sourceEntryId:chemicalIssue.id,weightKg:1,notes:'Unused chemical return'});
-        await call('POST', `/sizing/${sizing.id}/complete`, { actualLengthM: 100, qualityStatus: 'CONDITIONAL',qualityNotes:'Needs reprocessing' });
+        if(['1','sizing'].includes(process.env.CLOTEX_MANUFACTURING_BROWSER_TESTS??'')){const {verifySizingCompletionUI}=await import('./manufacturingSizingCompletion.browser.test.js');const row=(await call('GET','/sizing/')).find((r:{id:string})=>r.id===sizing.id);await verifySizingCompletionUI(app,token,row);}else await call('POST', `/sizing/${sizing.id}/complete`, { actualLengthM: 100, qualityStatus: 'CONDITIONAL',qualityNotes:'Needs reprocessing' });
         beamId = (await admin.query('SELECT id FROM manufacturing_sized_beams WHERE sizing_order_id=$1', [sizing.id])).rows[0].id;
         await call('POST','/weaving/',{beamType:'SIZED',beamId,loomId:loom,openingCounter:0},409);
         const waiting=await call('GET','/reference/beam-quality?kind=SIZED');
@@ -293,9 +300,25 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
         await admin.query('UPDATE yarn_lots SET unit_cost=4 WHERE id=$1',[weft]);
       }
       await call('POST',`/cost/${order.id}/materials`,{requestId:randomUUID(),stage:'WEAVING',stageId:run.id,lotId:weft,kind:'RETURN',sourceEntryId:concurrentMaterials[0].id,weightKg:8,notes:'Excess return'},400);
-      await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'LABOR',amount:20,sourceReference:order.id+'-payroll',currencyCode:'USD',notes:'Labor allocation, not payroll payment'});
+      // Real approved employee payroll source. Net snapshot is explicitly 20;
+      // deductions remain visible (25 earnings - 5 deductions), not silently reclassified.
+      const laborEmployee=randomUUID(),laborRun=randomUUID(),laborLine=randomUUID();
+      const payrollDb=await getPool().connect();
+      try {
+        await payrollDb.query('BEGIN');
+        await payrollDb.query("INSERT INTO payroll_employees(id,company_id,employee_code,full_name,base_salary,currency_code) VALUES($1,$2,$3,'Manufacturing employee',25,'USD')",[laborEmployee,company,`LABOR-${order.id}`]);
+        await payrollDb.query("INSERT INTO payroll_runs(id,company_id,payroll_no,period_month,period_year,status,total_base,total_deductions,total_net,currency_code,exchange_rate_to_usd,created_by_user_id) VALUES($1,$2,$3,11,2026,'CONFIRMED',25,5,20,'USD',1,$4)",[laborRun,company,`LABOR-${order.id}`,user]);
+        await payrollDb.query("INSERT INTO payroll_run_lines(id,company_id,payroll_run_id,employee_id,base_salary,allowances,deductions,net_salary) VALUES($1,$2,$3,$4,25,0,5,20)",[laborLine,company,laborRun,laborEmployee]);
+        const {postPayrollAccrualToGl}=await import('./glPostingService.js');
+        await postPayrollAccrualToGl(payrollDb,{companyId:company,payrollRunId:laborRun,payrollNo:`LABOR-${order.id}`,periodDate:'2026-11-01',totalNet:20,currencyCode:'USD',exchangeRateToUsd:1,userId:user});
+        await payrollDb.query('COMMIT');
+      }catch(e){await payrollDb.query('ROLLBACK');throw e;}finally{payrollDb.release();}
+      const laborCharge=await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'LABOR',amount:20,payrollLineId:laborLine,payrollBasis:'APPROVED_NET_SNAPSHOT',sourceReference:order.id+'-payroll',currencyCode:'USD',notes:'Explicit approved net snapshot 20; source earnings 25, deductions 5; analytical allocation, no new payroll recognition'});
+      await call('POST',`/cost/${order.id}/approve-charge`,{chargeId:laborCharge.id});
       await admin.query("UPDATE exchange_rates SET exchange_rate_to_usd=50 WHERE company_id=$1 AND currency_code='EGP'",[company]);
-      await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'ENERGY',amount:500,currencyCode:'EGP',notes:'Energy allocation'});
+      const energyCharge=await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'ENERGY',amount:500,currencyCode:'EGP',notes:'Energy allocation'});
+      // المصروف غير المعتمد لا يدخل التكلفة النهائية: يعتمده المخوَّل قبل التقرير.
+      await call('POST',`/cost/${order.id}/approve-charge`,{chargeId:energyCharge.id});
       await admin.query("UPDATE exchange_rates SET exchange_rate_to_usd=100 WHERE company_id=$1 AND currency_code='EGP'",[company]);
       await call('POST',`/cost/${order.id}/charges`,{requestId:randomUUID(),kind:'LABOR',amount:1,currencyCode:'USD',notes:'Not authorized'},403,readonly);
       const shifts = await Promise.all([1, 2].map(() => app.inject({ method: 'POST', url: `/weaving/${run.id}/shift-logs`,
@@ -307,7 +330,12 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       await call('POST', `/orders/${order.id}/transition`, { targetStatus: 'COMPLETED', version: 3 }, 409);
       const receipt = { itemId: item, warehouseId: warehouse, rolls: [{ rollNo: `R-${withSizing}`, lengthM: 90 }] };
       await call('POST', `/quality/batches/${batch.id}/rolls`, receipt, 409);
-      await call('PUT', `/quality/batches/${batch.id}/inspection`, { cleanLengthM: 90, reworkLengthM: 0, rejectedLengthM: 10, pendingLengthM: 0 });
+      // الهالك يعتمده مدير/محاسب مختلف عن الفاحص (WASTE_APPROVAL_REQUIRED): الفاحص مستخدم مستقل بصلاحية الفحص فقط.
+      const inspector = randomUUID();
+      await admin.query("INSERT INTO users(id,company_id,username,password_hash) VALUES ($1,$2,$3,'unused')", [inspector, company, `flow-inspector-${inspector}`]);
+      const inspectorToken = signAuthToken({ sub: inspector, companyId: company, username: 'flow-inspector', role: 'user', permissions: ['manufacturing.raw_inspection.manage'], isPlatformAdmin: false });
+      await call('PUT', `/quality/batches/${batch.id}/inspection`, { cleanLengthM: 90, reworkLengthM: 0, rejectedLengthM: 10, pendingLengthM: 0 }, 200, inspectorToken);
+      await call('POST', `/quality/batches/${batch.id}/approve`, {}, 403, inspectorToken);
       await call('POST', `/quality/batches/${batch.id}/approve`, {});
       await call('POST', `/quality/batches/${batch.id}/rolls`, { ...receipt, rolls: [{ rollNo: 'EXCESS', lengthM: 91 }] }, 400);
       const partial = { ...receipt, rolls: [{ rollNo: `R-${withSizing}-1`, lengthM: 40 }] };

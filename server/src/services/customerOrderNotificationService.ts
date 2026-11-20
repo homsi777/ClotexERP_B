@@ -130,6 +130,14 @@ export async function scanOrderNotifications(db: PoolClient, companyId: string, 
   await db.query(`UPDATE app_notification_events SET resolved_at=$3 WHERE company_id=$1 AND source='customer_order' AND entity_id=$2
     AND event_kind='stock_available' AND resolved_at IS NULL AND NOT(line_id=ANY($4::uuid[]))`, [companyId, orderId, now, currentLines]);
   for (const line of workflow.lines) {
+    const previousPhase=(await db.query<{phase:string;generation:number}>('SELECT phase,generation FROM customer_order_notification_line_phases WHERE company_id=$1 AND line_id=$2',[companyId,line.id])).rows[0];
+    const phaseGeneration=(previousPhase?.generation??0)+(previousPhase?.phase===line.phase?0:1);
+    if(previousPhase?.phase!==line.phase){
+      await db.query(`INSERT INTO customer_order_notification_line_phases(company_id,order_id,line_id,phase,generation) VALUES($1,$2,$3,$4,$5)
+        ON CONFLICT(company_id,line_id) DO UPDATE SET phase=EXCLUDED.phase,generation=EXCLUDED.generation`,[companyId,orderId,line.id,line.phase,phaseGeneration]);
+      await db.query(`UPDATE app_notification_events SET resolved_at=$4 WHERE company_id=$1 AND entity_id=$2 AND line_id=$3 AND source='customer_order' AND event_kind='phase_changed' AND resolved_at IS NULL`,[companyId,orderId,line.id,now]);
+      await ensureEvent(db,companyId,order,'phase_changed',`order:${orderId}:line:${line.id}:phase:${phaseGeneration}`,{...payload,materialName:line.materialName,colorCode:line.colorCode,phase:line.phase,fromPhase:previousPhase?.phase},now,line.id);
+    }
     const available = line.remainingMeters > line.reservedMeters + 0.0005 && line.availableMeters > 0.0005;
     const state = await db.query<{ available: boolean; generation: number }>(`SELECT available,generation FROM customer_order_notification_stock_state
       WHERE company_id=$1 AND order_id=$2 AND line_id=$3`, [companyId, orderId, line.id]);

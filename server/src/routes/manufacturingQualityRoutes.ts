@@ -6,6 +6,9 @@ import { sendError } from "../middleware/errorHandler.js";
 import { generateBarcode } from "../utils/rollHelpers.js";
 import { calculateRollReceiptBalance, validateQualityBreakdown } from "../services/manufacturingQualityService.js";
 
+import { manufacturingQualityCompletionRoutes } from './manufacturingQualityCompletionRoutes.js';
+import { qualityChecklistSchema } from '../services/manufacturingQualityCompletionService.js';
+
 const has = (user: JwtPayload | undefined, permission: string) =>
   Boolean(user && (user.role === "admin" || user.permissions.includes(permission)));
 const defectSchema = z.object({
@@ -16,9 +19,10 @@ const defectSchema = z.object({
 
 export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticateRequest);
+  await app.register(manufacturingQualityCompletionRoutes);
 
   app.get("/batches", async (req, reply) => {
-    if (!has(req.user, "manufacturing.weaving.view") && !has(req.user, "manufacturing.raw_inspection.manage"))
+    if (!has(req.user, "manufacturing.weaving.view") && !has(req.user, "manufacturing.raw_inspection.manage") && !has(req.user, "inventory.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية عرض دفعات الجودة", "FORBIDDEN");
     const rows = await getPool().query(
       `SELECT b.*,r.run_no,r.work_order_id,w.work_order_no,m.code AS loom_code,
@@ -39,7 +43,7 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/batches/:batchId/report", async (req, reply) => {
-    if (!has(req.user, "manufacturing.weaving.view") && !has(req.user, "manufacturing.raw_inspection.manage"))
+    if (!has(req.user, "manufacturing.weaving.view") && !has(req.user, "manufacturing.raw_inspection.manage") && !has(req.user, "inventory.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية عرض تقرير الجودة", "FORBIDDEN");
     const { batchId } = req.params as { batchId: string };
     const [batch, defects, rolls] = await Promise.all([
@@ -58,7 +62,7 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
          WHERE b.id=$1 AND b.company_id=$2`, [batchId, req.user!.companyId],
       ),
       getPool().query(
-        `SELECT x.position_m,x.quantity,x.severity,x.notes,d.code,d.name FROM manufacturing_production_batch_defects x
+        `SELECT x.defect_id,x.position_m,x.quantity,x.severity,x.notes,d.code,d.name FROM manufacturing_production_batch_defects x
          JOIN manufacturing_quality_defect_catalog d ON d.id=x.defect_id AND d.company_id=x.company_id WHERE x.production_batch_id=$1 AND x.company_id=$2 ORDER BY x.created_at`,
         [batchId, req.user!.companyId],
       ),
@@ -78,6 +82,7 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
     const parsed = z.object({
       cleanLengthM: z.number().min(0), reworkLengthM: z.number().min(0),
       rejectedLengthM: z.number().min(0), pendingLengthM: z.number().min(0),
+      checklist: qualityChecklistSchema.default([]),
       notes: z.string().max(2000).nullable().optional(), defects: z.array(defectSchema).max(300).default([]),
     }).safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, "بيانات فحص الدفعة غير صالحة", "VALIDATION");
@@ -113,8 +118,8 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
       }
       await client.query(
         `UPDATE manufacturing_production_batches SET clean_length_m=$3,rework_length_m=$4,rejected_length_m=$5,pending_length_m=$6,
-          inspection_notes=$7,status='INSPECTED',inspected_by_user_id=$8,inspected_at=now(),updated_at=now() WHERE id=$1 AND company_id=$2`,
-        [batchId, req.user!.companyId, parsed.data.cleanLengthM, parsed.data.reworkLengthM, parsed.data.rejectedLengthM, parsed.data.pendingLengthM, parsed.data.notes ?? null, req.user!.sub],
+          quality_checklist=$9,inspection_notes=$7,status='INSPECTED',inspected_by_user_id=$8,inspected_at=now(),updated_at=now() WHERE id=$1 AND company_id=$2`,
+        [batchId, req.user!.companyId, parsed.data.cleanLengthM, parsed.data.reworkLengthM, parsed.data.rejectedLengthM, parsed.data.pendingLengthM, parsed.data.notes ?? null, req.user!.sub, JSON.stringify(parsed.data.checklist)],
       );
       await client.query(`DELETE FROM manufacturing_production_batch_defects WHERE production_batch_id=$1 AND company_id=$2`, [batchId, req.user!.companyId]);
       for (const defect of parsed.data.defects) await client.query(
@@ -128,16 +133,23 @@ export const manufacturingQualityRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/batches/:batchId/approve", async (req, reply) => {
-    if (!has(req.user, "manufacturing.raw_inspection.manage"))
-      return sendError(reply, 403, "ليست لديك صلاحية اعتماد فحص الجودة", "FORBIDDEN");
-    const { batchId } = req.params as { batchId: string };
-    const updated = await getPool().query(
-      `UPDATE manufacturing_production_batches SET status='APPROVED',approved_by_user_id=$3,approved_at=now(),updated_at=now()
-       WHERE id=$1 AND company_id=$2 AND status='INSPECTED' RETURNING id`,
-      [batchId, req.user!.companyId, req.user!.sub],
-    );
-    if (!updated.rows.length) return sendError(reply, 409, "يجب تسجيل الفحص قبل اعتماده", "INVALID_STATE");
-    return reply.send({ ok: true, data: { id: batchId, status: "APPROVED" } });
+    const user=req.user!;
+    if (!has(user,'manufacturing.raw_inspection.manage') && !['admin','accountant'].includes(user.role))
+      return sendError(reply,403,'ليست لديك صلاحية اعتماد فحص الجودة','FORBIDDEN');
+    const {batchId}=req.params as {batchId:string};
+    const db=await getPool().connect();
+    try {
+      await db.query('BEGIN');
+      const batch=(await db.query(`SELECT * FROM manufacturing_production_batches WHERE id=$1 AND company_id=$2 FOR UPDATE`,[batchId,user.companyId])).rows[0];
+      if(!batch||batch.status!=='INSPECTED') {await db.query('ROLLBACK');return sendError(reply,409,'يجب تسجيل الفحص قبل اعتماده','INVALID_STATE');}
+      if(Number(batch.rejected_length_m)>0 && (!['admin','accountant'].includes(user.role)||batch.inspected_by_user_id===user.sub)) {
+        await db.query('ROLLBACK');return sendError(reply,403,'الهالك يتطلب اعتماد مدير أو محاسب مختلف عن الفاحص','WASTE_APPROVAL_REQUIRED');
+      }
+      const breakdown=validateQualityBreakdown({producedLengthM:Number(batch.produced_length_m),cleanLengthM:Number(batch.clean_length_m),reworkLengthM:Number(batch.rework_length_m),rejectedLengthM:Number(batch.rejected_length_m),pendingLengthM:Number(batch.pending_length_m)});
+      if(!batch.inspected_by_user_id||!batch.inspected_at||!breakdown.balanced){await db.query('ROLLBACK');return sendError(reply,409,'الفحص غير مكتمل أو كمياته غير متوازنة','INVALID_STATE');}
+      await db.query(`UPDATE manufacturing_production_batches SET status='APPROVED',approved_by_user_id=$3,approved_at=now(),updated_at=now() WHERE id=$1 AND company_id=$2`,[batchId,user.companyId,user.sub]);
+      await db.query('COMMIT');return reply.send({ok:true,data:{id:batchId,status:'APPROVED'}});
+    }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
   });
 
   app.post("/batches/:batchId/rolls", async (req, reply) => {

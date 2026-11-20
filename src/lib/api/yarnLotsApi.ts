@@ -1,5 +1,7 @@
 import { apiFetch } from './client';
 
+export type YarnProperties = {fiber?:string;spinningType?:string;count?:string;countSystem?:'Ne'|'Nm'|'Denier'|'Tex';blend?:Array<{fiber:string;percent:number}>};
+
 export type YarnLotStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD' | 'DAMAGED' | 'TRANSFERRED' | 'INACTIVE';
 
 export interface YarnLotDto {
@@ -7,7 +9,11 @@ export interface YarnLotDto {
   company_id: string;
   owner_type: 'COMPANY' | 'CUSTOMER';
   owner_customer_id: string | null;
-  yarn_properties?: { fiber?: string; count?: string; countSystem?: string };
+  yarn_properties?: YarnProperties;
+  weight_material_kind?:'YARN'|'CONSUMABLE'|null;
+  color_code?: string;
+  location_name?: string;
+  location_code?: string;
   receipt_packages?: { count: number; weightPerPackageKg: number } | null;
   lot_no: string | null;
   barcode: string;
@@ -35,6 +41,7 @@ export interface YarnLotDto {
 }
 
 export interface YarnLotListFilters {
+  materialKind?:'YARN'|'CONSUMABLE';
   search?: string;
   itemId?: string;
   status?: YarnLotStatus;
@@ -57,7 +64,8 @@ export interface YarnLotCreatePayload {
   grossWeightKg?:number;tareWeightKg?:number;
   ownerType?: 'COMPANY' | 'CUSTOMER';
   ownerCustomerId?: string | null;
-  yarnProperties?: { fiber?: string; count?: string; countSystem?: 'Ne' | 'Nm' | 'Denier' | 'Tex' };
+  yarnProperties?: YarnProperties;
+  packageBarcodes?: boolean;
   receiptPackages?: { count: number; weightPerPackageKg: number } | null;
   barcode?: string;
   lotNo?: string;
@@ -90,6 +98,7 @@ export interface YarnLotUpdatePayload {
 
 export async function listYarnLots(filters: YarnLotListFilters = {}): Promise<YarnLotListResult> {
   const q = new URLSearchParams();
+  if(filters.materialKind)q.set('materialKind',filters.materialKind);
   if (filters.ownerType) q.set('ownerType', filters.ownerType);
   if (filters.ownerCustomerId) q.set('ownerCustomerId', filters.ownerCustomerId);
   if (filters.search) q.set('search', filters.search);
@@ -131,7 +140,7 @@ export async function setYarnLotStatus(id: string, status: YarnLotStatus, notes?
   });
 }
 
-export async function postYarnStockOperation(id: string, payload: { type: 'ADJUST'; targetWeightKg: number; expectedWeightKg: number; reason: string; approved: true } | { type: 'TRANSFER'; weightKg: number; warehouseId: string; reason: string }) {
+export async function postYarnStockOperation(id: string, payload: { type: 'ADJUST'; targetWeightKg: number; expectedWeightKg: number; reason: string; approved: true } | { type: 'TRANSFER'; weightKg: number; warehouseId: string; locationId?:string|null; reason: string }) {
   return apiFetch(`/api/inventory/yarn-lots/${id}/stock-operation`, { method: 'POST', body: JSON.stringify(payload) });
 }
 export async function listYarnMovements(id: string) {

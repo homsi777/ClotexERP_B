@@ -1,4 +1,7 @@
-import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
+import { usePermissions } from '../../hooks/usePermissions';
+import { QualityChecklist, type ChecklistRow } from './QualityChecklist';
+import { listQualityInbox, type QualityInboxRow, type ProductionQualityReport } from '../../lib/api/manufacturingQualityApi';
 import { ExternalQualityEntry } from './ExternalQualityEntry';
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -58,15 +61,16 @@ const newRoll = (batchNo: string, index: number): RollLine => ({
   gsm: "",
 });
 
-function RawProductionQualityPanel({
+export function RawProductionQualityPanel({
   canInspect,
   canReceive,
-  defects,
+  defects, batchId, receivingOnly = false, onChanged,
 }: {
   canInspect: boolean;
   canReceive: boolean;
-  defects: QualityDefect[];
+  defects: QualityDefect[]; batchId?: string; receivingOnly?: boolean; onChanged?: () => void;
 }) {
+  const { user: qualityUser } = usePermissions();
   const [rows, setRows] = useState<ProductionBatch[]>([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -76,6 +80,8 @@ function RawProductionQualityPanel({
     [colors, setColors] = useState<ApiFabricColor[]>([]),
     [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]),
     [locations, setLocations] = useState<ApiWarehouseLocation[]>([]);
+  const [report, setReport] = useState<ProductionQualityReport | null>(null);
+  const [checklist, setChecklist] = useState<ChecklistRow[]>([]);
   const [quality, setQuality] = useState({
     clean: "",
     rework: "0",
@@ -94,13 +100,20 @@ function RawProductionQualityPanel({
   });
   const load = useCallback(async () => {
     try {
-      setRows(await listProductionBatches());
+      setRows((await listProductionBatches()).filter(b => !batchId || b.id === batchId));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل دفعات الجودة");
     }
-  }, []);
+  }, [batchId]);
   useEffect(() => void load(), [load]);
+  useEffect(() => {
+    if (!batchId || !rows.length) return;
+    let active = true;
+    getProductionQualityReport(batchId).then(value => { if (active) setReport(value); })
+      .catch(e => { if (active) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { active = false; };
+  }, [batchId, rows]);
   useEffect(() => {
     if (!stock.warehouseId) {
       setLocations([]);
@@ -111,20 +124,21 @@ function RawProductionQualityPanel({
       .catch(() => setLocations([]));
   }, [stock.warehouseId]);
 
-  const openInspection = (batch: ProductionBatch) => {
-    setInspection(batch);
-    setQuality({
-      clean: String(batch.clean_length_m || batch.produced_length_m),
-      rework: String(batch.rework_length_m || 0),
-      rejected: String(batch.rejected_length_m || 0),
-      pending: String(
-        batch.pending_length_m === batch.produced_length_m
-          ? 0
-          : batch.pending_length_m || 0,
-      ),
-      notes: batch.inspection_notes || "",
-      defects: [],
-    });
+  const openInspection = async (batch: ProductionBatch) => {
+    setBusy(true); setError('');
+    try {
+      const saved = await getProductionQualityReport(batch.id);
+      const b = saved.batch;
+      setReport(saved);
+      setChecklist(b.quality_checklist ?? []);
+      setQuality({
+        clean: String(b.status === 'PENDING_INSPECTION' ? b.produced_length_m : b.clean_length_m),
+        rework: String(b.rework_length_m), rejected: String(b.rejected_length_m),
+        pending: String(b.status === 'PENDING_INSPECTION' ? 0 : b.pending_length_m), notes: b.inspection_notes ?? '',
+        defects: saved.defects.map(d => ({defectId: String(d.defect_id), positionM: d.position_m == null ? '' : String(d.position_m),quantity: String(d.quantity),severity: d.severity == null ? '' : String(d.severity),notes: d.notes == null ? '' : String(d.notes)})),
+      });
+      setInspection(b);
+    } catch(e) {setError(e instanceof Error ? e.message : String(e));} finally {setBusy(false);}
   };
   const openReceipt = async (batch: ProductionBatch) => {
     setBusy(true);
@@ -160,6 +174,7 @@ function RawProductionQualityPanel({
       await action();
       close();
       await load();
+      onChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تنفيذ العملية");
     } finally {
@@ -226,6 +241,12 @@ function RawProductionQualityPanel({
           {error}
         </div>
       )}
+      {batchId && report && <section className="mb-4 space-y-2 rounded border p-3" aria-label="تفاصيل فحص الخام">
+        <p>المصدر: {report.batch.work_order_no} / {report.batch.run_no} / {report.batch.batch_no}</p>
+        <p>الفاحص: {String(report.batch.inspector_name ?? 'لم يفحص')} {String(report.batch.inspected_at ?? '')} — المعتمد: {String(report.batch.approver_name ?? 'لم يعتمد')} {String(report.batch.approved_at ?? '')}</p>
+        <QualityChecklist value={report.batch.quality_checklist ?? []} onChange={() => undefined} disabled/>
+        {report.defects.map((d,i) => <p key={i}>{String(d.code)} — {String(d.name)} / {String(d.severity ?? '—')} / {String(d.quantity)} / {String(d.notes ?? '')}</p>)}
+      </section>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -287,15 +308,16 @@ function RawProductionQualityPanel({
                   >
                     طباعة التقرير
                   </button>
-                  {canInspect && !["APPROVED", "CLOSED"].includes(b.status) && (
+                  {!receivingOnly && canInspect && !["APPROVED", "CLOSED"].includes(b.status) && (
                     <button
                       className="rounded border px-2 py-1"
-                      onClick={() => openInspection(b)}
+                      disabled={busy}
+                      onClick={() => void openInspection(b)}
                     >
                       تسجيل الفحص
                     </button>
                   )}
-                  {canInspect && b.status === "INSPECTED" && (
+                  {!receivingOnly && (canInspect || qualityUser?.role === "accountant") && b.status === "INSPECTED" && (Number(b.rejected_length_m) === 0 || (["admin","accountant"].includes(qualityUser?.role ?? "") && b.inspected_by_user_id !== qualityUser?.id)) && (
                     <button
                       className="rounded bg-emerald-600 px-2 py-1 text-white"
                       disabled={busy}
@@ -341,6 +363,8 @@ function RawProductionQualityPanel({
             <p className="mb-4 text-sm text-slate-500">
               إجمالي الإنتاج: {inspection.produced_length_m} م
             </p>
+            {report && <p className="mb-3 text-sm">الفاحص: {String(report.batch.inspector_name ?? 'لم يفحص')} — المعتمد: {String(report.batch.approver_name ?? 'لم يعتمد')}</p>}
+            <QualityChecklist value={checklist} onChange={setChecklist} disabled={busy}/>
             <div className="grid gap-3 md:grid-cols-4">
               {(
                 [
@@ -424,6 +448,7 @@ function RawProductionQualityPanel({
                         </option>
                       ))}
                   </select>
+                  <input aria-label="ملاحظات العيب" className={input} value={d.notes} onChange={e => updateDefect(i,{notes:e.target.value})}/>
                   <input
                     className={input}
                     type="number"
@@ -490,6 +515,7 @@ function RawProductionQualityPanel({
                   void run(
                     () =>
                       saveBatchInspection(inspection.id, {
+                        checklist,
                         cleanLengthM: Number(quality.clean),
                         reworkLengthM: Number(quality.rework),
                         rejectedLengthM: Number(quality.rejected),
@@ -746,15 +772,34 @@ function RawProductionQualityPanel({
   );
 }
 
-// One entry point, existing domain actions and server authorization remain authoritative.
+// Warehouse adapter reuses the authoritative batch receipt and its existing roll editor.
+// Parent can mount at /inventory/create?productionBatchId=... without a second posting path.
+export function ManufacturingRawReceiptAdapter({batchId}:{batchId:string}) {
+  return <RawProductionQualityPanel batchId={batchId} canInspect={false} canReceive defects={[]} receivingOnly/>;
+}
 export function ProductionQualityPanel(props: {canInspect:boolean;canReceive:boolean;defects:QualityDefect[]}) {
-  const {t}=useTranslation('externalJobs');
-  const [kind,setKind]=useState<'raw'|'external'>('raw');
-  return <section className="space-y-4">
-    <h2 className="font-bold">{t('traceability.qualityEntry')}</h2>
-    <nav aria-label={t('traceability.qualityEntry')} className="flex gap-2">
-      {(['raw','external'] as const).map(k=><button key={k} type="button" aria-pressed={kind===k} onClick={()=>setKind(k)} className={`rounded border px-4 py-2 ${kind===k?'bg-indigo-600 text-white':'bg-white'}`}>{t(k==='raw'?'traceability.rawQuality':'traceability.externalQuality')}</button>)}
-    </nav>
-    {kind==='raw'?<RawProductionQualityPanel {...props}/>:<ExternalQualityEntry/>}
+  const {user,has}=usePermissions();
+  const [rows,setRows]=useState<QualityInboxRow[]>([]),[selected,setSelected]=useState<QualityInboxRow|null>(null);
+  const [error,setError]=useState(''),[search,setSearch]=useState(''),[kind,setKind]=useState('ALL'),[pending,setPending]=useState(true);
+  const load=useCallback(async()=>{try{setRows(await listQualityInbox());setError('');}catch(e){setError(e instanceof Error?e.message:String(e));}},[]);
+  useEffect(()=>{void load();},[load]);
+  const filtered=rows.filter(r=>(kind==='ALL'||r.kind===kind)&&(!pending||['PENDING_INSPECTION','INSPECTED','APPROVED','QUALITY_HOLD'].includes(r.status))&&`${r.source_no} ${r.status} ${r.id} ${r.order_refs.map(o=>`${o.customer_order_id??''} ${o.customer_order_line_id??''}`).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  return <section dir="rtl" className="space-y-4">
+    <h2 className="font-bold">صندوق جودة الإنتاج — خام وجاهز</h2>
+    <div className="flex flex-wrap items-center gap-2">
+      <input aria-label="بحث الجودة" placeholder="المصدر أو مرجع الطلب" className={input} value={search} onChange={e=>setSearch(e.target.value)}/>
+      <select aria-label="نوع الجودة" className="rounded border p-2" value={kind} onChange={e=>setKind(e.target.value)}><option value="ALL">الكل</option><option value="RAW">خام</option><option value="FINISHED">جاهز / تجهيز خارجي</option></select>
+      <label><input type="checkbox" checked={pending} onChange={e=>setPending(e.target.checked)}/> بانتظار إجراء</label>
+      <button className="rounded border p-2" onClick={()=>void load()}>تحديث</button>
+    </div>
+    {error&&<p role="alert" className="text-red-700">{error}</p>}
+    <div className="overflow-auto"><table className="w-full text-sm"><thead><tr>{['النوع','المصدر','الكمية م','الحالة','مراجع أسطر الطلب','التفاصيل'].map(h=><th className="p-2 text-right" key={h}>{h}</th>)}</tr></thead><tbody>
+      {filtered.map(r=><tr key={`${r.kind}:${r.id}`} className="border-t"><td>{r.kind==='RAW'?'خام':'جاهز'}</td><td>{r.source_no}</td><td>{r.length_m}</td><td>{r.status}</td><td className="max-w-xs break-all text-xs">{r.order_refs.map((o,i)=><div key={i}>{o.customer_order_id??'مخزون'} / {o.customer_order_line_id??'—'}</div>)}</td><td><button className="rounded border p-2" onClick={()=>setSelected(r)}>عرض / إجراء</button></td></tr>)}
+    </tbody></table>{!filtered.length&&<p className="p-6">لا توجد سجلات مطابقة.</p>}</div>
+    {selected&&<><button className="rounded border p-2" onClick={()=>setSelected(null)}>إغلاق التفاصيل</button>
+      {selected.kind==='RAW'?<div key={selected.id}>
+        <Link className="text-indigo-700" to={`/inventory/create?productionBatchId=${selected.id}`}>استلام الخام في المستودع</Link>
+        <RawProductionQualityPanel {...props} batchId={selected.id} onChanged={()=>void load()}/>
+      </div>:<ExternalQualityEntry key={selected.id} id={selected.id} defects={props.defects} canInspect={props.canInspect||has('inventory.manage')} canApprove={user?.role==='admin'||user?.role==='accountant'} onChanged={()=>void load()}/>}</>}
   </section>;
 }

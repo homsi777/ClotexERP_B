@@ -1,4 +1,5 @@
 import { OrderWorkflowPanel } from './OrderWorkflowPanel';
+import {OrderReceiptsPanel} from './OrderReceiptsPanel';
 import { OrderMetadataSummary } from './OrderMetadataFields';
 import React, { useCallback, useMemo, useState } from 'react';
 import { FileSpreadsheet, FileText, MessageCircle, Printer, X } from 'lucide-react';
@@ -181,6 +182,7 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
         </div>
 
         <OrderMetadataSummary order={order} />
+        <OrderReceiptsPanel key={order.id} orderId={order.id}/>
         <div className="flex-1 overflow-hidden min-h-0 bg-slate-100">
           {showWorkflow && <div className="h-full overflow-auto"><OrderWorkflowPanel key={order.id} order={order}/></div>}
           <div className={showPicking?'h-full':'hidden'}><OrderPickingByZonePanel key={order.id} order={order} customerName={party.name}/></div>

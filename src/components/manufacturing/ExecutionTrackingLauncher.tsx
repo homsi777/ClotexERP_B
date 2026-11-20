@@ -1,0 +1,12 @@
+import {useEffect,useState} from 'react';
+import {apiFetch} from '../../lib/api/client';
+import {ExecutionTrackingPanel} from './ExecutionTrackingPanel';
+import type {ExecutionStage} from '../../lib/api/manufacturingExecutionApi';
+type Option={id:string;name:string};
+type Row={id:string;warping_order_no?:string;sizing_order_no?:string;run_no?:string;output_beam_id?:string;output_beam_no?:string;output_beams?:Array<{id:string;beamNo:string}>};
+export function ExecutionTrackingLauncher({stage,canManage,onChanged}:{stage:'WARPING'|'SIZING'|'WEAVING';canManage:boolean;onChanged?:()=>void|Promise<void>}){
+  const [kind,setKind]=useState<ExecutionStage>(stage),[rows,setRows]=useState<Row[]>([]),[id,setId]=useState(''),[error,setError]=useState(''),[revision,setRevision]=useState(0);
+  useEffect(()=>{let active=true;const route={WARPING:'warping',SIZING:'sizing',WEAVING:'weaving'}[stage];void apiFetch<{data:Row[]}>(`/api/manufacturing/${route}`).then(r=>{if(active){setRows(r.data);setError('');}}).catch(e=>{if(active)setError(String(e));});return()=>{active=false;};},[stage,revision]);
+  const options:Option[]=kind==='WARP'?rows.flatMap(r=>(r.output_beams??[]).map(b=>({id:b.id,name:b.beamNo}))):kind==='SIZED'?rows.filter(r=>r.output_beam_id).map(r=>({id:r.output_beam_id!,name:r.output_beam_no??r.output_beam_id!})):rows.map(r=>({id:r.id,name:r.warping_order_no??r.sizing_order_no??r.run_no??r.id}));
+  return <details className="m-4 rounded-xl border bg-white p-3"><summary className="cursor-pointer font-bold">سجل العمال والتشغيل اليومي وتسليم المطاوي</summary>{error&&<p role="alert" className="text-rose-700">{error}</p>}<div className="my-3 flex flex-wrap gap-2"><select aria-label="نوع سجل التشغيل" value={kind} className="max-w-full rounded border p-2" onChange={e=>{setKind(e.target.value as ExecutionStage);setId('');}}><option value={stage}>تسجيل التشغيل والعمال والتوقفات</option>{stage!=='WEAVING'&&<option value={stage==='WARPING'?'WARP':'SIZED'}>تسليم واستلام المطواة</option>}</select><select aria-label="مرجع سجل التشغيل" className="max-w-full rounded border p-2" value={id} onChange={e=>setId(e.target.value)}><option value="">اختر الأمر أو المطواة</option>{options.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select><button onClick={()=>setRevision(r=>r+1)} className="rounded border p-2">تحديث المراجع</button></div>{id&&<ExecutionTrackingPanel key={`${kind}:${id}`} stage={kind} subjectId={id} canManage={canManage} onChanged={async()=>{setRevision(r=>r+1);await onChanged?.();}}/>}</details>;
+}

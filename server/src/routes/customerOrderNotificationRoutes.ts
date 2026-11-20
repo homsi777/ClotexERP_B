@@ -5,17 +5,35 @@ import {sendError} from '../middleware/errorHandler.js';
 import {listNotificationInbox,notificationRecipientDiagnostics,scanCustomerOrderNotifications,setNotificationRead} from '../services/customerOrderNotificationService.js';
 
 export const customerOrderNotificationRoutes:FastifyPluginAsync=async(app)=>{
+  app.put('/notifications/employee-routing',async(req,reply)=>{
+    if(req.user!.role!=='admin'&&!req.user!.permissions.includes('customers.manage'))return sendError(reply,403,'لا تملك صلاحية إدارة التنبيهات','FORBIDDEN');
+    const parsed=z.object({employeeId:z.string().uuid(),userId:z.string().uuid().nullable()}).strict().safeParse(req.body);
+    if(!parsed.success)return sendError(reply,400,'بيانات ربط الموظف غير صالحة','VALIDATION');
+    const db=await getPool().connect();try{
+      await db.query('BEGIN');const company=req.user!.companyId,{employeeId,userId}=parsed.data;
+      const employee=await db.query('SELECT id FROM payroll_employees WHERE company_id=$1 AND id=$2 AND is_active FOR UPDATE',[company,employeeId]);
+      if(!employee.rows.length){await db.query('ROLLBACK');return sendError(reply,400,'الموظف غير متاح ضمن الشركة','VALIDATION');}
+      const previous=await db.query('SELECT user_id FROM customer_order_notification_employee_users WHERE company_id=$1 AND employee_id=$2',[company,employeeId]);
+      if(userId){const eligible=await db.query(`SELECT u.id FROM users u WHERE u.company_id=$1 AND u.id=$2 AND u.is_active AND (u.role='admin' OR EXISTS(SELECT 1 FROM roles r JOIN role_permissions rp ON rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id WHERE r.code=u.role AND p.code='customers.view')) FOR SHARE OF u`,[company,userId]);
+        if(!eligible.rows.length){await db.query('ROLLBACK');return sendError(reply,400,'المستخدم لا يملك صلاحية عرض الأوردرات','VALIDATION');}
+        await db.query(`INSERT INTO customer_order_notification_employee_users(company_id,employee_id,user_id) VALUES($1,$2,$3) ON CONFLICT(company_id,employee_id) DO UPDATE SET user_id=EXCLUDED.user_id`,[company,employeeId,userId]);
+      }else await db.query('DELETE FROM customer_order_notification_employee_users WHERE company_id=$1 AND employee_id=$2',[company,employeeId]);
+      await db.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,entity_id,details) VALUES($1,$2,'ORDER_EMPLOYEE_NOTIFICATION_LINK','payroll_employee',$3,$4::jsonb)`,[company,req.user!.sub,employeeId,JSON.stringify({before:previous.rows[0]?.user_id??null,after:userId})]);await db.query('COMMIT');return {ok:true};
+    }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+  });
   app.get('/notifications/routing',async(req,reply)=>{
     if(req.user!.role!=='admin'&&!req.user!.permissions.includes('customers.manage'))return sendError(reply,403,'لا تملك صلاحية إدارة التنبيهات','FORBIDDEN');
     const db=await getPool().connect();try{
       const users=await db.query(`SELECT id,COALESCE(full_name,username) AS name FROM users WHERE company_id=$1 AND is_active ORDER BY name`,[req.user!.companyId]);
       const phases=await db.query('SELECT phase,user_id AS "userId" FROM customer_order_notification_phase_users WHERE company_id=$1',[req.user!.companyId]);
-      return {ok:true,data:{users:users.rows,phases:phases.rows}};
+      const employees=await db.query('SELECT id,full_name AS name FROM payroll_employees WHERE company_id=$1 AND is_active ORDER BY full_name',[req.user!.companyId]);
+      const employeeLinks=await db.query('SELECT employee_id AS "employeeId",user_id AS "userId" FROM customer_order_notification_employee_users WHERE company_id=$1',[req.user!.companyId]);
+      return {ok:true,data:{users:users.rows,phases:phases.rows,employees:employees.rows,employeeLinks:employeeLinks.rows}};
     }finally{db.release();}
   });
   app.put('/notifications/routing',async(req,reply)=>{
     if(req.user!.role!=='admin'&&!req.user!.permissions.includes('customers.manage'))return sendError(reply,403,'لا تملك صلاحية إدارة التنبيهات','FORBIDDEN');
-    const parsed=z.object({phase:z.enum(['pending_supply','partial_ready','ready_pickup']),userId:z.string().uuid().nullable()}).safeParse(req.body);
+    const parsed=z.object({phase:z.enum(['pending_supply','partial_ready','ready_pickup','STOCK_CHECK','PLANNING','WARPING','SIZING','WEAVING','QUALITY','RAW_STORED','EXTERNAL_PROCESSING','READY','DELIVERED','MULTIPLE']),userId:z.string().uuid().nullable()}).safeParse(req.body);
     if(!parsed.success)return sendError(reply,400,'بيانات التوجيه غير صالحة','VALIDATION');
     const db=await getPool().connect();try{
       await db.query('BEGIN');

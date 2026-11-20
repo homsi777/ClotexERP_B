@@ -10,6 +10,8 @@ export type QualityDefect = { id:string; code:string; name:string; inspection_ty
 export type MachineHistory = { statusEvents:unknown[]; maintenanceEvents:unknown[] };
 export type WorkbookWarning = { code:string; message:string; sheet?:string; cell?:string };
 export type ManufacturingWorkbookPreview = {
+  sheets?:import('../../components/manufacturing/WorkbookSheetGrid').SheetGrid[];
+  illustrations?:Array<{name:string;mimeType:string;base64:string}>;
   sheetNames:string[];
   resolvedSheets:Record<string,string>;
   technicalFields:Record<string,string|number|boolean>;

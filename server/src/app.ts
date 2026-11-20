@@ -1,3 +1,4 @@
+import {manufacturingItemSpecificationRoutes} from './routes/manufacturingItemSpecificationRoutes.js';
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { getCorsOrigins, getEnv } from './config/env.js';
@@ -54,6 +55,7 @@ import { customerDiscountRoutes } from './routes/customerDiscountRoutes.js';
 import { operatingExpenseRoutes } from './routes/operatingExpenseRoutes.js';
 import { aiRoutes } from './routes/aiRoutes.js';
 import { manufacturingReferenceRoutes } from './routes/manufacturingReferenceRoutes.js';
+import {manufacturingPrintRoutes} from './routes/manufacturingPrintRoutes.js';
 import { manufacturingWorkOrderRoutes } from './routes/manufacturingWorkOrderRoutes.js';
 import { manufacturingWarpingRoutes } from './routes/manufacturingWarpingRoutes.js';
 import { manufacturingSizingRoutes } from './routes/manufacturingSizingRoutes.js';
@@ -185,7 +187,9 @@ export async function buildApp() {
   await app.register(operatingExpenseRoutes, { prefix: '/api/expenses' });
   await app.register(aiRoutes, { prefix: '/api/ai' });
   await app.register(aiRoutes, { prefix: '/api/v1/ai' });
+  await app.register(manufacturingItemSpecificationRoutes, {prefix:'/api/manufacturing'});
   await app.register(manufacturingReferenceRoutes, { prefix: '/api/manufacturing/reference' });
+  await app.register(manufacturingPrintRoutes,{prefix:'/api/manufacturing/print'});
   await app.register(manufacturingWorkOrderRoutes, { prefix: '/api/manufacturing/work-orders' });
   await app.register(manufacturingWarpingRoutes, { prefix: '/api/manufacturing/warping' });
   await app.register(manufacturingSizingRoutes, { prefix: '/api/manufacturing/sizing' });

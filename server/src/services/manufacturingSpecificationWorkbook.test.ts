@@ -47,6 +47,9 @@ function buildPortableFixture(): Buffer {
 }
 
 const portable = previewManufacturingSpecificationWorkbook(buildPortableFixture());
+assert.equal(portable.sheets?.length,4);
+assert.equal(portable.sheets?.find(s=>s.name==='امر السداء')?.cells.find(c=>c.address==='P9')?.formula,'[1]السداء!T50');
+assert.equal(portable.sheets?.find(s=>s.name==='امر الشغل')?.cells.find(c=>c.address==='B2')?.value,'13/2');
 assert.equal(portable.resolvedSheets.workOrder, 'امر الشغل');
 assert.equal(portable.technicalFields['نمرة السداء'], '13/2');
 assert.equal(portable.warp?.yarnCount, 6.5);

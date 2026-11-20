@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import {validateCustomerOrderVoucherLink} from '../services/customerOrderVoucherLink.js';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
@@ -318,6 +319,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      await validateCustomerOrderVoucherLink(client,companyId,d);
       const voucherNo = await generateSequentialDocumentNo(
         client,
         companyId,
@@ -423,6 +425,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply, 400, 'لا يمكن التعديل إلا في حالة مسودة', 'INVALID_STATE');
       }
 
+      await validateCustomerOrderVoucherLink(client,companyId,d);
       const vd = d.voucherDate ? d.voucherDate : new Date().toISOString().slice(0, 10);
       const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
 
@@ -519,6 +522,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         return sendError(reply, 400, 'لا يمكن التأكيد في هذه الحالة', 'INVALID_STATE');
       }
 
+      await validateCustomerOrderVoucherLink(client,companyId,{referenceDocumentType:row.reference_document_type,referenceDocumentNo:row.reference_document_no,voucherType:row.voucher_type,partyType:row.party_type,partyId:row.party_id});
       const confirmationLines = await loadVoucherConfirmationLines(client, companyId, id);
       if (!row.cashbox_id && confirmationLines.length === 0) {
         await client.query('ROLLBACK');

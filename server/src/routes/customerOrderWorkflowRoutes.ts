@@ -23,6 +23,14 @@ export const customerOrderWorkflowRoutes:FastifyPluginAsync=async(app)=>{
     const rows=await getPool().query(`SELECT a.id,a.action,a.details,a.created_at,u.username FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id AND u.company_id=a.company_id WHERE a.company_id=$1 AND a.entity_type='customer_order' AND a.entity_id=$2 ORDER BY a.created_at DESC LIMIT 200`,[company,id]);
     return {ok:true,data:rows.rows};
   });
+  app.get('/:id/receipts',async(req,reply)=>{
+    const u=req.user!;
+    if(u.role!=='admin'&&u.role!=='accountant'&&!u.permissions.includes('orders.price'))return sendError(reply,403,'لا تملك صلاحية عرض المبالغ','FORBIDDEN');
+    const order=(await getPool().query('SELECT order_no FROM customer_orders WHERE company_id=$1 AND id=$2',[u.companyId,(req.params as {id:string}).id])).rows[0];
+    if(!order)return sendError(reply,404,'الأوردر غير موجود','NOT_FOUND');
+    const rows=await getPool().query(`SELECT id,voucher_no,status,voucher_date::text,amount::float,currency_code,purpose FROM vouchers WHERE company_id=$1 AND reference_document_type='CUSTOMER_ORDER' AND reference_document_no=$2 AND voucher_type='RECEIPT' ORDER BY voucher_date DESC,created_at DESC`,[u.companyId,order.order_no]);
+    return {ok:true,data:rows.rows};
+  });
   for(const action of ['reserve','release'] as const)app.post(`/:id/lines/:lineId/${action}`,async(req,reply)=>{
     const ids=req.params as {id:string;lineId:string};
     const input=z.object({rollIds:z.array(z.string().uuid()).max(500).optional()}).safeParse(req.body??{});

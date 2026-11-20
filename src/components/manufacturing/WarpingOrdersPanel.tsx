@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import {ManufacturingPrintButton} from './ManufacturingPrintButton';
 import {WarpingYarnSettlementPanel} from './WarpingYarnSettlementPanel';
 import {BeamQualityReviewPanel} from './BeamQualityReviewPanel';
 import {apiFetch} from '../../lib/api/client';
@@ -360,7 +361,7 @@ export function WarpingOrdersPanel({
                     </button>
                   )}
                 </td>
-                <td>{r.status}{r.output_beams.map(b=><div key={b.id} className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs">{b.beamNo} — {b.status}</div>)}</td>
+                <td>{r.status}{r.output_beams.map(b=><div key={b.id} className="mt-1 rounded bg-emerald-50 px-2 py-1 text-xs">{b.beamNo} — {b.status} <ManufacturingPrintButton kind="warp-beams" id={b.id} /></div>)}</td>
                 <td className="space-x-1 space-x-reverse whitespace-nowrap">
                   {canManage && r.status === "DRAFT" && (
                     <button

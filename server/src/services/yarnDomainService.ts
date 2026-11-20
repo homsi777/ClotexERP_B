@@ -14,6 +14,7 @@ export const yarnPropertiesSchema = z.object({
   'مجموع نسب الخليط يجب أن يساوي 100% بتسامح 0.001 نقطة مئوية');
 export type YarnProperties = z.infer<typeof yarnPropertiesSchema>;
 export const yarnReceiveSchema = z.object({
+  packageBarcodes: z.boolean().optional(),
   receiptKey: z.string().uuid().optional(),
   barcode: z.string().regex(/^\d{7}$/, 'الباركود سبعة أرقام').optional(),
   lotNo: z.string().trim().max(100).optional(),
@@ -30,7 +31,7 @@ export const yarnReceiveSchema = z.object({
   ownerCustomerId: z.string().uuid().nullable().optional(),
   yarnProperties: yarnPropertiesSchema.optional(),
   receiptPackages: z.object({ count: z.number().int().positive().max(1000), weightPerPackageKg: yarnKg.refine(n => n > 0) }).strict().nullable().optional(),
-}).strict().refine(d => d.ownerType === 'CUSTOMER' ? !!d.ownerCustomerId : !d.ownerCustomerId, 'تحقق من مالك الخيط')
+}).strict().refine(d => !d.packageBarcodes || !!d.receiptPackages, 'باركودات الطرود تتطلب عدد الطرود ووزنها').refine(d => d.ownerType === 'CUSTOMER' ? !!d.ownerCustomerId : !d.ownerCustomerId, 'تحقق من مالك الخيط')
   .refine(d=>d.grossWeightKg==null&&d.tareWeightKg==null||d.grossWeightKg!=null&&d.tareWeightKg!=null&&d.grossWeightKg>=d.tareWeightKg&&Math.abs(d.grossWeightKg-d.tareWeightKg-d.weightKg)<.0005,'الصافي لا يطابق القائم والفوارغ')
   .refine(d => !d.receiptPackages || Math.abs(d.weightKg - d.receiptPackages.count * d.receiptPackages.weightPerPackageKg) < 0.0005, 'صافي الطرود لا يطابق وزن الاستلام');
 export type YarnReceive = z.infer<typeof yarnReceiveSchema>;
@@ -74,11 +75,18 @@ export async function yarnMovement(db: PoolClient, company: string, user: string
 export async function insertYarnReceipt(db: PoolClient, company: string, user: string, d: YarnReceive, referenceType = 'MANUAL_RECEIVE', reference:string = randomUUID()) {
   await validateYarnReceipt(db, company, d);
   const profile = (await db.query('SELECT properties FROM yarn_item_profiles WHERE company_id=$1 AND item_id=$2', [company,d.itemId])).rows[0];
+  await db.query("SELECT pg_advisory_xact_lock(hashtext($1),hashtext('YARN_BARCODE'))", [company]);
   const barcode = d.barcode || await yarnBarcode(db, company);
   const r = await db.query(`INSERT INTO yarn_lots(company_id,lot_no,barcode,item_id,color_id,supplier_id,warehouse_id,location_id,weight_kg,unit_cost,currency_code,batch_no,container_no,notes,created_by_user_id,owner_type,owner_customer_id,yarn_properties,receipt_packages,status,receipt_key)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb,$19::jsonb,$20,$21) RETURNING *`,
     [company,d.lotNo || null,barcode,d.itemId,d.colorId ?? null,d.supplierId ?? null,d.warehouseId,d.locationId ?? null,d.weightKg,d.unitCost ?? null,d.currencyCode || 'USD',d.batchNo ?? null,d.containerNo ?? null,d.notes ?? null,user,d.ownerType,d.ownerCustomerId ?? null,JSON.stringify(d.yarnProperties ?? profile?.properties ?? {}),JSON.stringify(d.receiptPackages ?? null),d.ownerType === 'CUSTOMER' ? 'RESERVED' : 'AVAILABLE',d.receiptKey ?? null]);
-  await yarnMovement(db,company,user,r.rows[0],'RECEIVE',d.weightKg,referenceType,reference,d.notes || '',null,d.warehouseId);
+  if (d.packageBarcodes && d.receiptPackages) {
+    // Labels identify packages, never introduce stock or movements outside the parent lot.
+    for (let n=1;n<=d.receiptPackages.count;n++) await db.query(
+      `INSERT INTO yarn_package_labels(company_id,yarn_lot_id,package_number,barcode,nominal_weight_kg) VALUES($1,$2,$3,$4,$5)`,
+      [company,r.rows[0].id,n,`${barcode}-${String(n).padStart(4,'0')}`,d.receiptPackages.weightPerPackageKg]);
+  }
+  await yarnMovement(db,company,user,r.rows[0],'RECEIVE' ,d.weightKg,referenceType,reference,d.notes || '',null,d.warehouseId);
   await db.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,entity_id,details) VALUES($1,$2,'YARN_RECEIVED','yarn_lot',$3,$4::jsonb)`,[company,user,r.rows[0].id,JSON.stringify(d)]);
   return r.rows[0];
 }
@@ -99,17 +107,29 @@ export async function receiveYarnBatch(pool:Pool,company:string,user:string,raw:
     await db.query('SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))',[company,d.batchKey]);
     const prior=(await db.query("SELECT details FROM audit_logs WHERE company_id=$1 AND action='YARN_BATCH_RECEIVED' AND details->>'batchKey'=$2",[company,d.batchKey])).rows[0];
     if(prior){if(prior.details.fingerprint!==fingerprint)yarnFail('معرف الدفعة مستخدم بمحتوى مختلف',409);return prior.details.result;}
-    const rows=[];for(const row of d.rows)rows.push(await insertYarnReceipt(db,company,user,row,'BATCH_RECEIVE',d.batchKey));
+    const rows:Array<{id:string}>=new Array(d.rows.length);
+    const ordered=d.rows.map((row,index)=>({row,index})).sort((a,b)=>Number(!!b.row.barcode)-Number(!!a.row.barcode));
+    for(const {row,index} of ordered)rows[index]=await insertYarnReceipt(db,company,user,row,'BATCH_RECEIVE',d.batchKey);
     const result={lotIds:rows.map(row=>row.id),count:rows.length};
     await db.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,details) VALUES($1,$2,'YARN_BATCH_RECEIVED','yarn_batch',$3::jsonb)`,[company,user,JSON.stringify({batchKey:d.batchKey,fingerprint,result})]);return result;
   });
 }
 export async function saveYarnProfile(pool: Pool, company: string, user: string, item: string, body: unknown) {
-  const d = z.object({ expectedVersion: z.number().int().min(0), properties: yarnPropertiesSchema }).strict().parse(body);
+  const d = z.object({ expectedVersion: z.number().int().min(0), properties: yarnPropertiesSchema, weightMaterialKind:z.enum(['YARN','CONSUMABLE']).optional() }).strict().parse(body);
   return yarnTransaction(pool, async db => {
     // The item row serializes first insert as well as subsequent updates.
-    const locked = await db.query("SELECT id FROM fabric_items WHERE company_id=$1 AND id=$2 AND unit='kg' FOR UPDATE",[company,item]);
+    const locked = await db.query("SELECT id,weight_material_kind FROM fabric_items WHERE company_id=$1 AND id=$2 AND unit='kg' FOR UPDATE",[company,item]);
     if (!locked.rows.length) yarnFail('صنف الخيط غير موجود',404);
+    const kind=locked.rows[0].weight_material_kind;
+    if(d.weightMaterialKind && kind!==d.weightMaterialKind){
+      if(kind!==null && kind!==undefined){
+        const used=await db.query(`SELECT 1 FROM yarn_lots y WHERE y.company_id=$1 AND y.item_id=$2
+          AND (y.weight_kg<>0 OR EXISTS(SELECT 1 FROM yarn_lot_movements m WHERE m.company_id=y.company_id AND m.yarn_lot_id=y.id)) LIMIT 1`,[company,item]);
+        if(used.rows.length)yarnFail('لا يمكن تغيير تصنيف مادة لها رصيد أو حركات',409);
+      }
+      await db.query('UPDATE fabric_items SET weight_material_kind=$3,updated_at=now() WHERE company_id=$1 AND id=$2',[company,item,d.weightMaterialKind]);
+      await db.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,entity_id,details) VALUES($1,$2,'WEIGHT_MATERIAL_CLASSIFIED','fabric_item',$3,$4::jsonb)`,[company,user,item,JSON.stringify({from:kind??null,to:d.weightMaterialKind})]);
+    }
     const old = (await db.query('SELECT version FROM yarn_item_profiles WHERE company_id=$1 AND item_id=$2',[company,item])).rows[0];
     if ((old?.version ?? 0) !== d.expectedVersion) yarnFail('تغير تصنيف الصنف؛ أعد التحميل',409);
     const next = d.expectedVersion + 1;
@@ -120,7 +140,7 @@ export async function saveYarnProfile(pool: Pool, company: string, user: string,
   });
 }
 
-const dispatchSchema = z.object({ requestKey: z.string().uuid(), lotId: z.string().uuid(), supplierId: z.string().uuid(), weightKg: yarnKg.refine(n => n > 0), notes: z.string().trim().min(3).max(2000) }).strict();
+const dispatchSchema = z.object({ customerOrderId:z.string().uuid().nullable().optional(), requestKey: z.string().uuid(), lotId: z.string().uuid(), supplierId: z.string().uuid(), weightKg: yarnKg.refine(n => n > 0), notes: z.string().trim().min(3).max(2000) }).strict();
 const returnSchema = z.object({ requestKey: z.string().uuid(), returnedKg: yarnKg, shortageKg: yarnKg.default(0), approvedShortage: z.boolean().default(false), warehouseId: z.string().uuid(), locationId: z.string().uuid().nullable().optional(), colorId: z.string().uuid().nullable().optional(), notes: z.string().trim().min(3).max(2000) }).strict()
   .refine(d => d.returnedKg + d.shortageKg > 0 && (!d.shortageKg || d.approvedShortage), 'اعتمد الفاقد وأدخل كمية صحيحة');
 export async function dispatchYarn(pool: Pool, company: string, user: string, body: unknown) {
@@ -130,8 +150,14 @@ export async function dispatchYarn(pool: Pool, company: string, user: string, bo
     if (!lot) yarnFail('لوط الخيط غير موجود',404);
     if ((lot.owner_type === 'COMPANY' ? lot.status !== 'AVAILABLE' : lot.status !== 'RESERVED') || Number(lot.weight_kg) < d.weightKg) yarnFail('رصيد اللوط غير متاح للإرسال',409);
     await yarnReference(db,company,'suppliers',d.supplierId);
-    const dispatch = (await db.query(`INSERT INTO yarn_external_dispatches(company_id,source_lot_id,supplier_id,owner_type,owner_customer_id,dispatched_kg,request_key,notes,created_by_user_id)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[company,lot.id,d.supplierId,lot.owner_type,lot.owner_customer_id,d.weightKg,d.requestKey,d.notes,user])).rows[0];
+    if(d.customerOrderId){
+      const order=(await db.query('SELECT id,customer_id,status FROM customer_orders WHERE company_id=$1 AND id=$2 FOR SHARE',[company,d.customerOrderId])).rows[0];
+      if(!order)yarnFail('طلب العميل غير موجود ضمن الشركة',404);
+      if(['draft','cancelled','completed'].includes(order.status))yarnFail('يجب ربط الإرسال بطلب عميل مؤكد ومفتوح',409);
+      if(lot.owner_type==='CUSTOMER' && lot.owner_customer_id!==order.customer_id)yarnFail('مالك الخيط لا يطابق عميل الطلب',409);
+    }
+    const dispatch = (await db.query(`INSERT INTO yarn_external_dispatches(company_id,source_lot_id,supplier_id,owner_type,owner_customer_id,dispatched_kg,request_key,notes,created_by_user_id,customer_order_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[company,lot.id,d.supplierId,lot.owner_type,lot.owner_customer_id,d.weightKg,d.requestKey,d.notes,user,d.customerOrderId??null])).rows[0];
     await db.query('UPDATE yarn_lots SET weight_kg=weight_kg-$3,updated_at=now() WHERE company_id=$1 AND id=$2',[company,lot.id,d.weightKg]);
     await yarnMovement(db,company,user,lot,'EXTERNAL_DISPATCH',-d.weightKg,'YARN_EXTERNAL',dispatch.id,d.notes,lot.warehouse_id,null);
     return dispatch;
@@ -184,7 +210,7 @@ export function parseYarnCsv(source: string): string[][] {
   if (rows.length < 2 || rows.length > 501) yarnFail('الملف يجب أن يحتوي 1 إلى 500 سطر بيانات');
   return rows;
 }
-const csvHeaders = ['itemCode','warehouseCode','lotNo','weightKg','ownerType','ownerCustomerCode','supplierCode','barcode','unitCost','currencyCode','locationCode'];
+const csvHeaders = ['itemCode','warehouseCode','lotNo','weightKg','ownerType','ownerCustomerCode','supplierCode','barcode','unitCost','currencyCode','locationCode','colorCode'];
 const hash = (s:string) => createHash('sha256').update(s,'utf8').digest('hex');
 export async function previewYarnOpening(db: PoolClient, company: string, csv: string) {
   const parsed=parseYarnCsv(csv), headers=parsed.shift();
@@ -215,7 +241,9 @@ export async function previewYarnOpening(db: PoolClient, company: string, csv: s
       }
       if(!values.weightKg || !/^\d+(\.\d{1,3})?$/.test(values.weightKg)) yarnFail('وزن غير صالح');
       if(values.unitCost && !/^\d+(\.\d{1,4})?$/.test(values.unitCost)) yarnFail('تكلفة غير صالحة');
-      const payload=yarnReceiveSchema.parse({itemId,warehouseId,locationId,lotNo:values.lotNo || undefined,weightKg:Number(values.weightKg),ownerType:values.ownerType,ownerCustomerId:await resolve('customers',values.ownerCustomerCode,true),supplierId:await resolve('suppliers',values.supplierCode,true),barcode:values.barcode || undefined,unitCost:values.unitCost ? Number(values.unitCost) : null,currencyCode:values.currencyCode || 'USD'});
+      let colorId:string|null=null;
+      if(values.colorCode){const colors=await db.query('SELECT id FROM fabric_colors WHERE (company_id=$1 OR company_id IS NULL) AND color_code=$2',[company,values.colorCode]);if(colors.rows.length!==1)yarnFail('كود اللون غير معروف أو ملتبس');colorId=colors.rows[0].id;}
+      const payload=yarnReceiveSchema.parse({itemId,warehouseId,locationId,colorId,lotNo:values.lotNo || undefined,weightKg:Number(values.weightKg),ownerType:values.ownerType,ownerCustomerId:await resolve('customers',values.ownerCustomerCode,true),supplierId:await resolve('suppliers',values.supplierCode,true),barcode:values.barcode || undefined,unitCost:values.unitCost ? Number(values.unitCost) : null,currencyCode:values.currencyCode || 'USD'});
       await validateYarnReceipt(db,company,payload);
       if(payload.barcode) {
         if(seen.has(payload.barcode) || (await db.query('SELECT id FROM yarn_lots WHERE company_id=$1 AND barcode=$2',[company,payload.barcode])).rows.length) yarnFail('باركود مكرر');
@@ -242,4 +270,15 @@ export async function importYarnOpening(pool: Pool, company: string, user: strin
     for(const row of ordered) lots.push((await insertYarnReceipt(db,company,user,row.payload!,'YARN_OPENING_IMPORT',id)).id);
     return {id,lotIds:lots,rowCount:lots.length,totalKg:preview.totalKg};
   });
+}
+
+export async function saveYarnMinimumStock(pool:Pool,company:string,user:string,item:string,raw:unknown) {
+ const d=z.object({minimumKg:yarnKg}).strict().parse(raw);
+ return yarnTransaction(pool,async db=>{
+  await yarnReference(db,company,'fabric_items',item);
+  const row=await db.query(`INSERT INTO yarn_minimum_stock(company_id,item_id,minimum_kg) VALUES($1,$2,$3)
+   ON CONFLICT(company_id,item_id) DO UPDATE SET minimum_kg=EXCLUDED.minimum_kg,updated_at=now() RETURNING *`,[company,item,d.minimumKg]);
+  await db.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,entity_id,details) VALUES($1,$2,'YARN_MINIMUM_STOCK','fabric_item',$3,$4::jsonb)`,[company,user,item,JSON.stringify(d)]);
+  return row.rows[0];
+ });
 }

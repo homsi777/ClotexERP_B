@@ -526,14 +526,14 @@ export const ChecksVault: React.FC = () => {
                 </label>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('form.receivedDate')}</label>
-                <input type="date" value={form.receivedDate} onChange={(e) => setForm((f) => ({ ...f, receivedDate: e.target.value }))} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={form.receivedDate} onChange={(e) => setForm((f) => ({ ...f, receivedDate: e.target.value }))} className="w-full min-w-0 max-w-full border rounded-lg px-3 py-2" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('form.dueDate')}</label>
-                <input type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full min-w-0 max-w-full border rounded-lg px-3 py-2" />
               </div>
             </div>
             <CheckImageInput value={formImage} onChange={setFormImage} />

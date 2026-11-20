@@ -45,8 +45,8 @@ export async function yarnStockOperation(pool: Pick<Pool, 'connect'>, companyId:
       }
       // Serialize barcode allocation for all manual yarn receipts/transfers.
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1),hashtext('YARN_BARCODE'))",[companyId]);
-      const target = await client.query(`INSERT INTO yarn_lots (company_id,barcode,lot_no,item_id,color_id,supplier_id,warehouse_id,location_id,weight_kg,unit_cost,currency_code,batch_no,container_no,notes,created_by_user_id,owner_type,yarn_properties)
-        SELECT company_id,(SELECT (GREATEST(COALESCE(MAX(barcode::bigint),999999),999999)+1)::text FROM yarn_lots WHERE company_id=$2 AND barcode ~ '^[0-9]{7}$'),lot_no,item_id,color_id,supplier_id,$3,$4,$5,unit_cost,currency_code,batch_no,container_no,$6,$7,owner_type,yarn_properties FROM yarn_lots WHERE id=$1 AND company_id=$2 RETURNING id,barcode`,[lotId,companyId,d.warehouseId,d.locationId ?? null,d.weightKg,d.reason,userId]);
+      const target = await client.query(`INSERT INTO yarn_lots (company_id,barcode,lot_no,item_id,color_id,supplier_id,warehouse_id,location_id,weight_kg,unit_cost,currency_code,batch_no,container_no,notes,created_by_user_id,owner_type,yarn_properties,parent_yarn_lot_id)
+        SELECT company_id,(SELECT (GREATEST(COALESCE(MAX(barcode::bigint),999999),999999)+1)::text FROM yarn_lots WHERE company_id=$2 AND barcode ~ '^[0-9]{7}$'),lot_no,item_id,color_id,supplier_id,$3,$4,$5,unit_cost,currency_code,batch_no,container_no,$6,$7,owner_type,yarn_properties,id FROM yarn_lots WHERE id=$1 AND company_id=$2 RETURNING id,barcode`,[lotId,companyId,d.warehouseId,d.locationId ?? null,d.weightKg,d.reason,userId]);
       if (target.rows[0].barcode && !/^[0-9]{7}$/.test(target.rows[0].barcode)) fail('نفد نطاق باركود الخيط',409);
       targetLotId = target.rows[0].id;
       delta = -d.weightKg;

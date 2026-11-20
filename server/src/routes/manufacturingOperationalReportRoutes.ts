@@ -2,11 +2,30 @@ import type {FastifyPluginAsync} from 'fastify';
 import {z} from 'zod';
 import {getPool} from '../db/pool.js';
 import {sendError} from '../middleware/errorHandler.js';
-export const manufacturingOperationalReportRoutes:FastifyPluginAsync=async(app)=>{
+import type {Pool} from 'pg';
+import {authenticateRequest} from '../middleware/auth.js';
+import {manufacturingAllStageReport,operationalReportFilters} from '../services/manufacturingOperationalReportService.js';
+export function createManufacturingOperationalReportRoutes(pool:()=>Pick<Pool,'query'>=getPool):FastifyPluginAsync{return async(app)=>{
+  app.addHook('preHandler',async(req,reply)=>{if(!req.user)await authenticateRequest(req,reply);});
+  app.get('/operations-report/stages',async(req,reply)=>{
+    const parsed=operationalReportFilters.safeParse(req.query);
+    if(!parsed.success)return sendError(reply,400,'فلاتر التقرير غير صالحة','VALIDATION');
+    const u=req.user!,q=parsed.data;
+    if(u.role!=='admin'&&!u.permissions.includes(`manufacturing.reports.${q.action}`)&&!(q.action==='view'&&u.permissions.includes('reports.view')))
+      return sendError(reply,403,'لا تملك صلاحية إجراء التقرير','FORBIDDEN');
+    try{
+      const data=await manufacturingAllStageReport(pool(),u.companyId,q);
+      reply.header('Cache-Control','no-store');
+      return {ok:true,data};
+    }catch(e){
+      if((e as {code?:string}).code==='42P01')return sendError(reply,503,'بنية تقارير التنفيذ غير مكتملة في قاعدة البيانات؛ يلزم تطبيق الترحيلات المعتمدة بواسطة المسؤول','SCHEMA_NOT_READY');
+      throw e;
+    }
+  });
   app.get('/operations-report/options',async(req,reply)=>{
     const u=req.user!;
     if(u.role!=='admin'&&!u.permissions.includes('manufacturing.reports.view')&&!u.permissions.includes('reports.view'))return sendError(reply,403,'لا تملك صلاحية التقارير','FORBIDDEN');
-    const [machines,employees,shifts]=await Promise.all([getPool().query('SELECT id,code,name FROM manufacturing_machines WHERE company_id=$1 ORDER BY code',[u.companyId]),getPool().query('SELECT id,full_name AS name FROM payroll_employees WHERE company_id=$1 ORDER BY full_name',[u.companyId]),getPool().query('SELECT id,name FROM attendance_shift_types WHERE company_id=$1 ORDER BY name',[u.companyId])]);
+    const [machines,employees,shifts]=await Promise.all([pool().query('SELECT id,code,name FROM manufacturing_machines WHERE company_id=$1 ORDER BY code',[u.companyId]),pool().query('SELECT id,full_name AS name FROM payroll_employees WHERE company_id=$1 ORDER BY full_name',[u.companyId]),pool().query('SELECT id,name FROM attendance_shift_types WHERE company_id=$1 ORDER BY name',[u.companyId])]);
     return {ok:true,data:{machines:machines.rows,employees:employees.rows,shifts:shifts.rows}};
   });
   app.get('/operations-report',async(req,reply)=>{
@@ -38,9 +57,10 @@ export const manufacturingOperationalReportRoutes:FastifyPluginAsync=async(app)=
       LEFT JOIN manufacturing_production_batches b ON b.company_id=s.company_id AND b.shift_log_id=s.id
       WHERE ${where.join(' AND ')})`;
     const [rows,summary]=await Promise.all([
-      getPool().query(`${cte} SELECT * FROM detail ORDER BY production_date DESC,id LIMIT 500`,params),
-      getPool().query(`${cte} SELECT COUNT(*)::int AS row_count,COALESCE(SUM(produced_m),0)::float AS produced_m,COALESCE(SUM(clean_m),0)::float AS clean_m,COALESCE(SUM(rejected_m),0)::float AS rejected_m,COALESCE(SUM(rework_m),0)::float AS rework_m,COALESCE(SUM(pending_m),0)::float AS pending_m,COALESCE(SUM(received_m),0)::float AS received_m,COALESCE(SUM(downtime_minutes),0)::int AS downtime_minutes,(SELECT COALESCE(SUM(planned_m),0)::float FROM (SELECT run_id,MAX(planned_m) planned_m FROM detail GROUP BY run_id) plans) AS planned_m FROM detail`,params)
+      pool().query(`${cte} SELECT * FROM detail ORDER BY production_date DESC,id LIMIT 500`,params),
+      pool().query(`${cte} SELECT COUNT(*)::int AS row_count,COALESCE(SUM(produced_m),0)::float AS produced_m,COALESCE(SUM(clean_m),0)::float AS clean_m,COALESCE(SUM(rejected_m),0)::float AS rejected_m,COALESCE(SUM(rework_m),0)::float AS rework_m,COALESCE(SUM(pending_m),0)::float AS pending_m,COALESCE(SUM(received_m),0)::float AS received_m,COALESCE(SUM(downtime_minutes),0)::int AS downtime_minutes,(SELECT COALESCE(SUM(planned_m),0)::float FROM (SELECT run_id,MAX(planned_m) planned_m FROM detail GROUP BY run_id) plans) AS planned_m FROM detail`,params)
     ]);
     return {ok:true,data:{rows:rows.rows,summary:summary.rows[0],truncated:summary.rows[0].row_count>500,runTimeRecorded:false}};
   });
-};
+};}
+export const manufacturingOperationalReportRoutes=createManufacturingOperationalReportRoutes();

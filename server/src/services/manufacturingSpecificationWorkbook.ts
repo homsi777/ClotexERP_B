@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import {extractWorkbookSheets,extractWorkbookIllustrations,type WorkbookSheetGrid} from './manufacturingWorkbookVisuals.js';
 
 export const MANUFACTURING_WORKBOOK_SHEETS = {
   workOrder: 'أمر الشغل',
@@ -53,6 +54,8 @@ export interface ManufacturingWorkbookWarning {
 }
 
 export interface ManufacturingSpecificationWorkbookPreview {
+  sheets?:WorkbookSheetGrid[];
+  illustrations?:Array<{name:string;mimeType:string;base64:string}>;
   sheetNames: string[];
   resolvedSheets: Partial<Record<ManufacturingSheetRole, string>>;
   technicalFields: Record<string, string | number | boolean>;
@@ -284,6 +287,7 @@ export function previewManufacturingSpecificationWorkbook(
     type: 'buffer',
     cellFormula: true,
     cellStyles: true,
+    bookFiles:true,
     cellDates: true,
   });
   const resolvedSheets: Partial<Record<ManufacturingSheetRole, string>> = {};
@@ -333,6 +337,8 @@ export function previewManufacturingSpecificationWorkbook(
 
   return {
     sheetNames: workbook.SheetNames,
+    sheets:extractWorkbookSheets(workbook),
+    illustrations:extractWorkbookIllustrations(workbook),
     resolvedSheets,
     technicalFields: readTechnicalFields(workOrderSheet),
     warp,

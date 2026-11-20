@@ -1,3 +1,4 @@
+import {manufacturingExecutionRoutes} from './manufacturingExecutionRoutes.js';
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import {manufacturingYarnSettlementRoutes} from './manufacturingYarnSettlementRoutes.js';
 import { randomUUID } from "node:crypto";
@@ -40,6 +41,7 @@ function dbError(reply: FastifyReply, error: unknown) {
 export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticateRequest);
   await app.register(manufacturingYarnSettlementRoutes);
+  await app.register(manufacturingExecutionRoutes, {prefix: "/execution"});
   app.get("/options", async (req, reply) => {
     if (!canView(req.user) && !has(req.user, "manufacturing.warping.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية عرض خيارات التسدية", "FORBIDDEN");
@@ -62,7 +64,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         [company],
       ),
       getPool().query(
-        `SELECT y.id,y.barcode,y.weight_kg,f.name AS item_name,c.name_ar AS color_name FROM yarn_lots y JOIN fabric_items f ON f.id=y.item_id LEFT JOIN fabric_colors c ON c.id=y.color_id WHERE y.company_id=$1 AND y.status='AVAILABLE' AND y.weight_kg>0 ORDER BY f.name,y.created_at`,
+        `SELECT y.id,y.barcode,y.weight_kg,f.name AS item_name,c.name_ar AS color_name FROM yarn_lots y JOIN fabric_items f ON f.id=y.item_id AND f.company_id=y.company_id LEFT JOIN fabric_colors c ON c.id=y.color_id AND c.company_id=y.company_id WHERE y.company_id=$1 AND y.status='AVAILABLE' AND y.weight_kg>0 AND f.weight_material_kind IS DISTINCT FROM 'CONSUMABLE' ORDER BY f.name,y.created_at`,
         [company],
       ),
     ]);
@@ -207,7 +209,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
       }
       const cardNo = await generateWarpCardNo(client, req.user!.companyId),
         barcode = `WARP-${randomUUID()}`,
-        card = { nextStage: p.data.nextStage ?? null, ...buildWarpCardData({
+        card = { selvedgeOverride: x.selvedge_override ?? null, nextStage: p.data.nextStage ?? null, ...buildWarpCardData({
           specificationSnapshot: x.specification_snapshot,
           plannedLengthM: Number(x.planned_length_m),
           loomLabel: x.loom_code,
@@ -408,10 +410,11 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         card_no: string;
         barcode: string;
         card_data: Record<string, unknown>;
+        selvedge_override: Record<string, unknown> | null;
         print_count: number;
         status: WarpingStatus;
       }>(
-        `SELECT c.id,c.card_no,c.barcode,c.card_data,c.print_count,x.status FROM manufacturing_warp_cards c JOIN manufacturing_warping_orders x ON x.id=c.warping_order_id AND x.company_id=c.company_id WHERE c.warping_order_id=$1 AND c.company_id=$2 AND c.status='ACTIVE' FOR UPDATE OF c`,
+        `SELECT c.id,c.card_no,c.barcode,c.card_data,c.print_count,x.status,x.selvedge_override FROM manufacturing_warp_cards c JOIN manufacturing_warping_orders x ON x.id=c.warping_order_id AND x.company_id=c.company_id WHERE c.warping_order_id=$1 AND c.company_id=$2 AND c.status='ACTIVE' FOR UPDATE OF c`,
         [id, req.user!.companyId],
       );
       if (!q.rows.length) {
@@ -436,7 +439,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
       await client.query("COMMIT");
       return reply.send({
         ok: true,
-        data: { cardNo: c.card_no, barcode: c.barcode, cardData: c.card_data, printCount: c.print_count + 1 },
+        data: { cardNo: c.card_no, barcode: c.barcode, cardData: { ...c.card_data, selvedgeOverride: c.selvedge_override }, printCount: c.print_count + 1 },
       });
     } catch (e) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -541,11 +544,16 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         status: string;
         unit_cost: string | null;
         currency_code: string;
+        weight_material_kind: 'YARN' | 'CONSUMABLE' | null;
       }>(
-        `SELECT l.id,l.yarn_lot_id,l.requested_weight_kg,y.weight_kg,y.warehouse_id,y.status,y.unit_cost,y.currency_code FROM manufacturing_warping_yarn_issue_lines l JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id WHERE l.issue_id=$1 AND l.company_id=$2 ORDER BY y.id FOR UPDATE OF y`,
+        `SELECT l.id,l.yarn_lot_id,l.requested_weight_kg,y.weight_kg,y.warehouse_id,y.status,y.unit_cost,y.currency_code,f.weight_material_kind FROM manufacturing_warping_yarn_issue_lines l JOIN yarn_lots y ON y.id=l.yarn_lot_id AND y.company_id=l.company_id JOIN fabric_items f ON f.id=y.item_id AND f.company_id=y.company_id WHERE l.issue_id=$1 AND l.company_id=$2 ORDER BY y.id FOR UPDATE OF y FOR SHARE OF f`,
         [issueId, req.user!.companyId],
       );
       for (const line of lines.rows) {
+        if (line.weight_material_kind === 'CONSUMABLE') {
+          await client.query('ROLLBACK');
+          return sendError(reply, 400, 'المستهلكات لا تُصرف كخيط تسدية', 'VALIDATION');
+        }
         const amount = Number(line.requested_weight_kg);
         if (line.status !== "AVAILABLE" || Number(line.weight_kg) + 0.0005 < amount) {
           await client.query("ROLLBACK");

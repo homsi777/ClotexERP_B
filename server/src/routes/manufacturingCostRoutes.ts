@@ -1,9 +1,10 @@
+import {manufacturingAssetRegister,setManufacturingAssetAcquisition} from '../services/manufacturingFinancialSourcesService.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest, type JwtPayload } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
-import { addManufacturingCharge, costRate, finalizeManufacturingCost, linkManufacturingExternal, lockCostOrder, manufacturingCostReport, postManufacturingMaterial,recordManufacturingConsumption } from '../services/manufacturingCostService.js';
+import { approveManufacturingCharge, manageManufacturingRate, addManufacturingCharge, costRate, finalizeManufacturingCost, linkManufacturingExternal, lockCostOrder, manufacturingCostReport, postManufacturingMaterial,recordManufacturingConsumption } from '../services/manufacturingCostService.js';
 const has = (u: JwtPayload, p: string) => u.role === 'admin' || u.permissions.includes(p);
 const price = (u: JwtPayload) => ['admin', 'accountant'].includes(u.role) || has(u, 'manufacturing.cost.manage');
 export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
@@ -14,11 +15,42 @@ export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
             return sendError(reply, 403, 'لا تملك صلاحية العرض', 'FORBIDDEN');
         const [orders, lots, stages, jobs] = await Promise.all([
             getPool().query("SELECT id,work_order_no,status FROM manufacturing_work_orders WHERE company_id=$1 AND status<>'CANCELLED' ORDER BY created_at DESC", [u.companyId]),
-            getPool().query("SELECT y.id,y.barcode,y.weight_kg,f.name FROM yarn_lots y JOIN fabric_items f ON f.id=y.item_id AND f.company_id=y.company_id WHERE y.company_id=$1 AND y.status='AVAILABLE' ORDER BY f.name", [u.companyId]),
+            getPool().query("SELECT y.id,y.barcode,y.weight_kg,f.name,f.weight_material_kind FROM yarn_lots y JOIN fabric_items f ON f.id=y.item_id AND f.company_id=y.company_id WHERE y.company_id=$1 AND y.status='AVAILABLE' ORDER BY f.name", [u.companyId]),
             getPool().query(`SELECT id,work_order_id,run_no name,'WEAVING' stage,status FROM manufacturing_weaving_runs WHERE company_id=$1 UNION ALL SELECT s.id,w.work_order_id,s.sizing_order_no name,'SIZING' stage,s.status FROM manufacturing_sizing_orders s JOIN manufacturing_warp_beams b ON b.id=s.input_beam_id AND b.company_id=s.company_id JOIN manufacturing_warping_orders w ON w.id=b.warping_order_id AND w.company_id=b.company_id WHERE s.company_id=$1`, [u.companyId]),
             getPool().query("SELECT id,job_no FROM external_jobs WHERE company_id=$1 AND job_kind='PROCESSING' AND document_status='CONFIRMED' ORDER BY created_at DESC", [u.companyId])
         ]);
         return { ok: true, data: { orders: orders.rows, lots: lots.rows, stages: stages.rows, jobs: jobs.rows, canPrice: price(u), canViewCost: price(u) || has(u, 'manufacturing.cost.view'), canPost: has(u, 'inventory.manage') } };
+    });
+    app.get('/financial-sources', async (req,reply) => {
+        const u=req.user!;
+        if(!price(u)) return sendError(reply,403,'لا تملك صلاحية العرض','FORBIDDEN');
+        const [rates,machines,payroll,assets]=await Promise.all([
+          getPool().query('SELECT * FROM manufacturing_internal_rates WHERE company_id=$1 ORDER BY id',[u.companyId]),
+          getPool().query('SELECT id,name FROM manufacturing_machines WHERE company_id=$1 AND is_active',[u.companyId]),
+          getPool().query(`SELECT l.id,l.employee_id,e.full_name,r.payroll_no,r.currency_code,l.base_salary,l.allowances,l.deductions,l.net_salary,l.base_salary+l.allowances gross_earnings,
+          COALESCE((SELECT SUM(c.amount) FROM manufacturing_cost_charges c WHERE c.company_id=l.company_id AND c.payroll_line_id=l.id),0) allocated,
+          (SELECT MIN(c.payroll_cost_basis) FROM manufacturing_cost_charges c WHERE c.company_id=l.company_id AND c.payroll_line_id=l.id) cost_basis,
+          (SELECT MIN((c.payroll_source_snapshot->>'eligibleAmount')::numeric) FROM manufacturing_cost_charges c WHERE c.company_id=l.company_id AND c.payroll_line_id=l.id) eligible_amount
+          FROM payroll_run_lines l JOIN payroll_runs r ON r.company_id=l.company_id AND r.id=l.payroll_run_id JOIN payroll_employees e ON e.company_id=l.company_id AND e.id=l.employee_id WHERE l.company_id=$1 AND r.status IN ('CONFIRMED','PAID') ORDER BY r.created_at DESC`,[u.companyId]),
+          manufacturingAssetRegister(getPool(),u.companyId)
+        ]);
+        return {ok:true,data:{rates:rates.rows,machines:machines.rows,payroll:payroll.rows,assets,assetEngineAvailable:false}};
+    });
+    app.get('/asset-register',async(req,reply)=>{
+        const u=req.user!;
+        if(!price(u)&&!has(u,'manufacturing.cost.view')) return sendError(reply,403,'لا تملك صلاحية العرض','FORBIDDEN');
+        return {ok:true,data:await manufacturingAssetRegister(getPool(),u.companyId)};
+    });
+    app.post('/asset-register/acquisition-date',async(req,reply)=>{
+        const u=req.user!;
+        if(!price(u)) return sendError(reply,403,'لا تملك صلاحية الإجراء','FORBIDDEN');
+        const db=await getPool().connect();
+        try{
+            await db.query('BEGIN');
+            const data=await setManufacturingAssetAcquisition(db,u.companyId,u.sub,req.body);
+            await db.query('COMMIT');return {ok:true,data};
+        }catch(e){await db.query('ROLLBACK').catch(()=>undefined);return handle(e,reply);}
+        finally{db.release();}
     });
     app.get('/:id', async (req, reply) => {
         const u = req.user!;
@@ -39,7 +71,7 @@ export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
             return handle(e, reply);
         }
     });
-    for (const action of ['materials', 'consumption', 'charges', 'external-link', 'price-material', 'finalize'] as const) {
+    for (const action of ['materials', 'consumption', 'charges', 'approve-charge', 'internal-rates', 'external-link', 'price-material', 'finalize'] as const) {
         app.post(`/:id/${action}`, async (req, reply) => {
             const u = req.user!;
             if (action === 'materials' ? !has(u, 'inventory.manage') : !price(u))
@@ -58,6 +90,8 @@ export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
                     data = await postManufacturingMaterial(db, u.companyId, u.sub, id, req.body);
                 else if(action==='consumption')
                     data=await recordManufacturingConsumption(db,u.companyId,u.sub,id,req.body);
+                else if(action === 'approve-charge') data=await approveManufacturingCharge(db,u.companyId,u.sub,id,req.body);
+                else if(action === 'internal-rates') data=await manageManufacturingRate(db,u.companyId,u.sub,req.body);
                 else if (action === 'charges')
                     data = await addManufacturingCharge(db, u.companyId, u.sub, id, req.body);
                 else if (action === 'external-link')

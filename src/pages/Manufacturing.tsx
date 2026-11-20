@@ -1,4 +1,8 @@
+import {ExecutionTrackingLauncher} from '../components/manufacturing/ExecutionTrackingLauncher';
+import {ManufacturingItemSpecificationMapping} from '../components/manufacturing/ManufacturingItemSpecificationMapping';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {ManufacturingPrintButton} from '../components/manufacturing/ManufacturingPrintButton';
+import {WorkbookSheetGrid} from '../components/manufacturing/WorkbookSheetGrid';
 import {SpecificationRevisionEditor} from '../components/manufacturing/SpecificationRevisionEditor';
 import {ManufacturingOperationsReportPanel} from '../components/manufacturing/ManufacturingOperationsReportPanel';
 import { useSearchParams } from 'react-router-dom';
@@ -161,15 +165,15 @@ export const Manufacturing = () => {
         )}
         <div key={`${tab}:${revision}`} className="min-w-0 overflow-x-auto">
           {tab === "specifications" ? (
-            <WorkbookPreviewPanel t={t} canImport={canSpecImport} canApprove={canSpecApprove} />
+            <><ManufacturingItemSpecificationMapping/><WorkbookPreviewPanel t={t} canImport={canSpecImport} canApprove={canSpecApprove} /></>
           ) : tab === "workOrders" ? (
             <WorkOrdersPanel t={t} canManage={canWorkManage} canRelease={canWorkRelease} />
           ) : tab === "warping" ? (
-            <WarpingOrdersPanel canManage={canWarpManage} canQuality={canWarpQuality} canApproveYarn={canApproveYarn} />
+            <><ExecutionTrackingLauncher stage="WARPING" canManage={canWarpManage}/><WarpingOrdersPanel canManage={canWarpManage} canQuality={canWarpQuality} canApproveYarn={canApproveYarn} /></>
           ) : tab === "sizing" ? (
             <SizingOrdersPanel canManage={canSizingManage} />
           ) : tab === "weaving" ? (
-            <WeavingRunsPanel canManage={canWeavingManage} />
+            <><ExecutionTrackingLauncher stage="WEAVING" canManage={canWeavingManage}/><WeavingRunsPanel canManage={canWeavingManage} /></>
           ) : tab === "rawInspection" ? (
             <ProductionQualityPanel canInspect={canRawInspection} canReceive={canInventoryManage} defects={defects} />
           ) : tab === "costing" ? (
@@ -443,6 +447,7 @@ function WorkOrdersPanel({ t, canManage, canRelease }: { t: any; canManage: bool
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
+                    <ManufacturingPrintButton kind="work-orders" id={row.id} />
                     {canRelease && row.status === "DRAFT" && (
                       <button disabled={busy} onClick={() => void action(row, "RELEASED")} className="text-indigo-700 hover:underline">
                         {t("workOrders.release")}
@@ -496,6 +501,7 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
   });
   const [library, setLibrary] = useState<ManufacturingSpecificationSummary[]>([]);
   const [versions, setVersions] = useState<ManufacturingSpecificationVersion[]>([]);
+  const [selectedVersionId,setSelectedVersionId]=useState<string|null>(null);
   const [editingVersion,setEditingVersion]=useState<ManufacturingSpecificationVersion|null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const refreshLibrary = useCallback(async () => {
@@ -510,9 +516,13 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
   }, [refreshLibrary]);
   const selectSpecification = async (id: string) => {
     setSelectedId(id);
+    setVersions([]);
+    setSelectedVersionId(null);
     setError("");
     try {
-      setVersions(await listManufacturingSpecificationVersions(id));
+      const loaded=await listManufacturingSpecificationVersions(id);
+      setVersions(loaded);
+      setSelectedVersionId(loaded[0]?.id??null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("workbook.libraryError"));
     }
@@ -567,6 +577,7 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
     }
   };
   const specification = preview && "sheetNames" in preview ? preview : null;
+  const selectedVersion=versions.find(v=>v.id===selectedVersionId);
   const card = preview && "logicalRecordCount" in preview ? preview : null;
   return (
     <div className="space-y-6 p-5">
@@ -602,7 +613,7 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
               {versions.map((v) => (
                 <div key={v.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div>
-                    <b>v{v.version_no}</b>
+                    <button type="button" aria-pressed={v.id===selectedVersionId} className="font-bold text-indigo-700 hover:underline" onClick={()=>setSelectedVersionId(v.id)}>v{v.version_no} — عرض الأوراق</button>
                     <span className="mx-2">{t(`workbook.status.${v.status}`)}</span>
                     <span className="text-xs text-slate-500">{v.source_file_name}</span>
                   </div>
@@ -619,6 +630,7 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
         </div>
       </div>
       {editingVersion&&<SpecificationRevisionEditor key={editingVersion.id} version={editingVersion} onClose={()=>setEditingVersion(null)} onSaved={async id=>{await refreshLibrary();await selectSpecification(id);}}/>}
+      {selectedVersion&&<section className="space-y-2"><h4 className="font-bold">أوراق الإصدار v{selectedVersion.version_no}</h4><WorkbookSheetGrid key={selectedVersion.id} sheets={selectedVersion.parsed_data.sheets} illustrations={selectedVersion.parsed_data.illustrations}/></section>}
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1">
           <span className="block text-xs font-bold">{t("workbook.documentType")}</span>
@@ -687,6 +699,7 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
             <PreviewTable title={t("workbook.technicalFields")} rows={Object.entries(specification.technicalFields).map(([label, value]) => [label, String(value)])} />
             <PreviewTable title={t("workbook.detectedSheets")} rows={Object.entries(specification.resolvedSheets)} />
           </div>
+          <WorkbookSheetGrid sheets={specification.sheets} illustrations={specification.illustrations}/>
           <WarningList warnings={specification.warnings} t={t} />
         </div>
       )}
