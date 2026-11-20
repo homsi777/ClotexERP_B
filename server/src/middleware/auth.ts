@@ -6,6 +6,8 @@ import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from './errorHandler.js';
 import { touchActiveSession, isSessionRevoked } from '../services/activeSessionsService.js';
 import { clientIp } from '../utils/clientIp.js';
+import { effectivePermissionsForUser } from '../services/userPermissionService.js';
+import { ACTION_LABELS, resolveRoutePolicy } from '../services/permissionCatalog.js';
 
 export type JwtPayload = {
   sub: string;
@@ -77,8 +79,10 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
       full_name: string | null;
       company_id: string;
       is_platform_admin: boolean;
+      role: string;
+      perm_mode: string;
     }>(
-      'SELECT is_active, full_name, company_id, is_platform_admin FROM users WHERE id = $1',
+      'SELECT is_active, full_name, company_id, is_platform_admin, role, perm_mode FROM users WHERE id = $1',
       [payload.sub],
     );
     if (userCheck.rows.length === 0 || !userCheck.rows[0].is_active) {
@@ -95,6 +99,16 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
 
     if (isSessionRevoked(payload.sub, token)) {
       return sendError(reply, 401, 'تم إنهاء الجلسة من قبل المدير', 'SESSION_REVOKED');
+    }
+
+    // وضع الصلاحيات «مخصّص»: تُقرأ المصفوفة من القاعدة بكل طلب (فيسري أي تعديل فوراً) وتُطبَّق مركزياً على كل المسارات.
+    if (userCheck.rows[0].perm_mode === 'CUSTOM' && payload.role !== 'admin') {
+      const eff = await effectivePermissionsForUser(pool, { id: payload.sub, role: payload.role, perm_mode: 'CUSTOM' });
+      payload.permissions = eff.permissions;
+      const policy = resolveRoutePolicy(request.routeOptions?.url ?? request.url.split('?')[0], request.method);
+      if (policy && !policy.open && !eff.matrix.includes(policy.code)) {
+        return sendError(reply, 403, `ليست لديك صلاحية «${ACTION_LABELS[policy.action]}» في «${policy.module.name}»`, 'FORBIDDEN');
+      }
     }
 
     request.user = payload;

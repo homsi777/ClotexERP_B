@@ -27,6 +27,7 @@ export interface ApiUser {
   role: string;
   is_active: boolean;
   notes?: string | null;
+  perm_mode?: 'ROLE' | 'CUSTOM';
   created_at: string;
   updated_at?: string;
 }
@@ -224,4 +225,23 @@ export async function downloadDatabaseBackupToDevice(): Promise<{ fileName: stri
   }
 
   return { fileName, sizeBytes: blob.size };
+}
+
+export interface PermissionCatalog {
+  groups: { code: string; name: string }[];
+  modules: { code: string; name: string; group: string; financial?: boolean; actions: ('view' | 'create' | 'edit' | 'delete' | 'approve' | 'print' | 'export' | 'price' | 'costView' | 'disburse')[] }[];
+  actionLabels: Record<string, string>;
+}
+export interface UserPermissionsDto {
+  userId: string; username: string; role: string; mode: 'ROLE' | 'CUSTOM'; codes: string[];
+  audit: { changed_at: string; mode: string; granted_count: number; added: string[]; removed: string[]; changed_by_name: string | null }[];
+}
+export async function getPermissionCatalog(): Promise<PermissionCatalog> {
+  return (await apiFetch<{ ok: boolean; data: PermissionCatalog }>('/api/system/permission-catalog')).data;
+}
+export async function getUserPermissions(userId: string): Promise<UserPermissionsDto> {
+  return (await apiFetch<{ ok: boolean; data: UserPermissionsDto }>(`/api/system/users/${userId}/permissions`)).data;
+}
+export async function saveUserPermissionMatrix(userId: string, body: { mode: 'ROLE' | 'CUSTOM'; codes: string[] }) {
+  return apiFetch<{ ok: boolean; data: { mode: string; granted: number } }>(`/api/system/users/${userId}/permissions`, { method: 'PUT', body: JSON.stringify(body) });
 }

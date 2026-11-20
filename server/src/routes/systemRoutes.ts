@@ -1,3 +1,5 @@
+import { ACTION_LABELS, PERMISSION_GROUPS, PERMISSION_MODULES } from '../services/permissionCatalog.js';
+import { grantedMatrixCodes, saveUserPermissions } from '../services/userPermissionService.js';
 import bcrypt from 'bcryptjs';
 import type { FastifyPluginAsync } from 'fastify';
 import https from 'node:https';
@@ -338,7 +340,7 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
     const targetCompanyId = requirePlatformAdmin(req.user) && q.companyId ? q.companyId : companyId;
 
     const rows = await getPool().query(
-      `SELECT id, username, full_name, role, is_active, notes, created_at, updated_at
+      `SELECT id, username, full_name, role, is_active, notes, perm_mode, created_at, updated_at
        FROM users WHERE company_id=$1 ORDER BY created_at DESC`,
       [targetCompanyId],
     );
@@ -426,6 +428,48 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
 
     if (!row.rows.length) return sendError(reply, 404, 'المستخدم غير موجود', 'NOT_FOUND');
     return reply.send({ ok: true, data: row.rows[0] });
+  });
+
+  // ───────── مصفوفة الصلاحيات التفصيلية لكل مستخدم ─────────
+  app.get('/permission-catalog', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    return reply.send({ ok: true, data: { groups: PERMISSION_GROUPS, modules: PERMISSION_MODULES, actionLabels: ACTION_LABELS } });
+  });
+
+  app.get('/users/:id/permissions', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { id } = req.params as { id: string };
+    const pool = getPool();
+    const u = await pool.query<{ id: string; role: string; perm_mode: string; company_id: string; username: string }>('SELECT id, role, perm_mode, company_id, username FROM users WHERE id=$1', [id]);
+    const row = u.rows[0];
+    if (!row || (row.company_id !== req.user!.companyId && !requirePlatformAdmin(req.user))) return sendError(reply, 404, 'المستخدم غير موجود', 'NOT_FOUND');
+    const audit = await pool.query(
+      `SELECT a.changed_at, a.mode, a.granted_count, a.added, a.removed, cu.username AS changed_by_name
+         FROM user_permission_audit a LEFT JOIN users cu ON cu.id = a.changed_by WHERE a.user_id=$1 ORDER BY a.changed_at DESC LIMIT 20`, [id]);
+    return reply.send({ ok: true, data: { userId: row.id, username: row.username, role: row.role, mode: row.perm_mode, codes: await grantedMatrixCodes(pool, id), audit: audit.rows } });
+  });
+
+  app.put('/users/:id/permissions', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { id } = req.params as { id: string };
+    const parsed = z.object({ mode: z.enum(['ROLE', 'CUSTOM']), codes: z.array(z.string().max(120)).max(500).default([]) }).safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    if (id === req.user!.sub) return sendError(reply, 400, 'لا يمكنك تعديل صلاحياتك بنفسك', 'VALIDATION');
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const res = await saveUserPermissions(client, { companyId: req.user!.companyId, targetUserId: id, changedBy: req.user!.sub, mode: parsed.data.mode, codes: parsed.data.codes });
+      await client.query('COMMIT');
+      return reply.send({ ok: true, data: res });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      const err = e as { code?: string; message?: string };
+      if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message ?? 'غير موجود', 'NOT_FOUND');
+      if (err.code === 'VALIDATION') return sendError(reply, 400, err.message ?? ArabicErrors.validation, 'VALIDATION');
+      throw e;
+    } finally {
+      client.release();
+    }
   });
 
   app.get('/active-sessions', { preHandler: authenticateRequest }, async (req, reply) => {

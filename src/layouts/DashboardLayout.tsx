@@ -40,7 +40,8 @@ import { ActiveCompanyBanner } from '../components/companies/ActiveCompanyBanner
 import {OrderNotificationInbox} from '../components/orders/OrderNotificationInbox';
 import { BRAND } from '../branding';
 import { useAnchoredPopoverStyle } from '../lib/useAnchoredPopoverStyle';
-import { fetchMe } from '../lib/api/authApi';
+import { fetchMe, type AuthUser } from '../lib/api/authApi';
+import { canSeePath } from '../lib/permissionNav';
 import { getCheckDueSummary, type CheckDueItem } from '../lib/api/checksApi';
 import { applyCompanyDefaultLanguage } from '../i18n/applyCompanyLanguage';
 
@@ -78,6 +79,8 @@ const Topbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpandedKey, setMobileExpandedKey] = useState<string | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [navUser, setNavUser] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setNavUser).catch(() => setNavUser(null)); }, []);
   const notifyRef = useRef<HTMLDivElement>(null);
 
   const customerOrders = useStore((s) => s.customerOrders);
@@ -105,7 +108,7 @@ const Topbar = () => {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [notifyOpen]);
 
-  const navItems: NavItem[] = [
+  const navItemsAll: NavItem[] = [
     { labelKey: 'home', to: '/', icon: Home },
     {
       labelKey: 'inventory',
@@ -204,6 +207,13 @@ const Topbar = () => {
     { labelKey: 'partners', to: '/partners', icon: Handshake },
     { labelKey: 'settings', to: '/settings', icon: Settings },
   ];
+  const navItems: NavItem[] = navItemsAll.flatMap((item): NavItem[] => {
+    if ('subItems' in item && item.subItems) {
+      const subItems = item.subItems.filter((sub) => canSeePath(navUser, sub.to));
+      return subItems.length ? [{ ...item, subItems }] : [];
+    }
+    return canSeePath(navUser, (item as { to: string }).to) ? [item] : [];
+  });
 
   const isRouteActive = (to?: string) => {
     if (!to) return false;

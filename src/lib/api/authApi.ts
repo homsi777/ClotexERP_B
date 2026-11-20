@@ -16,6 +16,10 @@ export type AuthUser = {
   homeCompanyId: string;
   role: string;
   permissions: string[];
+  /** وضع الصلاحيات: ROLE حسب الدور، CUSTOM مصفوفة مخصّصة بصلاحيات تفصيلية. */
+  permMode?: 'ROLE' | 'CUSTOM';
+  /** أكواد المصفوفة الممنوحة (للوضع CUSTOM) بصيغة p:module.action. */
+  permMatrix?: string[];
   /** مدير منصة clotex نفسه — منفصل عن "أدمن" أي شركة عميل. */
   isPlatformAdmin: boolean;
 };

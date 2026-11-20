@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { effectiveDefaultCurrency } from '../utils/defaultCurrency.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { effectivePermissionsForUser } from '../services/userPermissionService.js';
 import { getPool } from '../db/pool.js';
 import {
   authenticateRequest,
@@ -24,6 +25,12 @@ const loginBodySchema = z.object({
 const switchCompanyBodySchema = z.object({
   companyId: z.string().uuid(),
 });
+
+async function resolveUserPermissions(user: { id: string; role: string }) {
+  const pool = getPool();
+  const m = await pool.query<{ perm_mode: string }>('SELECT perm_mode FROM users WHERE id = $1', [user.id]);
+  return effectivePermissionsForUser(pool, { id: user.id, role: user.role, perm_mode: m.rows[0]?.perm_mode });
+}
 
 async function permissionCodesForRole(roleCode: string): Promise<string[]> {
   const pool = getPool();
@@ -110,7 +117,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 401, ArabicErrors.invalidCredentials, 'AUTH');
     }
 
-    const permissions = await permissionCodesForRole(user.role);
+    const { permissions, mode: permMode, matrix: permMatrix } = await resolveUserPermissions(user);
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -152,6 +159,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         homeCompanyId: user.company_id,
         role: user.role,
         permissions,
+        permMode,
+        permMatrix,
         isPlatformAdmin: user.is_platform_admin,
       },
     });
@@ -211,7 +220,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 401, ArabicErrors.unauthorized, 'UNAUTHORIZED');
     }
 
-    const permissions = await permissionCodesForRole(user.role);
+    const { permissions, mode: permMode, matrix: permMatrix } = await resolveUserPermissions(user);
 
     return reply.send({
       ok: true,
@@ -227,6 +236,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         homeCompanyId: user.company_id,
         role: user.role,
         permissions,
+        permMode,
+        permMatrix,
         isPlatformAdmin: user.is_platform_admin,
       },
     });
@@ -273,7 +284,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 409, 'الحساب المحدد غير فعّال', 'COMPANY_INACTIVE');
     }
 
-    const permissions = await permissionCodesForRole(user.role);
+    const { permissions, mode: permMode, matrix: permMatrix } = await resolveUserPermissions(user);
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -318,6 +329,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         homeCompanyId: user.company_id,
         role: user.role,
         permissions,
+        permMode,
+        permMatrix,
         isPlatformAdmin: user.is_platform_admin,
       },
     });

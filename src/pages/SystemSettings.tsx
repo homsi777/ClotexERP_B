@@ -1,3 +1,4 @@
+import { UserPermissionsModal } from '../components/settings/UserPermissionsModal';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -115,7 +116,7 @@ const defaultSettings = {
 };
 
 export const SystemSettings = () => {
-  const { t } = useTranslation('settings');
+  const { t, i18n } = useTranslation('settings');
   const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useToast();
   const tabParam = searchParams.get('tab');
@@ -124,6 +125,7 @@ export const SystemSettings = () => {
   const [settingsValues, setSettingsValues] = useState(defaultSettings);
   const [settingsStatus, setSettingsStatus] = useState('');
   const [users, setUsers] = useState<ApiUser[]>([]);
+  const [permUser, setPermUser] = useState<ApiUser | null>(null);
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [permissions, setPermissions] = useState<ApiPermission[]>([]);
   const [rolePermissions, setRolePermissions] = useState<ApiRolePermission[]>([]);
@@ -974,6 +976,16 @@ export const SystemSettings = () => {
                                 <Pencil className="w-3.5 h-3.5" />
                                 {t('users.edit')}
                               </button>
+                              {user.role !== 'admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPermUser(user)}
+                                  className={`ms-1.5 inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${user.perm_mode === 'CUSTOM' ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-[var(--border-default)] text-[var(--text-heading)] hover:bg-[var(--surface-muted-nav)]'}`}
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                  {i18n.language === 'tr' ? 'Yetkiler' : 'الصلاحيات'}{user.perm_mode === 'CUSTOM' ? ' ✓' : ''}
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1005,6 +1017,14 @@ export const SystemSettings = () => {
               </div>
               )}
             </div>
+          )}
+
+          {permUser && (
+            <UserPermissionsModal
+              user={permUser}
+              onClose={() => setPermUser(null)}
+              onSaved={(mode) => setUsers((cur) => cur.map((u) => (u.id === permUser.id ? { ...u, perm_mode: mode } : u)))}
+            />
           )}
 
           {activeSection === 'activeDevices' && (
