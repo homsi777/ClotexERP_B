@@ -554,5 +554,6 @@
   "voucher.checkDueShort": "استحقاق",
   "voucher.payMethodLabel": "طريقة الدفع",
   "voucher.checkBankLabel": "البنك",
-  "voucher.checkHolderLabel": "صاحب الحساب"
+  "voucher.checkHolderLabel": "صاحب الحساب",
+  "voucher.convertedLine": "ما يعادل {{amount}} بسعر صرف {{rate}}"
 }

@@ -33,6 +33,8 @@ export type VoucherPrintData = {
   currencyCode: string;
   exchangeRateToUsd?: string;
   amountUsd?: string;
+  /** تحويل اختياري بسعر صرف: مكافئ المبلغ بعملة أخرى. */
+  conversion?: { amount: string; currencyCode: string; rate: string } | null;
   cashboxName?: string;
   paymentMethod?: string | null;
   referenceDocumentNo?: string | null;
@@ -665,6 +667,7 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
           <div class="amount-label">${amountHeading}</div>
           <div class="amount-value">${amountDisplay}</div>
           <div class="amount-words">${amountWords}</div>
+          ${data.conversion ? `<div class="amount-words">${esc(t('voucher.convertedLine', { amount: formatAmountDisplay(data.conversion.amount, data.conversion.currencyCode), rate: Number(data.conversion.rate) }))}</div>` : ''}
         </div>
 
         <div class="narrative-box">
@@ -717,6 +720,9 @@ export function voucherRowToPrintData(voucher: {
   currency_code: string;
   exchange_rate_to_usd?: string | null;
   amount_usd?: string | null;
+  convert_to_currency_code?: string | null;
+  convert_rate?: string | null;
+  converted_amount?: string | null;
   cashbox_name?: string | null;
   payment_method?: string | null;
   purpose?: string | null;
@@ -746,6 +752,8 @@ export function voucherRowToPrintData(voucher: {
     currencyCode: voucher.currency_code,
     exchangeRateToUsd: voucher.exchange_rate_to_usd ?? undefined,
     amountUsd: voucher.amount_usd ?? undefined,
+    conversion: voucher.converted_amount && voucher.convert_to_currency_code && voucher.convert_rate
+      ? { amount: voucher.converted_amount, currencyCode: voucher.convert_to_currency_code, rate: voucher.convert_rate } : null,
     cashboxName: voucher.cashbox_name ?? undefined,
     paymentMethod: voucher.payment_method,
     purpose: voucher.purpose ?? undefined,

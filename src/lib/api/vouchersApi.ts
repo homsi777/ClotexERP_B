@@ -52,6 +52,9 @@ export interface VoucherRow {
   currency_code: string;
   exchange_rate_to_usd?: string;
   amount_usd?: string;
+  convert_to_currency_code?: string | null;
+  convert_rate?: string | null;
+  converted_amount?: string | null;
   payment_method: string;
   status: VoucherStatus;
   purpose?: VoucherPurpose | string | null;
@@ -111,6 +114,8 @@ export async function createVoucher(payload: {
   currencyCode?: string;
   exchangeRateToUsd?: number;
   amountUsd?: number;
+  convertToCurrencyCode?: string | null;
+  convertRate?: number | null;
   paymentMethod?: 'CASH' | 'BANK' | 'TRANSFER' | 'OTHER';
   purpose?: VoucherPurpose;
   description?: string | null;
@@ -134,6 +139,8 @@ export async function createVoucher(payload: {
       currencyCode: payload.currencyCode ?? 'USD',
       exchangeRateToUsd: payload.exchangeRateToUsd,
       amountUsd: payload.amountUsd,
+      convertToCurrencyCode: payload.convertToCurrencyCode ?? null,
+      convertRate: payload.convertRate ?? null,
       paymentMethod: payload.paymentMethod ?? 'CASH',
       purpose: payload.purpose ?? 'INVOICE_PAYMENT',
       description: payload.description ?? null,

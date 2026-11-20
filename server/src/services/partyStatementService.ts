@@ -4,6 +4,9 @@ import { getPool } from '../db/pool.js';
 const VOUCHER_CHECK_SUFFIX = `COALESCE((SELECT ' — شيك رقم ' || string_agg(c.check_no || ' / ' || c.bank_name || ' / استحقاق ' || to_char(c.due_date,'YYYY-MM-DD') || COALESCE(' / ' || NULLIF(c.account_holder_name,''), ''), '، ') FROM voucher_lines vl JOIN checks c ON c.id = vl.check_id WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id), '')`;
 
 
+/** سند محوَّل بسعر صرف (اختياري): يظهر المكافئ والسعر بجانب المبلغ الأصلي. */
+const VOUCHER_CONVERT_SUFFIX = `CASE WHEN v.converted_amount IS NOT NULL THEN ' — ما يعادل ' || trim(to_char(v.converted_amount,'FM999999999990.00')) || ' ' || v.convert_to_currency_code || ' بسعر ' || trim(to_char(v.convert_rate,'FM999999990.999999')) ELSE '' END`;
+
 type PartyKind = 'CUSTOMER' | 'SUPPLIER';
 
 export type PartyStatementFilters = {
@@ -122,8 +125,8 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
-           v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
+            END) || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS type_label,
+           v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS description,
            0::numeric AS debit, v.amount AS credit, v.currency_code,
            0::numeric AS debit_usd,
            COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS credit_usd,
@@ -140,8 +143,8 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
-           v.voucher_no AS document_no, COALESCE(v.description, 'سند دفع مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
+            END) || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS type_label,
+           v.voucher_no AS document_no, COALESCE(v.description, 'سند دفع مؤكد') || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS description,
            v.amount AS debit, 0::numeric AS credit, v.currency_code,
            COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS debit_usd,
            0::numeric AS credit_usd,
@@ -237,8 +240,8 @@ function supplierRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
-           v.voucher_no AS document_no, COALESCE(v.description, 'سند دفع مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
+            END) || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS type_label,
+           v.voucher_no AS document_no, COALESCE(v.description, 'سند دفع مؤكد') || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS description,
            v.amount AS debit, 0::numeric AS credit, v.currency_code,
            COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS debit_usd,
            0::numeric AS credit_usd,
@@ -255,8 +258,8 @@ function supplierRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               WHEN 'COMPENSATION' THEN 'تعويض / عطل وضرر'
               WHEN 'OTHER' THEN 'أخرى'
               ELSE 'دفعة / تسوية فاتورة'
-            END) || ${VOUCHER_CHECK_SUFFIX} AS type_label,
-           v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} AS description,
+            END) || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS type_label,
+           v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS description,
            0::numeric AS debit, v.amount AS credit, v.currency_code,
            0::numeric AS debit_usd,
            COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS credit_usd,

@@ -15,5 +15,8 @@
   "expectedSupplyDate": "Beklenen Teslim: {{date}}",
   "rate.manualToggle": "Döviz kurunu elle gir",
   "rate.autoHint": "Son onaylı kur kullanılacak: 1 USD = {{rate}} {{code}}",
-  "rate.noStored": "{{code}} için onaylı kur yok — elle girişi açın veya kuru Döviz Kurları ekranından ekleyin"
+  "rate.noStored": "{{code}} için onaylı kur yok — elle girişi açın veya kuru Döviz Kurları ekranından ekleyin",
+  "convert.toggle": "Kur ile dönüştür (isteğe bağlı)",
+  "convert.rate": "1 {{from}} = ? {{to}}",
+  "convert.result": "{{amount}} {{from}} ≈ {{converted}} {{to}}"
 }

@@ -66,6 +66,9 @@ const createBody = z.object({
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().optional(),
   amountUsd: z.coerce.number().optional(),
+  /** تحويل اختياري للعرض: مكافئ المبلغ بعملة أخرى بسعر محدد (لا يغيّر الأرصدة). */
+  convertToCurrencyCode: z.string().trim().min(1).max(10).optional().nullable(),
+  convertRate: z.coerce.number().positive().optional().nullable(),
   paymentMethod: paymentMethodSchema.default('CASH'),
   purpose: purposeSchema,
   description: z.string().optional().nullable(),
@@ -80,6 +83,13 @@ const LINE_SUM_EPS = 0.01;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function conversionOf(d: { amount: number; currencyCode?: string; convertToCurrencyCode?: string | null; convertRate?: number | null }) {
+  const code = d.convertToCurrencyCode?.trim().toUpperCase() || null;
+  const rate = d.convertRate ?? null;
+  if (!code || !rate || code === (d.currencyCode ?? '').toUpperCase()) return { code: null, rate: null, amount: null };
+  return { code, rate, amount: round2(d.amount * rate) };
 }
 
 function computeUsd(amountOriginal: number, exchangeRateToUsd: number): number {
@@ -403,8 +413,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
            amount, currency_code, exchange_rate_to_usd, amount_usd,
            payment_method, status, purpose, description, notes,
            reference_document_type, reference_document_no,
-           created_by_user_id
-         ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,'DRAFT',$14,$15,$16,$17,$18,$19)
+           created_by_user_id, convert_to_currency_code, convert_rate, converted_amount
+         ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,'DRAFT',$14,$15,$16,$17,$18,$19,$20,$21,$22)
          RETURNING id, voucher_no, voucher_type, voucher_date, cashbox_id, party_type, party_id, party_name,
                    amount, currency_code, exchange_rate_to_usd, amount_usd, payment_method, status, purpose,
                    description, notes, reference_document_type, reference_document_no, created_at`,
@@ -428,6 +438,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
           d.referenceDocumentType?.trim() || null,
           d.referenceDocumentNo?.trim() || null,
           userId,
+          ...(() => { const c = conversionOf({ amount: d.amount, currencyCode, convertToCurrencyCode: d.convertToCurrencyCode, convertRate: d.convertRate }); return [c.code, c.rate, c.amount]; })(),
         ],
       );
 
@@ -506,7 +517,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
            amount=$9, currency_code=$10, exchange_rate_to_usd=$11, amount_usd=$12,
            payment_method=$13, purpose=$14, description=$15, notes=$16,
            reference_document_type=$17, reference_document_no=$18,
-           updated_at=now(), created_by_user_id=$19
+           updated_at=now(), created_by_user_id=$19,
+           convert_to_currency_code=$20, convert_rate=$21, converted_amount=$22
          WHERE id=$1 AND company_id=$2
          RETURNING id, voucher_no, status, purpose, updated_at`,
         [
@@ -529,6 +541,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
           d.referenceDocumentType?.trim() || null,
           d.referenceDocumentNo?.trim() || null,
           userId,
+          ...(() => { const c = conversionOf({ amount: d.amount, currencyCode, convertToCurrencyCode: d.convertToCurrencyCode, convertRate: d.convertRate }); return [c.code, c.rate, c.amount]; })(),
         ],
       );
 

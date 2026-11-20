@@ -15,6 +15,7 @@ import { convertToUsd, getCurrencyLabel, normalizeExchangeRate, round2 } from '.
 import { useToast } from '../components/NonBlockingToast';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
 import { ExchangeRateField, resolveExchangeRate } from '../components/ExchangeRateField';
+import { ConvertCurrencyField, NO_CONVERSION, conversionPayload, type CurrencyConversion } from '../components/ConvertCurrencyField';
 import { CheckEntryFields, emptyCheckDraft, isCheckDraftComplete, type CheckDraft } from '../components/treasury/CheckEntryFields';
 import {
   getReceiptPurposeOptions,
@@ -64,6 +65,7 @@ export const CollectionBonds = () => {
   const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
   const [manualRate, setManualRate] = useState(false);
+  const [conversion, setConversion] = useState<CurrencyConversion>(NO_CONVERSION);
   const storedRate = useMemo(() => {
     const row = exchangeRates.find((r) => r.currency_code === currencyCode);
     const n = row ? Number(row.exchange_rate_to_usd) : NaN;
@@ -275,6 +277,7 @@ export const CollectionBonds = () => {
         currencyCode,
         exchangeRateToUsd: rate,
         amountUsd,
+        ...conversionPayload(conversion),
         purpose,
         description: description || null,
         referenceDocumentType:customerOrderNo.trim()?'CUSTOMER_ORDER':null,
@@ -394,6 +397,7 @@ export const CollectionBonds = () => {
                       onValueChange={setExchangeRateToUsd}
                       onKeyDown={focusNextFormControl}
                     />
+                    <ConvertCurrencyField amount={Number(amount) || 0} currencyCode={currencyCode} rates={exchangeRates} value={conversion} onChange={setConversion} />
                   </div>
                 </div>
                 <div className="space-y-2">
