@@ -28,6 +28,8 @@ export type CheckRow = {
   received_date: string;
   due_date: string;
   image_data: string | null;
+  /** للقوائم: وجود صورة دون إرسالها (تُجلب عند الطلب). */
+  has_image?: boolean;
   status: CheckStatus;
   needs_review: boolean;
   created_at: string;
@@ -36,7 +38,7 @@ export type CheckRow = {
 
 const CHECK_SELECT = `
   SELECT id, check_no, bank_name, account_holder_name, party_type, party_id, party_name,
-         amount, currency_code, received_date, due_date, image_data, status, needs_review,
+         amount, currency_code, received_date, due_date, NULL::text AS image_data, (image_data IS NOT NULL) AS has_image, status, needs_review,
          created_at, updated_at
   FROM checks
 `;
@@ -329,4 +331,14 @@ export async function returnCheck(
   );
   await insertStatusHistory(client, { checkId: check.id, fromStatus: check.status, toStatus: 'RETURNED', note: input.note ?? null, userId: input.userId });
   return updated.rows[0];
+}
+
+/** صورة الشيك (base64 data URL) — تُجلب منفصلة لتخفيف القوائم. */
+export async function getCheckImage(companyId: string, checkId: string): Promise<string | null> {
+  const r = await getPool().query<{ image_data: string | null }>(
+    `SELECT image_data FROM checks WHERE id = $1 AND company_id = $2`,
+    [checkId, companyId],
+  );
+  if (!r.rows.length) fail('الشيك غير موجود', 'NOT_FOUND');
+  return r.rows[0].image_data;
 }

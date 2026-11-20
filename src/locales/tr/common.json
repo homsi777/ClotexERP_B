@@ -12,5 +12,8 @@
   "save": "Kaydet",
   "noAlertsCurrently": "Şu anda uyarı bulunmuyor",
   "customerFallback": "Müşteri",
-  "expectedSupplyDate": "Beklenen Teslim: {{date}}"
+  "expectedSupplyDate": "Beklenen Teslim: {{date}}",
+  "rate.manualToggle": "Döviz kurunu elle gir",
+  "rate.autoHint": "Son onaylı kur kullanılacak: 1 USD = {{rate}} {{code}}",
+  "rate.noStored": "{{code}} için onaylı kur yok — elle girişi açın veya kuru Döviz Kurları ekranından ekleyin"
 }

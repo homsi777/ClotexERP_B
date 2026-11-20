@@ -67,5 +67,22 @@
   "print.title": "طباعة شيكات",
   "print.selectedTitle": "{{count}} شيك محدَّد للطباعة",
   "print.clearSelection": "إلغاء التحديد",
-  "print.button": "طباعة"
+  "print.button": "طباعة",
+  "form.image": "صورة الشيك",
+  "form.imagePick": "اختيار صورة",
+  "form.imageChange": "تغيير الصورة",
+  "form.imageRemove": "إزالة الصورة",
+  "form.imageBusy": "جارٍ المعالجة…",
+  "form.imageOptional": "اختيارية — تُضغط تلقائياً قبل الحفظ.",
+  "form.defaultCurrency": "اجعلها عملتي الافتراضية",
+  "view.table": "جدول",
+  "view.gallery": "صور",
+  "gallery.noImage": "بلا صورة",
+  "gallery.close": "إغلاق",
+  "gallery.due": "الاستحقاق",
+  "gallery.received": "الاستلام",
+  "currency.USD": "دولار (USD)",
+  "currency.EGP": "جنيه مصري (EGP)",
+  "currency.TRY": "ليرة تركية (TRY)",
+  "currency.SYP": "ليرة سورية (SYP)"
 }

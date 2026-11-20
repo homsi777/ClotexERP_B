@@ -3,14 +3,12 @@
   "header.titleEdit": "Rezervasyon Siparişini Düzenle",
   "header.titleCreate": "Yeni Rezervasyon Siparişi",
   "header.subtitle": "Barkod → malzeme adı → malzeme kodu — renk manuel olarak girilir. Sonraki satır barkodu ve miktarları devralır.",
-
   "actions.cancel": "İptal",
   "actions.saveDraft": "Taslak Olarak Kaydet",
   "actions.saving": "Kaydediliyor…",
   "actions.saveChanges": "Değişiklikleri Kaydet",
   "actions.confirmOrder": "Siparişi Onayla",
   "actions.addLine": "Satır Ekle",
-
   "alert.title": "Dikkat:",
   "alert.scanPrefix": "Malzemeyi ve barkodu doldurmak için",
   "alert.scanBold": "kartela barkodunu/QR kodunu",
@@ -19,7 +17,6 @@
   "alert.and": "ve",
   "alert.colorBold": "rengi",
   "alert.scanSuffix": "manuel olarak tamamlayın. Sonraki satır aynı barkodu, miktarları ve fiyatı devralır.",
-
   "form.orderNumberLabel": "Sipariş Numarası",
   "form.orderNumberPlaceholder": "Otomatik oluşturulur (yalnızca sayı)",
   "form.dateLabel": "Tarih",
@@ -48,7 +45,6 @@
   "form.noTemplateOption": "— Şablonsuz —",
   "form.notesLabel": "Sipariş İçin Genel Notlar",
   "form.notesPlaceholder": "Teslimat koşulları, tedarikçi sevkiyat referansı, ...",
-
   "table.itemsTitle": "Sipariş Kalemleri",
   "table.colBarcode": "Barkod",
   "table.colMaterialName": "Malzeme Adı",
@@ -65,7 +61,6 @@
   "table.colorNamePlaceholder": "Renk",
   "table.attachImageTitle": "Fotoğraf ekle (kamera veya galeri)",
   "table.totalLabel": "Toplam",
-
   "summary.title": "Malzeme ve Tasarıma Göre Özet",
   "summary.subtitle": "Fiyatlandırma burada — her malzeme/tasarım için metre fiyatı",
   "summary.colMaterial": "Malzeme",
@@ -82,9 +77,7 @@
   "summary.statMeters": "Metreler",
   "summary.statTotal": "Toplam {{currency}}",
   "summary.statGroups": "Gruplar",
-
   "misc.unspecified": "Belirtilmemiş",
-
   "toast.cartelaFoundPrefix": "Kartela: {{title}} · {{artCode}}",
   "toast.cartelaColorMatched": "Renk {{code}}{{name}}",
   "toast.cartelaCompleteColorQty": "— rengi ve miktarı tamamlayın",
@@ -99,7 +92,7 @@
   "toast.checkQuantities": "Sipariş kalemlerindeki miktarları kontrol edin",
   "toast.cartelaDraftsCreated": "{{count}} taslak kartela eklendi — ayrıntılar kartela kaydından tamamlanabilir",
   "toast.saveFailed": "Sipariş kaydedilemedi",
-
   "validation.metersPerRollRequired": "Metre/top sıfırdan büyük olmalıdır",
-  "validation.rollCountRequired": "Top sayısı sıfırdan büyük olmalıdır"
+  "validation.rollCountRequired": "Top sayısı sıfırdan büyük olmalıdır",
+  "form.makeDefaultCurrency": "Varsayılan para birimim yap"
 }

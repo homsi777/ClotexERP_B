@@ -15,6 +15,8 @@ export interface CheckDto {
   received_date: string;
   due_date: string;
   image_data: string | null;
+  /** القوائم لا تحمل الصورة؛ تُجلب بـ getCheckImage. */
+  has_image?: boolean;
   status: CheckStatus;
   needs_review: boolean;
   created_at: string;
@@ -82,4 +84,10 @@ export async function returnCheck(id: string, note?: string | null) {
     method: 'POST',
     body: JSON.stringify({ note: note ?? null }),
   });
+}
+
+/** صورة الشيك (data URL) أو null — منفصلة عن القائمة لتخفيف التحميل. */
+export async function getCheckImage(id: string): Promise<string | null> {
+  const res = await apiFetch<{ ok: boolean; data: { image: string | null } }>(`/api/checks/${id}/image`);
+  return res.data.image;
 }

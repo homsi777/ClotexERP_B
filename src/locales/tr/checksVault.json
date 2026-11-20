@@ -67,5 +67,22 @@
   "print.title": "Çekleri Yazdır",
   "print.selectedTitle": "Yazdırmak için {{count}} çek seçildi",
   "print.clearSelection": "Seçimi Temizle",
-  "print.button": "Yazdır"
+  "print.button": "Yazdır",
+  "form.image": "Çek görseli",
+  "form.imagePick": "Görsel seç",
+  "form.imageChange": "Görseli değiştir",
+  "form.imageRemove": "Görseli kaldır",
+  "form.imageBusy": "İşleniyor…",
+  "form.imageOptional": "İsteğe bağlı — kaydetmeden önce otomatik sıkıştırılır.",
+  "form.defaultCurrency": "Varsayılan para birimim yap",
+  "view.table": "Tablo",
+  "view.gallery": "Görseller",
+  "gallery.noImage": "Görsel yok",
+  "gallery.close": "Kapat",
+  "gallery.due": "Vade",
+  "gallery.received": "Alış",
+  "currency.USD": "Dolar (USD)",
+  "currency.EGP": "Mısır Lirası (EGP)",
+  "currency.TRY": "Türk Lirası (TRY)",
+  "currency.SYP": "Suriye Lirası (SYP)"
 }

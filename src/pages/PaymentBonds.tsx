@@ -14,6 +14,7 @@ import { listExchangeRates, type ExchangeRateDto } from '../lib/api/exchangeRate
 import { convertToUsd, getCurrencyLabel, normalizeExchangeRate, round2 } from '../lib/currency';
 import { useToast } from '../components/NonBlockingToast';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
+import { ExchangeRateField, resolveExchangeRate } from '../components/ExchangeRateField';
 import {
   getPaymentPurposeOptions,
   type VoucherPurpose,
@@ -65,6 +66,12 @@ export const PaymentBonds = () => {
   const [description, setDescription] = useState('');
   const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
+  const [manualRate, setManualRate] = useState(false);
+  const storedRate = useMemo(() => {
+    const row = exchangeRates.find((r) => r.currency_code === currencyCode);
+    const n = row ? Number(row.exchange_rate_to_usd) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [exchangeRates, currencyCode]);
   const [splitMode, setSplitMode] = useState(false);
   const [splitLines, setSplitLines] = useState<SplitLine[]>([]);
   const [availableChecks, setAvailableChecks] = useState<CheckDto[]>([]);
@@ -224,7 +231,7 @@ export const PaymentBonds = () => {
 
   const buildPayload = () => {
     const party = resolveParty();
-    const rate = currencyCode === 'USD' ? 1 : normalizeExchangeRate(exchangeRateToUsd);
+    const rate = resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
     const amountOriginal = Number(amount) || 0;
     const amountUsd = round2(convertToUsd(amountOriginal, rate || 1));
     return { party, rate, amountOriginal, amountUsd };
@@ -431,19 +438,15 @@ export const PaymentBonds = () => {
                         className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">{t('fields.exchangeRate')}</label>
-                      <input
-                        type="number"
-                        step="0.000001"
-                        value={currencyCode === 'USD' ? '1' : exchangeRateToUsd}
-                        disabled={currencyCode === 'USD'}
-                        onChange={(e) => setExchangeRateToUsd(e.target.value)}
-                        onKeyDown={focusNextFormControl}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-left"
-                        dir="ltr"
-                      />
-                    </div>
+                    <ExchangeRateField
+                      currencyCode={currencyCode}
+                      storedRate={storedRate}
+                      manual={manualRate}
+                      onManualChange={setManualRate}
+                      value={exchangeRateToUsd}
+                      onValueChange={setExchangeRateToUsd}
+                      onKeyDown={focusNextFormControl}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">

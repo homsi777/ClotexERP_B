@@ -34,7 +34,7 @@ import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { resolveOrderWarehouseLabel } from '../../lib/warehouseSelect';
 import { ApiRequestError } from '../../lib/api/client';
 import { useToast } from '../NonBlockingToast';
-import { useDefaultCurrency } from '../../hooks/useDefaultCurrency';
+import { useDefaultCurrency, savePreferredCurrency } from '../../hooks/useDefaultCurrency';
 import { usePermissions } from '../../hooks/usePermissions';
 
 export interface OrderFormSubmitPayload extends CustomerOrderMetadata {
@@ -290,6 +290,11 @@ export function OrderFormModal({
   // التسعير صلاحية orders.price: بدونها لا تظهر الأسعار والإجماليات (والخادم يفرض ذلك أيضاً)
   const canPrice = usePermissions().has('orders.price');
   const [currency, setCurrency] = useState('USD');
+  /** يجعل العملة المختارة افتراضية لهذا المستخدم (ملاحظة بشير). */
+  const [makeDefaultCurrency, setMakeDefaultCurrency] = useState(false);
+  useEffect(() => {
+    if (makeDefaultCurrency) savePreferredCurrency(currency);
+  }, [makeDefaultCurrency, currency]);
   const [notes, setNotes] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
   const [advancePayment, setAdvancePayment] = useState('');
@@ -934,6 +939,10 @@ export function OrderFormModal({
                 <option value="TRY">{t('form.currencyTry')}</option>
                 <option value="SAR">{t('form.currencySar')}</option>
               </select>
+              <label className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
+                <input type="checkbox" checked={makeDefaultCurrency} onChange={(e) => setMakeDefaultCurrency(e.target.checked)} />
+                {t('form.makeDefaultCurrency')}
+              </label>
             </div>
             <div className="space-y-1.5 xl:col-span-2">
               <label className="text-xs font-bold text-slate-700">{t('form.templateLabel')}</label>

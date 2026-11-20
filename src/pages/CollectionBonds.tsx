@@ -13,6 +13,8 @@ import { listExchangeRates, type ExchangeRateDto } from '../lib/api/exchangeRate
 import { convertToUsd, getCurrencyLabel, normalizeExchangeRate, round2 } from '../lib/currency';
 import { useToast } from '../components/NonBlockingToast';
 import { VoucherPrintModal } from '../components/VoucherPrintModal';
+import { ExchangeRateField, resolveExchangeRate } from '../components/ExchangeRateField';
+import { CheckEntryFields, emptyCheckDraft, isCheckDraftComplete, type CheckDraft } from '../components/treasury/CheckEntryFields';
 import {
   getReceiptPurposeOptions,
   type VoucherPurpose,
@@ -20,7 +22,7 @@ import {
 
 type PartyKind = 'CUSTOMER' | 'SUPPLIER' | 'OTHER';
 
-type SplitLine = { localId: string; cashboxId: string; amount: string; transactionRef: string; transactionDate: string };
+type SplitLine = { localId: string; cashboxId: string; amount: string; transactionRef: string; transactionDate: string; check: CheckDraft };
 
 let splitLineSeq = 0;
 const nextSplitLineId = () => `sl-${++splitLineSeq}`;
@@ -28,6 +30,7 @@ const nextSplitLineId = () => `sl-${++splitLineSeq}`;
 const accountKindToPaymentMethod = (kind: CashboxAccountKind): VoucherLinePaymentMethod => {
   if (kind === 'BANK') return 'BANK';
   if (kind === 'WALLET') return 'WALLET';
+  if (kind === 'CHECKS') return 'CHECK';
   return 'CASH';
 };
 
@@ -49,13 +52,23 @@ export const CollectionBonds = () => {
   const [cashboxId, setCashboxId] = useState('');
   const [partyKind, setPartyKind] = useState<PartyKind>('CUSTOMER');
   const [partyId, setPartyId] = useState('');
+  const [customerOrderNo,setCustomerOrderNo]=useState('');
+  useEffect(()=>setCustomerOrderNo(''),[partyId,partyKind]);
   const [partyName, setPartyName] = useState('');
   const [purpose, setPurpose] = useState<VoucherPurpose>('INVOICE_PAYMENT');
   const [description, setDescription] = useState('');
   const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
+  const [manualRate, setManualRate] = useState(false);
+  const storedRate = useMemo(() => {
+    const row = exchangeRates.find((r) => r.currency_code === currencyCode);
+    const n = row ? Number(row.exchange_rate_to_usd) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [exchangeRates, currencyCode]);
   const [splitMode, setSplitMode] = useState(false);
   const [splitLines, setSplitLines] = useState<SplitLine[]>([]);
+  /** بيانات الشيك عند اختيار خزينة الشيكات بالسند الأحادي. */
+  const [singleCheck, setSingleCheck] = useState<CheckDraft>(emptyCheckDraft());
 
   /** حسابات غير خزينة الشيكات فقط — ربط الشيكات يتم من خزينة الشيكات مباشرة. */
   const splittableCashboxes = useMemo(() => cashboxes.filter((c) => c.account_kind !== 'CHECKS'), [cashboxes]);
@@ -69,7 +82,7 @@ export const CollectionBonds = () => {
   const addSplitLine = () => {
     setSplitLines((prev) => [
       ...prev,
-      { localId: nextSplitLineId(), cashboxId: splittableCashboxes[0]?.id || '', amount: '', transactionRef: '', transactionDate: '' },
+      { localId: nextSplitLineId(), cashboxId: splittableCashboxes[0]?.id || '', amount: '', transactionRef: '', transactionDate: '', check: emptyCheckDraft() },
     ]);
   };
   const removeSplitLine = (localId: string) => {
@@ -83,6 +96,9 @@ export const CollectionBonds = () => {
     () => cashboxes.find((c) => c.id === cashboxId) ?? null,
     [cashboxes, cashboxId],
   );
+
+  /** السند الأحادي على خزينة الشيكات ⇒ شيك جديد يُستلَم (يُنشأ سجله عند الحفظ). */
+  const singleIsCheck = !splitMode && selectedCashbox?.account_kind === 'CHECKS';
 
   const purposeHint = useMemo(
     () => getReceiptPurposeOptions().find((o) => o.value === purpose)?.hint ?? '',
@@ -166,7 +182,15 @@ export const CollectionBonds = () => {
       showToast({ type: 'warning', message: t('errors.chooseCashbox') });
       return;
     }
+    if (singleIsCheck && !isCheckDraftComplete(singleCheck)) {
+      showToast({ type: 'warning', message: t('check.incomplete') });
+      return;
+    }
     if (splitMode) {
+      if (splitLines.some((l) => cashboxes.find((c) => c.id === l.cashboxId)?.account_kind === 'CHECKS' && !isCheckDraftComplete(l.check))) {
+        showToast({ type: 'warning', message: t('check.incomplete') });
+        return;
+      }
       if (splitLines.length === 0) {
         showToast({ type: 'warning', message: t('split.noLinesWarning') });
         return;
@@ -199,13 +223,20 @@ export const CollectionBonds = () => {
         }
       }
       const party = resolveParty();
-      const rate = currencyCode === 'USD' ? 1 : normalizeExchangeRate(exchangeRateToUsd);
+      const rate = resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
       if (!rate) {
         showToast({ type: 'error', message: t('errors.invalidExchangeRate') });
         return;
       }
       const amountOriginal = Number(amount) || 0;
       const amountUsd = round2(convertToUsd(amountOriginal, rate));
+      const checkPayload = (d: CheckDraft) => ({
+        checkNo: d.checkNo.trim(),
+        bankName: d.bankName.trim(),
+        accountHolderName: d.accountHolderName.trim() || null,
+        dueDate: d.dueDate,
+        imageData: d.imageData,
+      });
       const lines: VoucherLineInput[] | undefined = splitMode
         ? splitLines.map((l) => {
             const box = cashboxes.find((c) => c.id === l.cashboxId);
@@ -215,13 +246,16 @@ export const CollectionBonds = () => {
               amount: Number(l.amount) || 0,
               transactionRef: l.transactionRef.trim() || null,
               transactionDate: l.transactionDate || null,
+              ...(box?.account_kind === 'CHECKS' ? { checkDetails: checkPayload(l.check) } : {}),
             };
           })
-        : undefined;
+        : singleIsCheck
+          ? [{ cashboxId, paymentMethod: 'CHECK' as VoucherLinePaymentMethod, amount: amountOriginal, checkDetails: checkPayload(singleCheck) }]
+          : undefined;
       const created = await createVoucher({
         voucherType: 'RECEIPT',
         voucherDate,
-        cashboxId: splitMode ? null : cashboxId,
+        cashboxId: splitMode || singleIsCheck ? null : cashboxId,
         partyType: party.partyType,
         partyId: party.partyId,
         partyName: party.partyName,
@@ -231,6 +265,8 @@ export const CollectionBonds = () => {
         amountUsd,
         purpose,
         description: description || null,
+        referenceDocumentType:customerOrderNo.trim()?'CUSTOMER_ORDER':null,
+        referenceDocumentNo:customerOrderNo.trim()||null,
         lines,
       });
       setVoucherNo(created.data.voucher_no);
@@ -246,6 +282,7 @@ export const CollectionBonds = () => {
       showToast({ type: 'success', message: t('success.saved', { voucherNo: created.data.voucher_no }) });
 
       setAmount('');
+      setSingleCheck(emptyCheckDraft());
       setDescription('');
       setPartyId('');
       setPartyName('');
@@ -324,19 +361,15 @@ export const CollectionBonds = () => {
                         className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-700"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">{t('exchangeRateLabel')}</label>
-                      <input
-                        type="number"
-                        step="0.000001"
-                        value={currencyCode === 'USD' ? '1' : exchangeRateToUsd}
-                        disabled={currencyCode === 'USD'}
-                        onChange={(e) => setExchangeRateToUsd(e.target.value)}
-                        onKeyDown={focusNextFormControl}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-left"
-                        dir="ltr"
-                      />
-                    </div>
+                    <ExchangeRateField
+                      currencyCode={currencyCode}
+                      storedRate={storedRate}
+                      manual={manualRate}
+                      onManualChange={setManualRate}
+                      value={exchangeRateToUsd}
+                      onValueChange={setExchangeRateToUsd}
+                      onKeyDown={focusNextFormControl}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -386,18 +419,26 @@ export const CollectionBonds = () => {
                         ))}
                       </select>
                     </div>
+                    {singleIsCheck && (
+                      <div className="space-y-2 pt-1">
+                        <h5 className="text-sm font-bold text-slate-800">{t('check.sectionTitle')}</h5>
+                        <CheckEntryFields value={singleCheck} onChange={setSingleCheck} />
+                        <p className="text-xs text-slate-500">{t('check.singleHint')}</p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {splitLines.map((line) => (
-                      <div key={line.localId} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-center bg-slate-50 border border-slate-200 rounded-lg p-2">
+                      <div key={line.localId} className="space-y-2">
+                      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-center bg-slate-50 border border-slate-200 rounded-lg p-2">
                         <select
                           value={line.cashboxId}
                           onChange={(e) => updateSplitLine(line.localId, { cashboxId: e.target.value })}
                           className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm"
                         >
                           <option value="">{t('chooseOption')}</option>
-                          {splittableCashboxes.map((c) => (
+                          {cashboxes.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name} ({t(`split.kind.${c.account_kind}`)})
                             </option>
@@ -429,6 +470,10 @@ export const CollectionBonds = () => {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                      </div>
+                      {cashboxes.find((c) => c.id === line.cashboxId)?.account_kind === 'CHECKS' && (
+                        <CheckEntryFields value={line.check} onChange={(check) => updateSplitLine(line.localId, { check })} />
+                      )}
                       </div>
                     ))}
                     <button
@@ -483,6 +528,7 @@ export const CollectionBonds = () => {
                   </div>
                 </div>
 
+                {partyKind==='CUSTOMER'&&partyId&&<label className="block text-sm">رقم أوردر العميل (اختياري)<input aria-label="رقم الأوردر المرتبط بسند القبض" value={customerOrderNo} onChange={e=>setCustomerOrderNo(e.target.value)} className="mt-1 w-full rounded-lg border p-2.5"/></label>}
                 {partyKind === 'CUSTOMER' ? (
                   <select
                     value={partyId}

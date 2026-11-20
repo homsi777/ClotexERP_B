@@ -3,14 +3,12 @@
   "header.titleEdit": "تعديل طلبية حجز",
   "header.titleCreate": "طلبية حجز جديدة",
   "header.subtitle": "الباركود → اسم الخامة → كود الخامة — اللون يدوياً. السطر التالي يرث الباركود والكميات.",
-
   "actions.cancel": "إلغاء",
   "actions.saveDraft": "حفظ مسودة",
   "actions.saving": "جاري الحفظ…",
   "actions.saveChanges": "حفظ التعديلات",
   "actions.confirmOrder": "تأكيد الطلبية",
   "actions.addLine": "إضافة سطر",
-
   "alert.title": "تنبيه:",
   "alert.scanPrefix": "امسح",
   "alert.scanBold": "باركود/QR الكارتيلا",
@@ -19,7 +17,6 @@
   "alert.and": "و",
   "alert.colorBold": "اللون",
   "alert.scanSuffix": "يدوياً. السطر التالي يرث نفس الباركود والكميات والسعر.",
-
   "form.orderNumberLabel": "رقم الطلبية",
   "form.orderNumberPlaceholder": "يُولَّد تلقائياً (رقم فقط)",
   "form.dateLabel": "التاريخ",
@@ -48,7 +45,6 @@
   "form.noTemplateOption": "— بدون نموذج —",
   "form.notesLabel": "ملاحظات عامة للطلبية",
   "form.notesPlaceholder": "شروط التسليم، مرجع شحنة المورد، ...",
-
   "table.itemsTitle": "بنود الطلبية",
   "table.colBarcode": "الباركود",
   "table.colMaterialName": "اسم الخامة",
@@ -65,7 +61,6 @@
   "table.colorNamePlaceholder": "لون",
   "table.attachImageTitle": "إرفاق صورة (كاميرا أو معرض)",
   "table.totalLabel": "المجموع",
-
   "summary.title": "ملخص حسب الخامة والتصميم",
   "summary.subtitle": "التسعير هنا — سعر المتر لكل خامة/تصميم",
   "summary.colMaterial": "الخامة",
@@ -82,9 +77,7 @@
   "summary.statMeters": "أمتار",
   "summary.statTotal": "إجمالي {{currency}}",
   "summary.statGroups": "مجموعات",
-
   "misc.unspecified": "غير محدد",
-
   "toast.cartelaFoundPrefix": "كارتيلا: {{title}} · {{artCode}}",
   "toast.cartelaColorMatched": "اللون {{code}}{{name}}",
   "toast.cartelaCompleteColorQty": "— أكمل اللون والكمية",
@@ -99,7 +92,7 @@
   "toast.checkQuantities": "تحقق من الكميات في بنود الطلبية",
   "toast.cartelaDraftsCreated": "تمت إضافة {{count}} كارتيلا مسودة — يمكن إكمال التفاصيل من سجل الكارتيلات",
   "toast.saveFailed": "تعذر حفظ الطلبية",
-
   "validation.metersPerRollRequired": "متر/رول يجب أن يكون أكبر من صفر",
-  "validation.rollCountRequired": "عدد الرول يجب أن يكون أكبر من صفر"
+  "validation.rollCountRequired": "عدد الرول يجب أن يكون أكبر من صفر",
+  "form.makeDefaultCurrency": "اجعلها عملتي الافتراضية"
 }

@@ -7,6 +7,7 @@ import { ArabicErrors } from '../utils/arabicErrors.js';
 import {
   createCheck,
   depositCheck,
+  getCheckImage,
   listChecks,
   markCheckCleared,
   returnCheck,
@@ -92,6 +93,19 @@ export const checksRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 500, ArabicErrors.server, 'SERVER');
     } finally {
       client.release();
+    }
+  });
+
+  app.get('/:id/image', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    try {
+      return reply.send({ ok: true, data: { image: await getCheckImage(companyId, id) } });
+    } catch (error) {
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
+      return sendError(reply, 500, ArabicErrors.server, 'SERVER');
     }
   });
 

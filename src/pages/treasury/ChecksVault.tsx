@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Loader2, AlertTriangle, Banknote, CheckCircle2, Undo2, Printer, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Plus, Search, Loader2, AlertTriangle, Banknote, CheckCircle2, Undo2, Printer, ArrowUp, ArrowDown, X, LayoutGrid, Table2 } from 'lucide-react';
 import {
   listChecks,
   createCheck,
@@ -18,6 +18,8 @@ import { ApiRequestError } from '../../lib/api/client';
 import { useToast } from '../../components/NonBlockingToast';
 import { renderChecksSheetA4Html } from '../../lib/printing/renderChecksSheetA4';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
+import { CheckImage, CheckImageInput } from '../../components/treasury/CheckEntryFields';
+import { useDefaultCurrency, savePreferredCurrency } from '../../hooks/useDefaultCurrency';
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -47,6 +49,11 @@ export const ChecksVault: React.FC = () => {
   const [sortBy, setSortBy] = useState<CheckSortBy>('dueDate');
 
   const [addOpen, setAddOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'gallery'>('table');
+  const [viewing, setViewing] = useState<CheckDto | null>(null);
+  const [formImage, setFormImage] = useState<string | null>(null);
+  const [makeDefaultCurrency, setMakeDefaultCurrency] = useState(false);
+  const { defaultCurrency } = useDefaultCurrency();
   const [saving, setSaving] = useState(false);
   const [depositingId, setDepositingId] = useState<string | null>(null);
   const [depositBankId, setDepositBankId] = useState('');
@@ -57,6 +64,11 @@ export const ChecksVault: React.FC = () => {
     partyKind: 'CUSTOMER' as PartyKind, partyId: '', partyName: '',
     amount: '', currencyCode: 'USD', receivedDate: todayStr(), dueDate: '',
   });
+
+  // العملة الافتراضية للفرع (أو المفضّلة للمستخدم) عند فتح النموذج.
+  useEffect(() => {
+    setForm((f) => (f.amount || f.checkNo ? f : { ...f, currencyCode: defaultCurrency }));
+  }, [defaultCurrency]);
 
   const bankCashboxes = useMemo(() => cashboxes.filter((c) => c.account_kind === 'BANK'), [cashboxes]);
 
@@ -108,7 +120,7 @@ export const ChecksVault: React.FC = () => {
   const resetForm = () => setForm({
     checkNo: '', bankName: '', accountHolderName: '',
     partyKind: 'CUSTOMER', partyId: '', partyName: '',
-    amount: '', currencyCode: 'USD', receivedDate: todayStr(), dueDate: '',
+    amount: '', currencyCode: defaultCurrency, receivedDate: todayStr(), dueDate: '',
   });
 
   const submitAdd = async () => {
@@ -134,9 +146,13 @@ export const ChecksVault: React.FC = () => {
         currencyCode: form.currencyCode,
         receivedDate: form.receivedDate,
         dueDate: form.dueDate,
+        imageData: formImage,
       });
+      if (makeDefaultCurrency) savePreferredCurrency(form.currencyCode);
       showToast({ type: 'success', message: t('form.addSuccess') });
       setAddOpen(false);
+      setFormImage(null);
+      setMakeDefaultCurrency(false);
       resetForm();
       await load();
     } catch (e) {
@@ -211,6 +227,14 @@ export const ChecksVault: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-slate-900">{t('pageTitle')}</h2>
           <p className="text-slate-500 mt-1">{t('pageSubtitle')}</p>
+        </div>
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
+          <button type="button" onClick={() => setViewMode('table')} className={`inline-flex items-center gap-1.5 px-3 py-2 ${viewMode === 'table' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>
+            <Table2 className="w-4 h-4" />{t('view.table')}
+          </button>
+          <button type="button" onClick={() => setViewMode('gallery')} className={`inline-flex items-center gap-1.5 px-3 py-2 ${viewMode === 'gallery' ? 'bg-slate-900 text-white' : 'text-slate-600'}`}>
+            <LayoutGrid className="w-4 h-4" />{t('view.gallery')}
+          </button>
         </div>
         <button
           type="button"
@@ -295,7 +319,56 @@ export const ChecksVault: React.FC = () => {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {viewMode === 'gallery' && (
+        <div className="space-y-3">
+          {loading && <div className="p-6 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline ml-2" />{t('loading')}</div>}
+          {!loading && rows.length === 0 && <div className="p-6 text-center text-slate-500">{t('emptyState')}</div>}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {rows.map((c) => (
+              <div key={c.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <button type="button" onClick={() => setViewing(c)} className="block w-full">
+                  {c.has_image ? (
+                    <CheckImage checkId={c.id} className="h-36 w-full object-cover" />
+                  ) : (
+                    <div className="flex h-36 w-full items-center justify-center bg-slate-50 text-xs text-slate-400">{t('gallery.noImage')}</div>
+                  )}
+                </button>
+                <div className="space-y-1 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-slate-800" dir="ltr">{c.check_no}</span>
+                    <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${STATUS_BADGE[c.status]}`}>{t(`status.${c.status}`)}</span>
+                  </div>
+                  <div className="text-slate-600">{c.bank_name}{c.party_name ? ` · ${c.party_name}` : ''}</div>
+                  <div className="font-mono font-bold text-slate-900">{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {c.currency_code}</div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className={isOverdue(c) ? 'font-bold text-rose-700' : isDueSoon(c) ? 'font-bold text-amber-700' : 'text-slate-500'}>{t('gallery.due')}: {c.due_date}</span>
+                    <label className="inline-flex items-center gap-1 text-slate-500"><input type="checkbox" checked={isSelected(c.id)} onChange={() => toggleSelect(c)} />{t('print.button')}</label>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {viewing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewing(null)}>
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+            {viewing.has_image ? <CheckImage checkId={viewing.id} className="max-h-[60vh] w-full rounded-lg object-contain bg-slate-50" /> : <div className="p-6 text-center text-slate-400">{t('gallery.noImage')}</div>}
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div><span className="text-slate-500">{t('col.checkNo')}: </span><b className="font-mono" dir="ltr">{viewing.check_no}</b></div>
+              <div><span className="text-slate-500">{t('col.bank')}: </span><b>{viewing.bank_name}</b></div>
+              <div><span className="text-slate-500">{t('col.party')}: </span><b>{viewing.party_name || viewing.account_holder_name || '—'}</b></div>
+              <div><span className="text-slate-500">{t('col.amount')}: </span><b className="font-mono">{Number(viewing.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {viewing.currency_code}</b></div>
+              <div><span className="text-slate-500">{t('gallery.received')}: </span><b>{viewing.received_date}</b></div>
+              <div><span className="text-slate-500">{t('gallery.due')}: </span><b>{viewing.due_date}</b></div>
+            </div>
+            <div className="flex justify-end"><button type="button" onClick={() => setViewing(null)} className="rounded-lg border px-4 py-2 text-sm">{t('gallery.close')}</button></div>
+          </div>
+        </div>
+      )}
+
+      <div className={`bg-white rounded-xl border border-slate-200 overflow-hidden ${viewMode === 'gallery' ? 'hidden' : ''}`}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
@@ -444,7 +517,13 @@ export const ChecksVault: React.FC = () => {
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('form.currency')}</label>
-                <input value={form.currencyCode} onChange={(e) => setForm((f) => ({ ...f, currencyCode: e.target.value.toUpperCase() }))} className="w-full border rounded-lg px-3 py-2" />
+                <select value={form.currencyCode} onChange={(e) => setForm((f) => ({ ...f, currencyCode: e.target.value }))} className="w-full border rounded-lg px-3 py-2 bg-white">
+                  {['USD', 'EGP', 'TRY', 'SYP'].map((c) => <option key={c} value={c}>{t(`currency.${c}`)}</option>)}
+                </select>
+                <label className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <input type="checkbox" checked={makeDefaultCurrency} onChange={(e) => setMakeDefaultCurrency(e.target.checked)} />
+                  {t('form.defaultCurrency')}
+                </label>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -457,8 +536,9 @@ export const ChecksVault: React.FC = () => {
                 <input type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full border rounded-lg px-3 py-2" />
               </div>
             </div>
+            <CheckImageInput value={formImage} onChange={setFormImage} />
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => { setAddOpen(false); resetForm(); }} className="px-4 py-2 border rounded-lg">{t('cancel')}</button>
+              <button type="button" onClick={() => { setAddOpen(false); setFormImage(null); resetForm(); }} className="px-4 py-2 border rounded-lg">{t('cancel')}</button>
               <button type="button" disabled={saving} onClick={() => void submitAdd()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50">
                 {saving ? t('saving') : t('save')}
               </button>

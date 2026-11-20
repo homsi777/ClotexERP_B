@@ -45,5 +45,9 @@
   "split.kind.CASH": "صندوق نقدي",
   "split.kind.BANK": "بنك",
   "split.kind.WALLET": "محفظة إلكترونية",
-  "split.kind.CHECKS": "خزينة شيكات"
+  "split.kind.CHECKS": "خزينة شيكات",
+  "check.sectionTitle": "بيانات الشيك",
+  "check.incomplete": "أكمل بيانات الشيك: الرقم والبنك وتاريخ الاستحقاق",
+  "check.singleHint": "الشيك يدخل خزينة الشيكات بحالة «مستلم» عند حفظ السند، ويُخصم من كشف الجهة كأي دفعة.",
+  "check.lineLabel": "شيك"
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { Plus, Search, Loader2, CreditCard, Ban } from 'lucide-react';
 import { format } from 'date-fns';
@@ -17,6 +17,7 @@ import { listExchangeRates, type ExchangeRateDto } from '../lib/api/exchangeRate
 import { ApiRequestError } from '../lib/api/client';
 import { convertToUsd, getCurrencyName, normalizeExchangeRate, round2, SUPPORTED_CURRENCIES } from '../lib/currency';
 import { useToast } from '../components/NonBlockingToast';
+import { ExchangeRateField, resolveExchangeRate } from '../components/ExchangeRateField';
 
 export const Expenses = () => {
   const { t, i18n } = useTranslation('expenses');
@@ -44,6 +45,12 @@ export const Expenses = () => {
   const [filterTo, setFilterTo] = useState('');
   const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
+  const [manualRate, setManualRate] = useState(false);
+  const storedRate = useMemo(() => {
+    const row = exchangeRates.find((r) => r.currency_code === currencyCode);
+    const n = row ? Number(row.exchange_rate_to_usd) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [exchangeRates, currencyCode]);
 
   const loadExpenses = useCallback(async (search?: string, from?: string, to?: string) => {
     const res = await listOperatingExpenses({
@@ -115,7 +122,7 @@ export const Expenses = () => {
     setSaving(true);
     setErr('');
     try {
-      const rate = currencyCode === 'USD' ? 1 : normalizeExchangeRate(exchangeRateToUsd);
+      const rate = resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
       if (!rate) {
         setErr(t('invalidExchangeRate'));
         return;
@@ -408,17 +415,18 @@ export const Expenses = () => {
 
               {currencyCode !== 'USD' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('exchangeRateLabel')}</label>
-                  <input
-                    type="number"
-                    step="0.000001"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  <ExchangeRateField
+                    currencyCode={currencyCode}
+                    storedRate={storedRate}
+                    manual={manualRate}
+                    onManualChange={setManualRate}
                     value={exchangeRateToUsd}
-                    onChange={(e) => setExchangeRateToUsd(e.target.value)}
+                    onValueChange={setExchangeRateToUsd}
+                    inputClassName="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
                   />
                   {amount && (
                     <p className="text-xs text-slate-500 mt-1">
-                      {t('approxUsd', { value: round2(convertToUsd(Number(amount) || 0, normalizeExchangeRate(exchangeRateToUsd) || 1)).toFixed(2) })}
+                      {t('approxUsd', { value: round2(convertToUsd(Number(amount) || 0, resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate }) || 1)).toFixed(2) })}
                     </p>
                   )}
                 </div>

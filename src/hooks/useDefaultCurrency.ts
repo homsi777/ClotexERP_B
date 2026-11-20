@@ -8,14 +8,41 @@ import { fetchMe } from '../lib/api/authApi';
  */
 let cache: Promise<string> | null = null;
 
+const PREFERRED_KEY = 'clotex.preferredCurrency';
+
+/** عملة يفضّلها المستخدم (تتقدّم على عملة الفرع) — مخزّنة على هذا المتصفح فقط. */
+export function getPreferredCurrency(): string | null {
+  try {
+    const v = localStorage.getItem(PREFERRED_KEY);
+    return v && /^[A-Z]{3}$/.test(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPreferredCurrency(code: string): void {
+  try {
+    localStorage.setItem(PREFERRED_KEY, String(code).toUpperCase());
+  } catch {
+    /* التخزين غير متاح — يبقى الافتراضي للفرع */
+  }
+}
+
+
 export function clearDefaultCurrencyCache(): void {
+  cache = null;
+}
+
+/** يحفظ تفضيل المستخدم ويُبطل الذاكرة لتتبنّاه النماذج التالية. */
+export function savePreferredCurrency(code: string): void {
+  setPreferredCurrency(code);
   cache = null;
 }
 
 function loadDefaultCurrency(): Promise<string> {
   if (!cache) {
     cache = fetchMe()
-      .then((u) => (u.companyDefaultCurrency || 'USD').toUpperCase())
+      .then((u) => getPreferredCurrency() ?? (u.companyDefaultCurrency || 'USD').toUpperCase())
       .catch(() => {
         cache = null; // لا نخزّن الفشل
         return 'USD';

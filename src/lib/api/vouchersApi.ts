@@ -15,6 +15,8 @@ export interface VoucherLineInput {
   attachmentImage?: string | null;
   /** دفع بشيك مستلَم سابقاً — سند دفع فقط. */
   checkId?: string | null;
+  /** شيك جديد يُستلَم بسند القبض (يُنشأ سجله عند التأكيد). */
+  checkDetails?: { checkNo: string; bankName: string; accountHolderName?: string | null; dueDate: string; imageData?: string | null } | null;
 }
 
 export interface VoucherLineRow {
@@ -29,6 +31,9 @@ export interface VoucherLineRow {
   transaction_date: string | null;
   attachment_image: string | null;
   sort_order: number;
+  check_id?: string | null;
+  check_no?: string | null;
+  check_details?: { checkNo: string; bankName: string; accountHolderName?: string | null; dueDate: string } | null;
 }
 
 export interface VoucherRow {

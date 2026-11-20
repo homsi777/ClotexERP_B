@@ -45,5 +45,9 @@
   "split.kind.CASH": "Nakit Kasa",
   "split.kind.BANK": "Banka",
   "split.kind.WALLET": "Elektronik Cüzdan",
-  "split.kind.CHECKS": "Çek Kasası"
+  "split.kind.CHECKS": "Çek Kasası",
+  "check.sectionTitle": "Çek bilgileri",
+  "check.incomplete": "Çek bilgilerini tamamlayın: numara, banka ve vade tarihi",
+  "check.singleHint": "Çek, fiş kaydedilince «alındı» durumuyla çek kasasına girer ve cari hesaptan diğer ödemeler gibi düşülür.",
+  "check.lineLabel": "Çek"
 }
