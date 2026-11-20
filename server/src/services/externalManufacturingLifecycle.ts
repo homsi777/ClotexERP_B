@@ -55,6 +55,31 @@ export async function lockManufacturingJob(db: Db, companyId: string, jobId: str
   return job;
 }
 
+/** المحاسب لا يسوّي ولا يسعّر قبل أن ينهي المخزن الاستلام (المهام ذات الاستلام القديم مستثناة). */
+async function requireInventoryCompleted(db: Db, companyId: string, job: { id: string; inventory_completed_at?: string | null }) {
+  if (job.inventory_completed_at) return;
+  const legacy = await db.query('SELECT 1 FROM external_job_receipts WHERE company_id=$1 AND job_id=$2 LIMIT 1', [companyId, job.id]);
+  if (legacy.rows.length) return;
+  fail('أنهِ الاستلام المخزوني للمهمة أولاً؛ بعدها تنتقل للمحاسب للتسوية والتسعير');
+}
+
+/** زر «انتهت مخزونياً»: يقفل الاستلام ويسلّم المهمة للمحاسب. الفرق المتبقي (إن وُجد) يسوّيه المحاسب. */
+export async function completeManufacturingInventory(db: Db, companyId: string, userId: string, jobId: string) {
+  const job = await lockManufacturingJob(db, companyId, jobId);
+  if (job.lifecycle_closed_at) fail('المهمة مغلقة');
+  await assertNewReceiptMode(db, companyId, jobId);
+  if (job.inventory_completed_at) return;
+  await db.query('UPDATE external_jobs SET inventory_completed_at=now(),inventory_completed_by=$3,updated_at=now() WHERE id=$1 AND company_id=$2', [jobId, companyId, userId]);
+}
+
+/** إعادة فتح الاستلام (للمحاسب/المدير) ما دامت الفاتورة غير مرحّلة والمهمة غير مغلقة. */
+export async function reopenManufacturingInventory(db: Db, companyId: string, _userId: string, jobId: string) {
+  const job = await lockManufacturingJob(db, companyId, jobId);
+  if (job.lifecycle_closed_at) fail('المهمة مغلقة');
+  if (job.fee_posted_at) fail('تم ترحيل الفاتورة؛ لا يمكن إعادة فتح الاستلام');
+  await db.query('UPDATE external_jobs SET inventory_completed_at=NULL,inventory_completed_by=NULL,updated_at=now() WHERE id=$1 AND company_id=$2', [jobId, companyId]);
+}
+
 export async function assertNoLifecycleReturns(db: Db, companyId: string, jobId: string) {
   const r = await db.query(`SELECT 1 FROM external_job_return_batches WHERE company_id=$1 AND job_id=$2
     UNION ALL SELECT 1 FROM external_job_settlements WHERE company_id=$1 AND job_id=$2 LIMIT 1`, [companyId, jobId]);
@@ -186,6 +211,7 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
   const prior = (await db.query('SELECT id,request_hash FROM external_job_return_batches WHERE company_id=$1 AND request_id=$2', [companyId, input.requestId])).rows[0];
   if (prior) { if (prior.request_hash !== hash) fail('رقم الطلب مستخدم بمحتوى مختلف', 'DUPLICATE'); return { id: prior.id, duplicate: true }; }
   if (job.lifecycle_closed_at) fail('المهمة مغلقة');
+  if (job.inventory_completed_at) fail('انتهى الاستلام المخزوني لهذه المهمة؛ أعد فتحه من المحاسب أولاً');
   await assertNewReceiptMode(db, companyId, jobId);
   await captureManufacturingSnapshots(db, companyId, jobId);
   const wh = await db.query('SELECT 1 FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true FOR SHARE', [input.destinationWarehouseId, companyId]);
@@ -294,6 +320,7 @@ export async function settleManufacturingShortage(db: Db, companyId: string, use
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.lifecycle_closed_at) fail('المهمة مغلقة');
   await assertNewReceiptMode(db, companyId, jobId);
+  await requireInventoryCompleted(db, companyId, job);
   await captureManufacturingSnapshots(db, companyId, jobId);
   const overview = await manufacturingOverview(db, companyId, jobId);
   const fifo = [...overview.lines].sort(byLineOrder);
@@ -357,6 +384,7 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
     currencyCode: z.string().trim().min(1).max(8), basis: z.enum(['METER', 'KG', 'FIXED']), approvedQuantity: amount })).min(1).max(30) }).strict().parse(raw);
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.fee_posted_at) fail('تم ترحيل الفاتورة؛ لا يمكن تعديل الأسعار');
+  await requireInventoryCompleted(db, companyId, job);
   const frozen = await db.query(`SELECT 1 FROM manufacturing_cost_closures c WHERE c.company_id=$1 AND c.work_order_id IN (SELECT l.work_order_id FROM manufacturing_external_links l WHERE l.company_id=$1 AND l.job_id=$2 UNION SELECT a.work_order_id FROM manufacturing_external_cost_shares a WHERE a.company_id=$1 AND a.job_id=$2) LIMIT 1`,[companyId,jobId]);
   if (frozen.rows.length) fail('تكلفة أمر الإنتاج معتمدة؛ لا يمكن تعديل أجرة المصنعية');
   const services = (await db.query('SELECT id FROM external_job_services WHERE job_id=$1 AND company_id=$2 ORDER BY id FOR UPDATE', [jobId, companyId])).rows;
@@ -386,6 +414,7 @@ export async function closeManufacturingJob(db: Db, companyId: string, jobId: st
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.lifecycle_closed_at) return;
   await assertNewReceiptMode(db, companyId, jobId);
+  await requireInventoryCompleted(db, companyId, job);
   const overview = await manufacturingOverview(db, companyId, jobId);
   if (!overview.lines.length || overview.lines.some(l => milli(l.sent_length_m) + milli(l.excess_m) !== milli(l.returned_m) + milli(l.shortage_m))) fail('لا يمكن الإغلاق مع وجود فرق غير محسوم');
   if (overview.batches.some(b => b.lines.some((l: { defective: boolean; resolution: string | null }) => l.defective && !l.resolution))) fail('توجد عيوب تنتظر قراراً');

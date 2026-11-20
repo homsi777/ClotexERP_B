@@ -358,6 +358,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
       if(!withSizing){
         const mixed=await call('POST','/external/processing',{supplierId:supplier,fabricStage:'RAW',preparationTypeId:prep,sourceWarehouseId:warehouse,rollIds:[costRoll,rawRoll],traceabilityOnly:true,lineReferences:[{rollId:costRoll,customerOrderId:reserveOrder.id,customerOrderLineId:reserveOrder.items[0].id},{rollId:rawRoll,customerOrderId:rivalOrder.id,customerOrderLineId:rivalOrder.items[0].id}]},201);
         const mixedOverview=await call('GET',`/external/${mixed.id}/lifecycle`);assert.equal(mixedOverview.costShares.length,2);
+        await call('POST',`/external/${mixed.id}/lifecycle/inventory-complete`,{});
         await call('POST',`/external/${mixed.id}/lifecycle/service-pricing`,{lines:[{serviceId:mixedOverview.services[0].id,unitPrice:10,currencyCode:'USD',basis:'FIXED',approvedQuantity:1}]});
         const shares=mixedOverview.costShares as Array<{id:string;work_order_id:string|null}>;
         const distribution={reason:'Accountant approved production and general-stock shares',lines:shares.map(s=>({shareId:s.id,amountUsd:s.work_order_id?4:6}))};
@@ -383,6 +384,7 @@ test('real manufacturing HTTP workflow: yarn to inspected warehouse rolls', {
         const returns=await call('GET',`/external/${job.id}/lifecycle`);
         const returned=(await admin.query('SELECT id FROM external_job_return_lines WHERE job_id=$1',[job.id])).rows[0];
         await call('POST',`/external/${job.id}/lifecycle/resolve-defect`,{returnLineId:returned.id,decision:'ACCEPT',notes:'Quality approved shade'});
+        await call('POST',`/external/${job.id}/lifecycle/inventory-complete`,{});
         await call('POST',`/external/${job.id}/lifecycle/settlements`,{sourceLineId:overview.lines[0].id,amountM:5,reason:'Approved process shrinkage'});
         await call('POST',`/external/${job.id}/lifecycle/service-pricing`,{lines:[{serviceId:returns.services[0].id,unitPrice:0.5,currencyCode:'USD',basis:'METER',approvedQuantity:35}]});
         await call('POST',`/external/${job.id}/lifecycle/close`,{});

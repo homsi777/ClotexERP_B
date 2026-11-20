@@ -26,7 +26,7 @@ test('external receipt by total quantity: automatic allocation, split rolls, aut
       catch (error) { throw new Error(`Migration ${file} failed`, { cause: error }); }
     }
     const { createProcessingExternalJob } = await import('./externalJobService.js');
-    const { receiveManufacturingBatch, settleManufacturingShortage, closeManufacturingJob, manufacturingOverview } = await import('./externalManufacturingLifecycle.js');
+    const { receiveManufacturingBatch, settleManufacturingShortage, closeManufacturingJob, manufacturingOverview, completeManufacturingInventory, reopenManufacturingInventory } = await import('./externalManufacturingLifecycle.js');
     const client = db as unknown as import('pg').PoolClient;
     const q = async (sql: string, p: unknown[] = []) => (await db.query(sql, p)).rows;
 
@@ -79,6 +79,13 @@ test('external receipt by total quantity: automatic allocation, split rolls, aut
 
     // 3) تجاوز الكمية الإجمالية المتبقية مرفوض (المتبقي 4م)
     await assert.rejects(() => rcv([{ lengthM: 5 }], 'DP-2'), /الكمية تتجاوز المتبقي/);
+
+    // المحاسب لا يسوّي قبل أن ينهي المخزن الاستلام؛ وبعد الإنهاء لا تُقبل دفعات جديدة إلا بإعادة الفتح
+    await assert.rejects(() => settleManufacturingShortage(client, company, user, job.id, { amountM: 4, reason: 'early' }), /أنهِ الاستلام المخزوني/);
+    await completeManufacturingInventory(client, company, user, job.id);
+    await assert.rejects(() => rcv([{ lengthM: 1 }], 'DP-3'), /انتهى الاستلام المخزوني/);
+    await reopenManufacturingInventory(client, company, user, job.id);
+    await completeManufacturingInventory(client, company, user, job.id);
 
     // 4) تسوية نقص بلا اختيار بند: تُوزَّع تلقائياً على الفرق غير المحسوم، ثم الإغلاق
     await assert.rejects(() => settleManufacturingShortage(client, company, user, job.id, { amountM: 4.001, reason: 'too much' }), /النقص يتجاوز الفرق/);

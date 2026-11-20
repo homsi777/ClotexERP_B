@@ -6,7 +6,7 @@ export interface ReturnLine { customer_order_id: string | null; customer_order_l
 export interface ManufacturingOverview {
   costShares?:Array<{id:string;work_order_id:string|null;work_order_no:string|null;allocated_usd?:string|null;approved_at:string|null}>;
   costAllocationTotalUsd?:number|null;
-  job: { raw_width_cm?: string | null; finished_width_cm?: string | null; raw_gsm?: string | null; finished_gsm?: string | null; traceability_only?: boolean; job_no: string; supplier_name: string; document_status: string; previous_job_id: string | null; lifecycle_closed_at: string | null; fee_amount: string | null; fee_currency_code: string | null; fee_posted_at: string | null; production_cost_closed?: boolean };
+  job: { inventory_completed_at?: string | null; sent_date?: string; raw_width_cm?: string | null; finished_width_cm?: string | null; raw_gsm?: string | null; finished_gsm?: string | null; traceability_only?: boolean; job_no: string; supplier_name: string; document_status: string; previous_job_id: string | null; lifecycle_closed_at: string | null; fee_amount: string | null; fee_currency_code: string | null; fee_posted_at: string | null; production_cost_closed?: boolean };
   services: ManufacturingService[]; lines: ManufacturingLine[];
   batches: { id: string; dye_paper_no: string; received_at: string; notes: string | null; attachments: string[]; service_ids: string[]; lines: ReturnLine[] }[];
   settlements: { id: string; source_line_id: string; amount_m: string; kind: 'SHORTAGE' | 'EXCESS'; reason_category?: 'SHORTAGE' | 'EXCESS' | 'WASTE' | 'SPOILAGE' | null; reason: string; approved_at: string }[];
@@ -15,5 +15,5 @@ export interface ManufacturingOverview {
 }
 export interface ManufacturingResponse { ok: boolean; data: ManufacturingOverview; canPrice: boolean; canManage: boolean; canReceive: boolean }
 export const getManufacturing = (id: string) => apiFetch<ManufacturingResponse>(`/api/external-jobs/${id}/lifecycle`);
-export const manufacturingAction = (id: string, action: 'returns' | 'services' | 'settlements' | 'resolve-defect' | 'service-pricing' | 'cost-allocation' | 'close', body: unknown) =>
+export const manufacturingAction = (id: string, action: 'returns' | 'services' | 'settlements' | 'resolve-defect' | 'service-pricing' | 'cost-allocation' | 'close' | 'inventory-complete' | 'inventory-reopen', body: unknown) =>
   apiFetch<{ ok: boolean; data?: { id: string; duplicate?: boolean } }>(`/api/external-jobs/${id}/lifecycle/${action}`, { method: 'POST', body: JSON.stringify(body) });

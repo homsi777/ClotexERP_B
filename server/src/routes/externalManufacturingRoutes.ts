@@ -5,7 +5,7 @@ import { sendError } from '../middleware/errorHandler.js';
 import { getPool } from '../db/pool.js';
 import { manufacturingOverview, receiveManufacturingBatch, settleManufacturingShortage,
   resolveManufacturingDefect, priceManufacturingServices, closeManufacturingJob,
-  replaceManufacturingServices } from '../services/externalManufacturingLifecycle.js';
+  replaceManufacturingServices, completeManufacturingInventory, reopenManufacturingInventory } from '../services/externalManufacturingLifecycle.js';
 
 export const externalManufacturingRoutes: FastifyPluginAsync = async app => {
   app.get('/:id/lifecycle', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -23,6 +23,8 @@ export const externalManufacturingRoutes: FastifyPluginAsync = async app => {
     'resolve-defect': { privileged: true, run: resolveManufacturingDefect },
     'service-pricing': { privileged: true, run: priceManufacturingServices },
     'cost-allocation':{privileged:true,run:allocateMixedCost},
+    'inventory-complete': { privileged: false, run: async (db, company, user, job) => completeManufacturingInventory(db, company, user, job) },
+    'inventory-reopen': { privileged: true, run: async (db, company, user, job) => reopenManufacturingInventory(db, company, user, job) },
     close: { privileged: true, run: async (db, company, _user, job) => closeManufacturingJob(db, company, job) },
   } satisfies Record<string, { privileged: boolean; run: (db: import('pg').PoolClient, company: string, user: string, job: string, body: unknown) => Promise<unknown> }>;
   for (const [action, spec] of Object.entries(actions)) {
