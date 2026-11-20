@@ -41,6 +41,9 @@ export async function ensureFabricVariantForColor(
   let variant: { id: string; variant_code: string } | null = null;
   for (let attempt = 0; attempt < 20 && !variant; attempt += 1) {
     if (attempt > 0) variantCode = `${base}-${attempt + 1}`;
+    // نقطة حفظ لكل محاولة: خطأ التكرار (23505) داخل معاملة مفتوحة يُسقطها كلها
+    // ("current transaction is aborted") ما لم نتراجع إلى نقطة الحفظ.
+    await client.query('SAVEPOINT variant_code_attempt');
     try {
       const inserted = await client.query<{ id: string; variant_code: string }>(
         `INSERT INTO fabric_item_variants (company_id, item_id, color_id, variant_code, width_cm, gsm)
@@ -48,8 +51,11 @@ export async function ensureFabricVariantForColor(
          RETURNING id, variant_code`,
         [companyId, itemId, colorId, variantCode],
       );
+      await client.query('RELEASE SAVEPOINT variant_code_attempt');
       variant = inserted.rows[0];
     } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT variant_code_attempt');
+      await client.query('RELEASE SAVEPOINT variant_code_attempt');
       if ((err as { code?: string }).code !== '23505') throw err;
       // كود الفاريانت مستخدم مسبقاً — جرّب كوداً آخر
     }
