@@ -11,6 +11,7 @@ import {
   FileText,
   Handshake,
   Home,
+  Layers,
   Menu,
   Network,
   Package,
@@ -120,12 +121,20 @@ const Topbar = () => {
       labelKey: 'stickers',
       icon: Tags,
       subItems: [
-        { labelKey: 'stickers.cartela', to: '/cartela' },
-        { labelKey: 'stickers.cartelaDelivery', to: '/cartela/delivery' },
-        { labelKey: 'stickers.cartelaCustody', to: '/cartela/custody' },
         { labelKey: 'stickers.labels', to: '/inventory/labels' },
         { labelKey: 'stickers.customLabel', to: '/inventory/custom-label' },
         { labelKey: 'stickers.printJobs', to: '/inventory/print-jobs' },
+      ],
+    },
+    // قائمة مستقلة للكارتيلات (ملاحظة بشير): المكتبة والمخزون والتسليم والعهدة.
+    {
+      labelKey: 'cartelaMenu',
+      icon: Layers,
+      subItems: [
+        { labelKey: 'cartelaMenu.library', to: '/cartela' },
+        { labelKey: 'cartelaMenu.stock', to: '/cartela/stock' },
+        { labelKey: 'cartelaMenu.delivery', to: '/cartela/delivery' },
+        { labelKey: 'cartelaMenu.custody', to: '/cartela/custody' },
       ],
     },
     {
@@ -190,6 +199,10 @@ const Topbar = () => {
     if (to === '/') return location.pathname === '/';
     return location.pathname === to || location.pathname.startsWith(`${to}/`);
   };
+
+  /** رابط فرعي نشط، دون تفعيل رابط الأب (مثل /cartela) حين يكون أحد إخوته الأدق هو الحالي. */
+  const isSubActive = (siblings: NavSubItem[], to: string) =>
+    isRouteActive(to) && !siblings.some((o) => o.to !== to && o.to.startsWith(`${to}/`) && isRouteActive(o.to));
 
   const isParentActive = (item: NavItem) => {
     if ('subItems' in item && item.subItems) {
@@ -422,7 +435,7 @@ const Topbar = () => {
                 </button>
                 <div className="absolute end-0 mt-1 w-56 bg-[var(--surface-header)] border border-[var(--border-default)] shadow-xl rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] flex flex-col py-1">
                   {item.subItems.map((sub, sIdx) => {
-                    const isActive = isRouteActive(sub.to);
+                    const isActive = isSubActive(item.subItems, sub.to);
                     return (
                       <Link key={sIdx} to={sub.to} className={subLinkCls(isActive)}>
                         {t(sub.labelKey, { ns: 'nav' })}
@@ -491,7 +504,7 @@ const Topbar = () => {
                       {expanded && (
                         <div className="border-t border-[var(--border-subtle)] bg-[var(--surface-muted-nav)] py-1">
                           {item.subItems.map((sub, sIdx) => {
-                            const isActive = isRouteActive(sub.to);
+                            const isActive = isSubActive(item.subItems, sub.to);
                             return (
                               <Link
                                 key={sIdx}

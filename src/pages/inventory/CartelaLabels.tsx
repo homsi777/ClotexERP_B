@@ -32,6 +32,9 @@ import {
   cartelaListLabel,
   createCartelaFiberType,
   generateCartelaLabel,
+  listSiblingColors,
+  cloneCartelaSiblings,
+  type SiblingColorsResult,
   deleteCartelaFiberType,
   deleteCartelaLabel,
   getCartelaLabel,
@@ -158,6 +161,9 @@ export const CartelaLabels: React.FC = () => {
   const [activeTab, setActiveTab] = useState<CartelaTab>('form');
   const [registryPrintingId, setRegistryPrintingId] = useState<string | null>(null);
   const [registryPreview, setRegistryPreview] = useState<{ id: string; html: string } | null>(null);
+  /** بعد إنشاء كارتيلة مرتبطة: سؤال إنشاء كارتيلات بقية ألوان نفس كود الدسان (يُسأل دائماً). */
+  const [siblingPrompt, setSiblingPrompt] = useState<{ cartelaId: string; data: SiblingColorsResult; picked: Set<string> } | null>(null);
+  const [siblingBusy, setSiblingBusy] = useState(false);
   const [selectedCartelaIds, setSelectedCartelaIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState<PrintMode | null>(null);
 
@@ -546,10 +552,47 @@ export const CartelaLabels: React.FC = () => {
         }),
       });
       scrollToColorsPanel();
+      if (row.fabric_item_id) {
+        try {
+          const sib = await listSiblingColors(row.id);
+          if (sib.candidates.length > 0) {
+            setSiblingPrompt({
+              cartelaId: row.id,
+              data: sib,
+              picked: new Set(sib.candidates.map((c) => `${c.itemId}|${c.colorId}`)),
+            });
+          }
+        } catch {
+          /* السؤال اختياري؛ فشل جلبه لا يُفشل الإنشاء */
+        }
+      }
     } catch (e) {
       showToast({ type: 'error', message: e instanceof Error ? e.message : t('toast.generateFailed') });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmSiblings = async () => {
+    if (!siblingPrompt || siblingPrompt.picked.size === 0) return;
+    setSiblingBusy(true);
+    try {
+      const colors = siblingPrompt.data.candidates
+        .filter((c) => siblingPrompt.picked.has(`${c.itemId}|${c.colorId}`))
+        .map((c) => ({ itemId: c.itemId, colorId: c.colorId }));
+      const res = await cloneCartelaSiblings(siblingPrompt.cartelaId, colors);
+      await loadList();
+      showToast({
+        type: res.failed.length ? 'warning' : 'success',
+        message: res.failed.length
+          ? t('siblings.partial', { created: res.created.length, failed: res.failed.length, reason: res.failed[0].message })
+          : t('siblings.created', { count: res.created.length }),
+      });
+      setSiblingPrompt(null);
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('siblings.failed') });
+    } finally {
+      setSiblingBusy(false);
     }
   };
 
@@ -1557,6 +1600,77 @@ export const CartelaLabels: React.FC = () => {
         <CartelaColorSwatchesPanel cartelaId={selectedId} serialNo={form.serialNo} />
       )}
       </>
+      )}
+
+      {siblingPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-auto rounded-xl bg-white p-4">
+            <h3 className="text-base font-bold text-slate-900">{t('siblings.title')}</h3>
+            <p className="text-sm text-slate-600">
+              {t('siblings.question', { count: siblingPrompt.data.candidates.length, code: siblingPrompt.data.designCode || '—' })}
+            </p>
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                className="font-bold text-violet-700 hover:underline"
+                onClick={() =>
+                  setSiblingPrompt((p) => {
+                    if (!p) return p;
+                    const all = p.data.candidates.map((c) => `${c.itemId}|${c.colorId}`);
+                    return { ...p, picked: p.picked.size === all.length ? new Set() : new Set(all) };
+                  })
+                }
+              >
+                {t('siblings.toggleAll')}
+              </button>
+              <span className="text-slate-500">{t('siblings.selected', { count: siblingPrompt.picked.size })}</span>
+            </div>
+            <div className="max-h-72 space-y-1 overflow-auto rounded-lg border border-slate-200 p-2">
+              {siblingPrompt.data.candidates.map((c) => {
+                const key = `${c.itemId}|${c.colorId}`;
+                return (
+                  <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={siblingPrompt.picked.has(key)}
+                      onChange={(e) =>
+                        setSiblingPrompt((p) => {
+                          if (!p) return p;
+                          const next = new Set(p.picked);
+                          if (e.target.checked) next.add(key);
+                          else next.delete(key);
+                          return { ...p, picked: next };
+                        })
+                      }
+                    />
+                    <span className="font-bold">{c.colorName || c.colorCode}</span>
+                    {c.colorCode && <span className="font-mono text-xs text-slate-500" dir="ltr">{c.colorCode}</span>}
+                    <span className="ms-auto text-xs text-slate-500">{c.itemName}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500">{t('siblings.note')}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={siblingBusy}
+                onClick={() => setSiblingPrompt(null)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                {t('siblings.skip')}
+              </button>
+              <button
+                type="button"
+                disabled={siblingBusy || siblingPrompt.picked.size === 0}
+                onClick={() => void confirmSiblings()}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {t('siblings.confirm', { count: siblingPrompt.picked.size })}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {registryPreview && (

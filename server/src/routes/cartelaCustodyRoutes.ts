@@ -10,8 +10,11 @@ import {
   generateCopies,
   listCustody,
   listDueChanges,
+  listStock,
+  listStockColors,
   resolveScan,
   returnCopies,
+  setStockLevel,
   type CustodyFilter,
 } from '../services/cartelaCustodyService.js';
 
@@ -148,6 +151,30 @@ export const cartelaCustodyRoutes: FastifyPluginAsync = async (app) => {
     try {
       const data = await inTx((c) => generateCopies(c, companyId, userId, req.body));
       return reply.status(201).send({ ok: true, data });
+    } catch (e) {
+      return mapErr(reply, e);
+    }
+  });
+  // مخزون الكارتيلات بالعدد (ملاحظة بشير): عرض الأعداد وتعديلها يدوياً.
+  app.get('/stock', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const search = String((req.query as Record<string, string>).search ?? '');
+    return reply.send({ ok: true, data: await listStock(getPool(), companyId, search) });
+  });
+
+  app.get('/stock/:cartelaId/colors', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const { cartelaId } = req.params as { cartelaId: string };
+    if (!/^[0-9a-f-]{36}$/i.test(cartelaId)) return sendError(reply, 400, 'معرّف غير صالح', 'VALIDATION');
+    return reply.send({ ok: true, data: await listStockColors(getPool(), companyId, cartelaId) });
+  });
+
+  app.put('/stock', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canWrite(req)) return sendError(reply, 403, 'ليس لديك صلاحية', 'FORBIDDEN');
+    const { companyId, sub: userId } = req.user!;
+    try {
+      const data = await inTx((c) => setStockLevel(c, companyId, userId, req.body));
+      return reply.send({ ok: true, data });
     } catch (e) {
       return mapErr(reply, e);
     }

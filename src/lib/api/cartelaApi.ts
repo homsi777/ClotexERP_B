@@ -255,3 +255,34 @@ export function cartelaListLabel(row: CartelaLabelListItem): string {
 }
 
 export const CARTELA_PERCENT_OPTIONS = Array.from({ length: 100 }, (_, index) => index + 1);
+
+export interface SiblingColor {
+  itemId: string;
+  itemName: string;
+  colorId: string;
+  colorCode: string | null;
+  colorName: string | null;
+}
+export interface SiblingColorsResult {
+  linked: boolean;
+  designCode: string;
+  candidates: SiblingColor[];
+}
+export interface CloneSiblingsResult {
+  created: { id: string; serialNo: string; colorCode: string | null; colorName: string | null }[];
+  failed: { colorCode: string | null; colorName: string | null; message: string }[];
+}
+
+/** ألوان الخامة الأخرى بنفس كود الدسان التي بلا كارتيلة (ملاحظة بشير). */
+export async function listSiblingColors(cartelaId: string): Promise<SiblingColorsResult> {
+  const res = await apiFetch<{ ok: boolean; data: SiblingColorsResult }>(`/api/cartela/${cartelaId}/sibling-colors`);
+  return res.data;
+}
+
+export async function cloneCartelaSiblings(cartelaId: string, colors: { itemId: string; colorId: string }[]): Promise<CloneSiblingsResult> {
+  const res = await apiFetch<{ ok: boolean; data: CloneSiblingsResult }>(`/api/cartela/${cartelaId}/clone-siblings`, {
+    method: 'POST',
+    body: JSON.stringify({ colors }),
+  });
+  return res.data;
+}

@@ -63,5 +63,10 @@
   "hr": "الموارد البشرية",
   "stickers.cartelaDelivery": "تسليم كارتيلات",
   "stickers.cartelaCustody": "عهدة الكارتيلات",
-  "inventory.zones": "عنابر المستودعات"
+  "inventory.zones": "عنابر المستودعات",
+  "cartelaMenu": "الكارتيلات",
+  "cartelaMenu.library": "مكتبة الكارتيلات",
+  "cartelaMenu.stock": "مخزون الكارتيلات",
+  "cartelaMenu.delivery": "تسليم كارتيلات",
+  "cartelaMenu.custody": "عهدة الكارتيلات"
 }

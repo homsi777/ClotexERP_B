@@ -7,7 +7,8 @@ import { createDeliveryVoucher, scanCartelaCopy, type DeliveryResult, type Scann
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { useToast } from '../../components/NonBlockingToast';
 
-type Line = { copy: ScannedCopy; days: string; dueDate: string };
+type Line = { copy: ScannedCopy; qty: number; days: string; dueDate: string };
+const poolKey = (c: ScannedCopy) => `${c.cartelaId}|${c.levelColorId ?? ''}`;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const addDays = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
@@ -38,12 +39,24 @@ export const CartelaDelivery: React.FC = () => {
     setScanning(true);
     try {
       const copy = await scanCartelaCopy(code);
-      if (lines.some((l) => l.copy.barcode.toUpperCase() === copy.barcode.toUpperCase())) {
+      if (copy.poolMode) {
+        // وضع العدد: كل مسح لنفس الكارتيلة يزيد العدد بقدر المتاح من المخزون.
+        const idx = lines.findIndex((l) => l.copy.poolMode && poolKey(l.copy) === poolKey(copy));
+        const available = copy.stock?.available ?? 0;
+        const current = idx >= 0 ? lines[idx].qty : 0;
+        if (current + 1 > available) {
+          showToast({ type: 'error', message: t('delivery.outOfStock', { title: copy.cartelaTitle, available }) });
+        } else if (idx >= 0) {
+          setLines((p) => p.map((l, i) => (i === idx ? { ...l, qty: l.qty + 1 } : l)));
+        } else {
+          setLines((p) => [...p, { copy, qty: 1, days: '', dueDate: '' }]);
+        }
+      } else if (lines.some((l) => l.copy.barcode.toUpperCase() === copy.barcode.toUpperCase())) {
         showToast({ type: 'warning', message: t('delivery.duplicateInVoucher') });
       } else if (copy.heldBy) {
         showToast({ type: 'error', message: t('delivery.alreadyHeld', { customer: copy.heldBy.customerName, voucher: copy.heldBy.voucherNo }) });
       } else {
-        setLines((p) => [...p, { copy, days: '', dueDate: '' }]);
+        setLines((p) => [...p, { copy, qty: 1, days: '', dueDate: '' }]);
       }
       setScan('');
     } catch (e) {
@@ -56,6 +69,13 @@ export const CartelaDelivery: React.FC = () => {
 
   const setDays = (i: number, v: string) =>
     setLines((p) => p.map((l, idx) => (idx === i ? { ...l, days: v, dueDate: v && Number(v) > 0 ? addDays(deliveryDate, Number(v)) : '' } : l)));
+  const setQty = (i: number, v: string) =>
+    setLines((p) => p.map((l, idx) => {
+      if (idx !== i) return l;
+      const max = l.copy.stock?.available ?? 1;
+      const n = Math.min(Math.max(Math.floor(Number(v) || 1), 1), Math.max(max, 1));
+      return { ...l, qty: n };
+    }));
   const setDue = (i: number, v: string) => setLines((p) => p.map((l, idx) => (idx === i ? { ...l, dueDate: v, days: '' } : l)));
 
   const save = async () => {
@@ -66,7 +86,7 @@ export const CartelaDelivery: React.FC = () => {
         customerId,
         deliveryDate,
         notes: notes || null,
-        lines: lines.map((l) => ({ barcode: l.copy.barcode, dueDate: l.dueDate || null })),
+        lines: lines.map((l) => ({ barcode: l.copy.barcode, quantity: l.qty, dueDate: l.dueDate || null })),
       });
       setResult(res);
       showToast({ type: 'success', message: t('delivery.saved', { no: res.voucherNo }) });
@@ -80,13 +100,13 @@ export const CartelaDelivery: React.FC = () => {
   };
 
   const printVoucher = (r: DeliveryResult, copies: Line[]) => {
-    const dueByBarcode = new Map(r.lines.map((l) => [l.barcode, l.dueDate]));
-    const rows = (copies.length ? copies.map((l) => l.copy) : []).map((c) => `<tr><td>${esc(c.barcode)}</td><td>${esc(c.cartelaTitle)}</td><td>${esc(c.artCode)}</td><td>${esc(c.colorName || c.colorCode || '—')}</td><td>${dueByBarcode.get(c.barcode) || t('status.dueUndefined')}</td></tr>`).join('');
+    const rows = copies.map((l) => `<tr><td>${esc(l.copy.barcode)}</td><td>${esc(l.copy.cartelaTitle)}</td><td>${esc(l.copy.artCode)}</td><td>${esc(l.copy.colorName || l.copy.colorCode || '—')}</td><td>${l.qty}</td><td>${l.dueDate || t('status.dueUndefined')}</td></tr>`).join('');
+    void r.lines;
     const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;padding:24px">
       <h2>${esc(t('delivery.voucherTitle'))} ${esc(r.voucherNo)}</h2>
       <p>${esc(t('delivery.customer'))}: <b>${esc(r.customerName)}</b> — ${esc(t('delivery.date'))}: <b>${esc(r.deliveryDate)}</b></p>
       <table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;width:100%;font-size:13px">
-        <thead><tr><th>${esc(t('cols.barcode'))}</th><th>${esc(t('cols.cartela'))}</th><th>${esc(t('cols.code'))}</th><th>${esc(t('cols.color'))}</th><th>${esc(t('cols.dueDate'))}</th></tr></thead>
+        <thead><tr><th>${esc(t('cols.barcode'))}</th><th>${esc(t('cols.cartela'))}</th><th>${esc(t('cols.code'))}</th><th>${esc(t('cols.color'))}</th><th>${esc(t('delivery.qty'))}</th><th>${esc(t('cols.dueDate'))}</th></tr></thead>
         <tbody>${rows}</tbody></table>
       <p style="margin-top:48px">${esc(t('delivery.receiverSignature'))}: ____________________</p></div>`;
     openDocumentPrintWindow(html, `${t('delivery.voucherTitle')} ${r.voucherNo}`);
@@ -142,17 +162,26 @@ export const CartelaDelivery: React.FC = () => {
               <tr>
                 <th className="p-2.5 text-right">{t('cols.barcode')}</th><th className="p-2.5 text-right">{t('cols.cartela')}</th>
                 <th className="p-2.5 text-right">{t('cols.code')}</th><th className="p-2.5 text-right">{t('cols.color')}</th>
+                <th className="p-2.5 text-right">{t('delivery.qty')}</th>
                 <th className="p-2.5 text-right">{t('delivery.days')}</th><th className="p-2.5 text-right">{t('cols.dueDate')}</th><th />
               </tr>
             </thead>
             <tbody>
-              {lines.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">{t('delivery.empty')}</td></tr>}
+              {lines.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-slate-500">{t('delivery.empty')}</td></tr>}
               {lines.map((l, i) => (
                 <tr key={l.copy.barcode} className="border-t border-slate-100">
                   <td className="p-2.5 font-mono" dir="ltr">{l.copy.barcode}</td>
                   <td className="p-2.5 font-bold">{l.copy.cartelaTitle}</td>
                   <td className="p-2.5">{l.copy.artCode}</td>
                   <td className="p-2.5">{l.copy.colorName || l.copy.colorCode || '—'}</td>
+                  <td className="p-2.5">
+                    {l.copy.poolMode ? (
+                      <div className="flex items-center gap-1">
+                        <input type="number" min={1} max={l.copy.stock?.available ?? 1} value={l.qty} onChange={(e) => setQty(i, e.target.value)} className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm" dir="ltr" />
+                        <span className="text-[11px] text-slate-500">{t('delivery.availableOf', { available: l.copy.stock?.available ?? 0 })}</span>
+                      </div>
+                    ) : <span>1</span>}
+                  </td>
                   <td className="p-2.5"><input type="number" min={1} value={l.days} onChange={(e) => setDays(i, e.target.value)} className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm" dir="ltr" /></td>
                   <td className="p-2.5"><input type="date" value={l.dueDate} onChange={(e) => setDue(i, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-sm" dir="ltr" /></td>
                   <td className="p-2.5"><button type="button" onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))} className="text-rose-600"><Trash2 className="h-4 w-4" /></button></td>

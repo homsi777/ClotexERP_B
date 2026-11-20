@@ -217,5 +217,15 @@
   "batchPrintModal.printSentMessage": "{{count}} satır (3×1) yazdırmaya gönderildi",
   "batchPrintModal.printFailed": "Yazdırma başarısız oldu",
   "tree.previewCartelaSticker": "Önizle",
-  "tree.previewClose": "Kapat"
+  "tree.previewClose": "Kapat",
+  "siblings.title": "Aynı kumaşın diğer renkleri",
+  "siblings.question": "Aynı desen kodu ({{code}}) için kartelası olmayan {{count}} renk daha bulundu. Bu kartelanın özellikleriyle kartelalarını şimdi oluşturmak ister misiniz?",
+  "siblings.toggleAll": "Tümünü seç/kaldır",
+  "siblings.selected": "Seçili: {{count}}",
+  "siblings.note": "Her renk için ayrı seri numaralı ve barkodlu bir kartela oluşturulur. Toplarda veya miktarlarda değişiklik yapılmaz.",
+  "siblings.skip": "Hayır, geç",
+  "siblings.confirm": "{{count}} kartela oluştur",
+  "siblings.created": "{{count}} kartela aynı özelliklerle oluşturuldu",
+  "siblings.partial": "{{created}} oluşturuldu, {{failed}} başarısız: {{reason}}",
+  "siblings.failed": "Kartelalar oluşturulamadı"
 }

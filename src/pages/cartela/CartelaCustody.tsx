@@ -69,7 +69,8 @@ export const CartelaCustody: React.FC = () => {
   const addReturn = () => {
     const c = retScan.trim();
     if (!c) return;
-    if (!retList.some((x) => x.toUpperCase() === c.toUpperCase())) setRetList((p) => [...p, c]);
+    // المسح المتكرر يُحتسب نسخة إضافية (وضع العدد)؛ الخادم يتجاهل تكرار نسخة بعينها.
+    setRetList((p) => [...p, c]);
     setRetScan('');
   };
   const confirmReturn = async () => {
@@ -190,11 +191,15 @@ export const CartelaCustody: React.FC = () => {
           </div>
           {retList.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              {retList.map((b) => (
-                <span key={b} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 font-mono text-xs" dir="ltr">
-                  {b}<button type="button" onClick={() => setRetList((p) => p.filter((x) => x !== b))} className="text-rose-600">×</button>
-                </span>
-              ))}
+              {Array.from(new Set(retList.map((x) => x.toUpperCase()))).map((b) => {
+                const n = retList.filter((x) => x.toUpperCase() === b).length;
+                return (
+                  <span key={b} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 font-mono text-xs" dir="ltr">
+                    {b}{n > 1 ? ` ×${n}` : ''}
+                    <button type="button" onClick={() => setRetList((p) => { const i = p.findIndex((x) => x.toUpperCase() === b); return i < 0 ? p : p.filter((_, k) => k !== i); })} className="text-rose-600">×</button>
+                  </span>
+                );
+              })}
               <button type="button" onClick={() => void confirmReturn()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white">
                 <Undo2 className="h-4 w-4" />{t('return.confirm', { count: retList.length })}
               </button>

@@ -63,5 +63,10 @@
   "hr": "İnsan Kaynakları",
   "stickers.cartelaDelivery": "Kartela teslimi",
   "stickers.cartelaCustody": "Kartela zimmeti",
-  "inventory.zones": "Depo koğuşları"
+  "inventory.zones": "Depo koğuşları",
+  "cartelaMenu": "Kartelalar",
+  "cartelaMenu.library": "Kartela kütüphanesi",
+  "cartelaMenu.stock": "Kartela stoğu",
+  "cartelaMenu.delivery": "Kartela teslimi",
+  "cartelaMenu.custody": "Kartela zimmeti"
 }

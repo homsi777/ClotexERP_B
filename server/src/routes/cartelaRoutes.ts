@@ -5,6 +5,7 @@ import { authenticateRequest } from '../middleware/auth.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { allocateCartelaSerialNo, resolveCartelaSerialNo, validateManualCartelaSerialNo } from '../services/cartelaSerialService.js';
+import { SiblingError, cloneCartelaToSiblings, listSiblingColors } from '../services/cartelaSiblingService.js';
 import { upsertFabricItemCartelaSpecs } from '../services/fabricItemCartelaSpecsService.js';
 import { ensureFabricVariantForColor } from '../services/fabricItemVariantLinkService.js';
 import {
@@ -843,6 +844,43 @@ export const cartelaRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       if (mapCartelaDbError(reply, err)) return reply;
       throw err;
+    }
+  });
+
+  // ملاحظة بشير: ألوان الخامة الأخرى بنفس كود الدسان التي بلا كارتيلة — تُعرض بعد إنشاء كارتيلة مرتبطة، ويُسأل المستخدم دائماً.
+  app.get('/:cartelaId/sibling-colors', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const { cartelaId } = req.params as { cartelaId: string };
+    if (!z.string().uuid().safeParse(cartelaId).success) return sendError(reply, 400, 'معرّف غير صالح', 'VALIDATION');
+    try {
+      return reply.send({ ok: true, data: await listSiblingColors(getPool(), companyId, cartelaId) });
+    } catch (err) {
+      if (err instanceof SiblingError) return sendError(reply, err.code === 'NOT_FOUND' ? 404 : 400, err.message, err.code);
+      throw err;
+    }
+  });
+
+  app.post('/:cartelaId/clone-siblings', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId, sub: userId } = req.user!;
+    const { cartelaId } = req.params as { cartelaId: string };
+    const body = z.object({
+      colors: z.array(z.object({ itemId: z.string().uuid(), colorId: z.string().uuid() })).min(1).max(200),
+    }).safeParse(req.body);
+    if (!z.string().uuid().safeParse(cartelaId).success || !body.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const data = await cloneCartelaToSiblings(client, companyId, userId, cartelaId, body.data.colors);
+      await client.query('COMMIT');
+      return reply.status(201).send({ ok: true, data });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err instanceof SiblingError) return sendError(reply, err.code === 'NOT_FOUND' ? 404 : 400, err.message, err.code);
+      const code = (err as { code?: string }).code;
+      if (code === 'CARTELA_AUTO_SERIAL_FULL') return sendError(reply, 409, (err as Error).message, code);
+      throw err;
+    } finally {
+      client.release();
     }
   });
 

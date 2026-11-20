@@ -180,6 +180,7 @@ import { CustomStickerPrinting } from './pages/inventory/CustomStickerPrinting';
 import { CartelaLabels } from './pages/inventory/CartelaLabels';
 import { CartelaDelivery } from './pages/cartela/CartelaDelivery';
 import { CartelaCustody } from './pages/cartela/CartelaCustody';
+import { CartelaStock } from './pages/cartela/CartelaStock';
 import { RollCut } from './pages/inventory/RollCut';
 import { BulkPricing } from './pages/inventory/BulkPricing';
 import { Warehouses } from './pages/inventory/Warehouses';
@@ -277,6 +278,7 @@ export default function App() {
             <Route path="cartela" element={<CartelaLabels />} />
             <Route path="cartela/delivery" element={<CartelaDelivery />} />
             <Route path="cartela/custody" element={<CartelaCustody />} />
+            <Route path="cartela/stock" element={<CartelaStock />} />
             <Route path="inventory/cartela" element={<Navigate to="/cartela" replace />} />
             <Route path="inventory/bulk-pricing" element={<BulkPricing />} />
             <Route path="inventory/warehouses" element={<Warehouses />} />

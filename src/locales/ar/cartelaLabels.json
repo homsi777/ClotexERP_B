@@ -217,5 +217,15 @@
   "batchPrintModal.printSentMessage": "تم إرسال {{count}} سطر (3×1) للطباعة",
   "batchPrintModal.printFailed": "فشلت الطباعة",
   "tree.previewCartelaSticker": "معاينة",
-  "tree.previewClose": "إغلاق"
+  "tree.previewClose": "إغلاق",
+  "siblings.title": "ألوان أخرى لنفس الخامة",
+  "siblings.question": "وُجد {{count}} لوناً آخر لنفس كود الدسان ({{code}}) بلا كارتيلة. هل تريد إنشاء كارتيلاتها الآن بنفس مواصفات هذه الكارتيلة؟",
+  "siblings.toggleAll": "تحديد/إلغاء الكل",
+  "siblings.selected": "المحدد: {{count}}",
+  "siblings.note": "لكل لون كارتيلة مستقلة برقم تسلسلي وباركود خاص به. لن يُعدَّل شيء في الأتواب أو الكميات.",
+  "siblings.skip": "لا، تخطّي",
+  "siblings.confirm": "إنشاء {{count}} كارتيلة",
+  "siblings.created": "تم إنشاء {{count}} كارتيلة بنفس المواصفات",
+  "siblings.partial": "أُنشئت {{created}} وتعذّرت {{failed}}: {{reason}}",
+  "siblings.failed": "تعذّر إنشاء الكارتيلات"
 }

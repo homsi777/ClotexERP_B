@@ -14,6 +14,10 @@ export interface ScannedCopy {
   colorName: string | null;
   isRegisteredCopy: boolean;
   heldBy: { customerId: string; customerName: string; voucherNo: string } | null;
+  /** وضع العدد: للكارتيلة عدد مخزون، والتسليم يخصم وحدة من المتاح. */
+  poolMode: boolean;
+  levelColorId: string | null;
+  stock: { quantity: number; held: number; available: number } | null;
 }
 
 export interface CustodyRow {
@@ -40,7 +44,7 @@ export interface DeliveryPayload {
   customerId: string;
   deliveryDate?: string;
   notes?: string | null;
-  lines: { barcode: string; days?: number | null; dueDate?: string | null }[];
+  lines: { barcode: string; quantity?: number; days?: number | null; dueDate?: string | null }[];
 }
 
 export interface DeliveryResult {
@@ -115,5 +119,36 @@ export async function listDueChanges(lineId: string) {
 
 export async function generateCartelaCopies(payload: { cartelaId: string; colorId?: string | null; count: number }) {
   const res = await apiFetch<{ ok: boolean; data: { barcodes: string[] } }>(`${BASE}/copies/generate`, { method: 'POST', body: JSON.stringify(payload) });
+  return res.data;
+}
+
+export interface StockRow {
+  cartelaId: string;
+  title: string;
+  artCode: string;
+  serialNo: string;
+  colorId: string | null;
+  colorCode: string | null;
+  colorName: string | null;
+  colorCount: number;
+  /** null = بلا تتبع عددي. */
+  quantity: number | null;
+  held: number;
+  available: number | null;
+}
+
+export async function listCartelaStock(search = ''): Promise<StockRow[]> {
+  const res = await apiFetch<{ ok: boolean; data: StockRow[] }>(`${BASE}/stock${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+  return res.data;
+}
+
+export async function listCartelaStockColors(cartelaId: string): Promise<StockRow[]> {
+  const res = await apiFetch<{ ok: boolean; data: StockRow[] }>(`${BASE}/stock/${cartelaId}/colors`);
+  return res.data;
+}
+
+export async function setCartelaStock(payload: { cartelaId: string; colorId?: string | null; quantity: number | null }) {
+  const res = await apiFetch<{ ok: boolean; data: { quantity: number | null; held: number; available: number | null } }>(
+    `${BASE}/stock`, { method: 'PUT', body: JSON.stringify(payload) });
   return res.data;
 }
