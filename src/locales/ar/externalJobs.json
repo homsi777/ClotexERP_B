@@ -470,5 +470,6 @@
   "receiptScreen.title": "استلام دفعة — مهمة {{no}}",
   "receiptScreen.subtitle": "نفس شاشة إدخال الأتواب — المرجع الكمية الإجمالية للمهمة",
   "receiptScreen.confirmAll": "تأكيد الاستلام الفعلي",
-  "receiptScreen.itemRequired": "اختر الخامة للرول (في المهمة أكثر من خامة)"
+  "receiptScreen.itemRequired": "اختر الخامة للرول (في المهمة أكثر من خامة)",
+  "receiptScreen.sentItem": "الخامة المرسلة المخصوم منها"
 }

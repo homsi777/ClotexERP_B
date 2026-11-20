@@ -106,6 +106,12 @@ test('external receipt by total quantity: automatic allocation, split rolls, aut
     await rcv2([{ lengthM: 10, sourceLineId: line1 }]);
     const done = new Map((await manufacturingOverview(client, company, job2.id)).lines.map((l: { sent_barcode: string; returned_m: string }) => [l.sent_barcode, Number(l.returned_m)]));
     assert.deepEqual([done.get('B1'), done.get('B2')], [10, 40]);
+    // الخامة الراجعة من شجرة التصنيف قد تختلف عن المرسلة (بوبلين ← شامريه)
+    await rcv2([{ lengthM: 5, sourceLineId: line1, resultItemId: itemB }]);
+    const diff = (await q(`SELECT r.item_id FROM external_job_return_lines q JOIN fabric_rolls r ON r.id=q.result_roll_id
+      WHERE q.job_id=$1 AND q.length_m=5`, [job2.id]));
+    assert.deepEqual(diff.map((r) => r.item_id), [itemB]);
+    await assert.rejects(() => rcv2([{ lengthM: 1, sourceLineId: line1, resultItemId: randomUUID() }]), /الخامة غير صالحة/);
   } finally {
     await db.query('ROLLBACK');
     await db.end();

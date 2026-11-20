@@ -771,24 +771,23 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     setPrintWarning('');
 
     if (isReceipt) {
+      if (!name.trim() || !catL1Id || !catL2Id) { setSaveError(t('errors.selectNameAndCode')); return; }
       if (length === '' || !(Number(length) > 0)) { setSaveError(t('errors.lengthRequired')); return; }
       if (receiptItems.length > 1 && !rItemId) { setSaveError(tj('receiptScreen.itemRequired')); return; }
       if (rDefective && !rResponsible.trim()) { setSaveError(tj('lifecycle.missing.responsible')); return; }
-      const itemLabel = receiptItems.find(([k]) => k === rItemId)?.[1] ?? receiptItems[0]?.[1] ?? '';
       const isEdit = Boolean(editingDraftId);
       const draftR: DraftRoll = {
-        localId: editingDraftId ?? nextDraftRollId(), catL1Id: '', catL2Id: '', catL3Id: '', catL4Id: '',
-        name: rColorName.trim() ? `${itemLabel} — ${rColorName.trim()}` : itemLabel, barcode, lotNumber, lengthType, length: Number(length) || 0,
+        localId: editingDraftId ?? nextDraftRollId(), catL1Id, catL2Id, catL3Id, catL4Id,
+        name, barcode, lotNumber, lengthType, length: Number(length) || 0,
         rollWidth: Number(rollWidth) || 0, widthUnit, weightMultiplier: Number(weightMultiplier) || 0, weight: Number(weight) || 0,
         costPrice: 0, sellingPrice: 0, imageUrl: '', warehouseId, forSale: false,
-        receipt: { itemId: rItemId, colorName: rColorName.trim(), colorCode: rColorCode.trim(), defective: rDefective, defectReason: rDefectReason, responsibleParty: rResponsible.trim(), notes: rLineNotes.trim() },
+        receipt: { itemId: rItemId, colorName: '', colorCode: '', defective: rDefective, defectReason: rDefectReason, responsibleParty: rResponsible.trim(), notes: rLineNotes.trim() },
       };
       setDraftRolls((prev) => (isEdit ? prev.map((d) => (d.localId === editingDraftId ? draftR : d)) : [...prev, draftR]));
       setEditingDraftId(null);
       setSuccessMessage(isEdit ? t('toast.updatedDraft') : t('toast.addedToDraft', { count: draftRolls.length + 1 }));
       setTimeout(() => setSuccessMessage(''), 3000);
       setRDefective(false); setRResponsible(''); setRLineNotes('');
-      if (!retainEntryFields) { setRColorName(''); setRColorCode(''); }
       resetEntryFieldsForNextRoll();
       return;
     }
@@ -969,13 +968,36 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     if (isReceipt && receiptJobId) {
       if (!warehouseId || !dyePaper.trim()) { setSaveError(tj('lifecycle.step1Hint')); setReceiptStep(1); return; }
       if (draftMeters > receiptRemaining + 0.0005) { setSaveError(tj('lifecycle.missing.exceeds')); return; }
+      setSaving(true);
+      const resolvedCache = new Map<string, Awaited<ReturnType<typeof resolveFabricClassification>>>();
+      const resolvedFor: Array<Awaited<ReturnType<typeof resolveFabricClassification>>> = [];
+      try {
+        for (const d of draftRolls) {
+          const widthCm = d.rollWidth > 0 ? Number((d.widthUnit === 'cm' ? d.rollWidth : d.rollWidth * 2.54).toFixed(2)) : null;
+          const gsmV = d.weightMultiplier > 0 ? d.weightMultiplier : null;
+          const key = [d.catL1Id, d.catL2Id, d.catL3Id, d.catL4Id, widthCm, gsmV].join('|');
+          let r = resolvedCache.get(key);
+          if (!r) {
+            r = await resolveFabricClassification({
+              level1CategoryId: d.catL1Id, level2CategoryId: d.catL2Id,
+              level3CategoryId: d.catL3Id || undefined, level4CategoryId: d.catL4Id || undefined, widthCm, gsm: gsmV,
+            });
+            resolvedCache.set(key, r);
+          }
+          resolvedFor.push(r);
+        }
+      } catch (error) {
+        setSaveError((error as { message?: string }).message ?? t('errors.saveFailedGeneric'));
+        setSaving(false);
+        return;
+      }
       const payload = {
         destinationWarehouseId: warehouseId, destinationLocationId: locationId || null, dyePaperNo: dyePaper.trim(),
         notes: receiptNotes.trim() || undefined, attachments: [] as string[], completedServiceIds: completedServices,
-        lines: draftRolls.map((d) => ({
-          itemId: d.receipt?.itemId || undefined, lengthM: Number(toMeters(d).toFixed(3)),
+        lines: draftRolls.map((d, i) => ({
+          itemId: d.receipt?.itemId || undefined,
+          resultItemId: resolvedFor[i].itemId, colorId: resolvedFor[i].colorId, resultVariantId: resolvedFor[i].variantId, lengthM: Number(toMeters(d).toFixed(3)),
           weightKg: d.weight > 0 ? d.weight : null, barcode: d.barcode.trim() || undefined,
-          colorName: d.receipt?.colorName || undefined, colorCode: d.receipt?.colorCode || undefined,
           widthCm: d.rollWidth > 0 ? Number((d.widthUnit === 'cm' ? d.rollWidth : d.rollWidth * 2.54).toFixed(2)) : null,
           gsm: d.weightMultiplier > 0 ? d.weightMultiplier : null,
           defective: Boolean(d.receipt?.defective), defectReason: d.receipt?.defective ? d.receipt.defectReason : undefined,
@@ -984,7 +1006,6 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       };
       const signature = JSON.stringify(payload);
       if (!retryRef.current || retryRef.current.payload !== signature) retryRef.current = { payload: signature, id: crypto.randomUUID() };
-      setSaving(true);
       try {
         await manufacturingAction(receiptJobId, 'returns', { ...payload, requestId: retryRef.current.id });
         retryRef.current = null;
@@ -1518,7 +1539,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                 )}
               </div>
 
-              {!isReceipt && <div className="space-y-3 md:col-span-2">
+              <div className="space-y-3 md:col-span-2">
                 <label className="block text-sm font-bold text-slate-700">{t('form.materialNameLabel')}</label>
                   <input 
                     id="name"
@@ -1553,9 +1574,9 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                       {t('form.linkedToTreeHint')}
                     </p>
                   ) : null}
-                </div>}
+                </div>
 
-              {!isEditMode && !isReceipt && (
+              {!isEditMode && (
                 <>
                   {treeLoadErr ? (
                     <p className="text-xs text-rose-600 md:col-span-2">{treeLoadErr}</p>
@@ -1681,21 +1702,13 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                 <>
                   {receiptItems.length > 1 && (
                     <div className="space-y-3 md:col-span-2">
-                      <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.itemColumnShort')}</label>
+                      <label className="block text-sm font-bold text-slate-700">{tj('receiptScreen.sentItem')}</label>
                       <select className="w-full rounded-lg border border-slate-300 bg-white p-3" value={rItemId} onChange={(e) => setRItemId(e.target.value)}>
                         <option value="">{tj('lifecycle.chooseItem')}</option>
                         {receiptItems.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
                       </select>
                     </div>
                   )}
-                  <div className="space-y-3">
-                    <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.returnedColor')}</label>
-                    <input className="w-full rounded-lg border border-slate-300 bg-white p-3" value={rColorName} onChange={(e) => setRColorName(e.target.value)} />
-                  </div>
-                  <div className="space-y-3">
-                    <label className="block text-sm font-bold text-slate-700">{tj('lifecycle.returnedColorCode')}</label>
-                    <input className="w-full rounded-lg border border-slate-300 bg-white p-3 font-mono" dir="ltr" value={rColorCode} onChange={(e) => setRColorCode(e.target.value)} />
-                  </div>
                   <div className="space-y-3 md:col-span-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
                     <label className="flex items-center gap-2 text-sm font-bold text-amber-900">
                       <input type="checkbox" checked={rDefective} onChange={(e) => setRDefective(e.target.checked)} /> {tj('lifecycle.defectiveCheck')}

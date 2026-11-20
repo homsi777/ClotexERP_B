@@ -470,5 +470,6 @@
   "receiptScreen.title": "Parti teslim alma — iş {{no}}",
   "receiptScreen.subtitle": "Top giriş ekranıyla aynı — referans işin toplam miktarıdır",
   "receiptScreen.confirmAll": "Fiili teslimi onayla",
-  "receiptScreen.itemRequired": "Top için kumaşı seçin (işte birden fazla kumaş var)"
+  "receiptScreen.itemRequired": "Top için kumaşı seçin (işte birden fazla kumaş var)",
+  "receiptScreen.sentItem": "Düşülecek gönderilen kumaş"
 }

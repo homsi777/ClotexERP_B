@@ -163,6 +163,8 @@ const returnSchema = z.object({
   destinationWarehouseId: uuid, destinationLocationId: uuid.nullable().optional(),
   completedServiceIds: z.array(uuid).max(30).default([]),
   lines: z.array(z.object({ sourceLineId: uuid.optional(), itemId: uuid.optional(),
+    /** خامة/لون/فاريانت الرول الراجع من شجرة التصنيف؛ قد تختلف عن الخامة المرسلة (بوبلين ← شامريه). */
+    resultItemId: uuid.optional(), resultVariantId: uuid.nullable().optional(),
     targetRef: z.object({ customerOrderId: uuid.nullable(), customerOrderLineId: uuid.nullable() }).strict().optional(),
     lengthM: amount, weightKg: optionalAmount,
     barcode: z.string().trim().min(1).max(200).optional(), colorId: uuid.nullable().optional(),
@@ -241,6 +243,8 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
     const source = slices[0].line;
     if (l.defective && (!l.defectReason || !l.responsibleParty)) fail('سبب العيب والجهة المسؤولة مطلوبان');
     if (l.colorId && !(await db.query('SELECT 1 FROM fabric_colors WHERE company_id=$1 AND id=$2', [companyId, l.colorId])).rows.length) fail('اللون غير صالح');
+    if (l.resultItemId && !(await db.query('SELECT 1 FROM fabric_items WHERE company_id=$1 AND id=$2', [companyId, l.resultItemId])).rows.length) fail('الخامة غير صالحة');
+    if (l.resultVariantId && !(await db.query('SELECT 1 FROM fabric_item_variants WHERE company_id=$1 AND id=$2 AND item_id=$3', [companyId, l.resultVariantId, l.resultItemId ?? null])).rows.length) fail('فاريانت الخامة غير صالح');
     const barcode = l.barcode || await generateBarcode(db as PoolClient, companyId);
     if ((await db.query('SELECT 1 FROM fabric_rolls WHERE company_id=$1 AND barcode=$2', [companyId, barcode])).rows.length) fail('الباركود مستخدم؛ اختر باركوداً جديداً مع الاحتفاظ بارتباطه بالأصلي', 'DUPLICATE');
     const status = l.defective ? 'RESERVED' : 'AVAILABLE';
@@ -255,11 +259,11 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
       ? Math.round(slices.reduce((n, sl) => n + Number(lineCost(sl)) * sl.milli, 0) / slices.reduce((n, sl) => n + sl.milli, 0) * 10000) / 10000
       : lineCost(slices[0]);
     const roll = (await db.query(`INSERT INTO fabric_rolls(company_id,item_id,color_id,supplier_id,warehouse_id,location_id,barcode,
-      length_m,actual_weight_kg,width_cm,gsm,unit_cost,currency_code,status,notes,created_by_user_id,calculated_weight_kg)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, [companyId, source.sent_item_id ?? source.item_id,
+      length_m,actual_weight_kg,width_cm,gsm,unit_cost,currency_code,status,notes,created_by_user_id,calculated_weight_kg,variant_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`, [companyId, l.resultItemId ?? source.sent_item_id ?? source.item_id,
       colorId, job.supplier_id, input.destinationWarehouseId, input.destinationLocationId || null, barcode,
       l.lengthM, l.weightKg ?? null, width, gsm,
-      unitCost, source.sent_currency_code ?? source.currency_code, status, l.notes || null, userId, calculatedWeight])).rows[0];
+      unitCost, source.sent_currency_code ?? source.currency_code, status, l.notes || null, userId, calculatedWeight, l.resultVariantId ?? null])).rows[0];
     await db.query(`INSERT INTO inventory_movements(company_id,roll_id,movement_type,to_warehouse_id,to_location_id,new_status,length_delta_m,weight_delta_kg,reference_type,reference_id,reference_no,created_by_user_id)
       VALUES($1,$2,'EXTERNAL_JOB_RETURNED',$3,$4,$5,$6,$7,'EXTERNAL_JOB_RETURN',$8,$9,$10)`, [companyId, roll.id, input.destinationWarehouseId, input.destinationLocationId || null, status, l.lengthM, l.weightKg ?? null, batch.id, job.job_no, userId]);
     const returnLine = (await db.query(`INSERT INTO external_job_return_lines(company_id,job_id,batch_id,source_line_id,source_roll_id,original_barcode,result_roll_id,
