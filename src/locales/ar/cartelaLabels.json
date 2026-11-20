@@ -30,14 +30,12 @@
   "toast.selectAtLeastOne": "اختر كارتيلة واحدة على الأقل للطباعة الجماعية.",
   "toast.batchPrintFailed": "تعذر الطباعة الجماعية",
   "toast.fontSizeSaved": "تم حفظ قياس الخط الافتراضي: {{value}} pt — تُطبَّق على الكارتيلات الجديدة.",
-
   "header.title": "كارتيله",
   "header.subtitle": "لصاقة 80×50 مم + كارتيلة ألوان (Code128) — طباعة حرارية بدون QR.",
   "tab.generate": "توليد كارتيلا",
   "tab.registry": "سجل الكارتيلات",
   "toggle.hideLogo": "إخفاء شعار CLOTEX",
   "toggle.showLogo": "إظهار شعار CLOTEX",
-
   "workflow.title": "مسار العمل — كارتيلة الألوان",
   "workflow.step1Before": "أنشئ/افتح كارتيلa واحفظها برقم ",
   "workflow.step1After": " (مثل 0013).",
@@ -45,7 +43,6 @@
   "workflow.step2After": ".",
   "workflow.step3": "حدّد الألوان → «طباعة 3×1» → اضبط المقاس → احفظ الإعدادات كافتراضي.",
   "workflow.step4": "امسح الباركود من الأعلى أو من Zebra — النظام يجلب الخامة + اللون من السيرفر.",
-
   "registry.title": "سجل الكارتيلات",
   "registry.subtitle": "جميع اللصاقات المُولَّدة — تعديل، حفظ، وإعادة طباعة.",
   "registry.searchPlaceholder": "بحث...",
@@ -67,10 +64,8 @@
   "registry.selectRowAria": "تحديد {{name}}",
   "registry.colorCount": "{{count}} لون",
   "registry.edit": "تعديل",
-
   "print": "طباعة",
   "delete": "حذف",
-
   "form.editTitle": "تعديل كارتيلا",
   "form.newTitle": "توليد كارتيلا جديدة",
   "form.savedBadge": "محفوظة — يمكن التعديل أو الحفظ كنسخة جديدة",
@@ -120,12 +115,9 @@
   "form.saveUpdateButton": "حفظ التعديل",
   "form.saveAsNewButton": "حفظ ككارتيلا جديدة",
   "form.printSilentButton": "طباعة صامتة",
-
   "preview.title": "معاينة قبل الطباعة",
   "preview.subtitle": "معاينة مكبّرة بنفس النسب — الطباعة الفعلية 80×50 mm حراري.",
-
   "colorPanels.colorStickerPrintSent": "تم إرسال ستيكر اللون للطباعة",
-
   "colorPanels.scan.title": "مسح باركود لون الكارتيلة (Code128)",
   "colorPanels.scan.subtitle": "مثال: 0013-C01 — يجلب الخامة الكاملة + اللون من السيرفر.",
   "colorPanels.scan.enterBarcode": "أدخل باركود اللون",
@@ -154,7 +146,6 @@
   "colorPanels.scan.auditWarehouseAll": "كل المستودعات",
   "colorPanels.scan.auditShowAllColors": "إظهار كل ألوان الخامة (حتى الملتهية)",
   "colorPanels.scan.auditExhausted": "غير متوفر",
-
   "colorPanels.swatches.loadFailed": "تعذر تحميل الألوان",
   "colorPanels.swatches.colorCodeRequired": "كود اللون مطلوب — مثال C-01",
   "colorPanels.swatches.updated": "تم تحديث اللون",
@@ -189,7 +180,6 @@
   "colorPanels.swatches.cancelButton": "إلغاء",
   "colorPanels.swatches.saving": "جاري الحفظ...",
   "colorPanels.swatches.saveButton": "حفظ",
-
   "tree.switchToTable": "عرض جدول",
   "tree.switchToTree": "عرض شجرة",
   "tree.noFabricName": "بدون اسم خامة",
@@ -225,5 +215,7 @@
   "batchPrintModal.saveDefaultsToast": "تم حفظ إعدادات طباعة الألوان كافتراضي",
   "batchPrintModal.selectAtLeastOneColor": "اختر لوناً واحداً على الأقل",
   "batchPrintModal.printSentMessage": "تم إرسال {{count}} سطر (3×1) للطباعة",
-  "batchPrintModal.printFailed": "فشلت الطباعة"
+  "batchPrintModal.printFailed": "فشلت الطباعة",
+  "tree.previewCartelaSticker": "معاينة",
+  "tree.previewClose": "إغلاق"
 }

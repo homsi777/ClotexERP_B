@@ -157,6 +157,7 @@ export const CartelaLabels: React.FC = () => {
   const [busy, setBusy] = useState<PrintMode | null>(null);
   const [activeTab, setActiveTab] = useState<CartelaTab>('form');
   const [registryPrintingId, setRegistryPrintingId] = useState<string | null>(null);
+  const [registryPreview, setRegistryPreview] = useState<{ id: string; html: string } | null>(null);
   const [selectedCartelaIds, setSelectedCartelaIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState<PrintMode | null>(null);
 
@@ -635,6 +636,16 @@ export const CartelaLabels: React.FC = () => {
     }
   };
 
+  /** معاينة ستيكر الكارتيلة (80×50) قبل الطباعة من الشجرة. */
+  const handleRegistryPreview = async (id: string) => {
+    try {
+      const data = await prepareCartelaLabelData(id);
+      setRegistryPreview({ id, html: buildCartelaLabelPreviewHtml(data) });
+    } catch (e) {
+      showToast({ type: 'error', message: e instanceof Error ? e.message : t('toast.printFailedGeneric') });
+    }
+  };
+
   const handleRegistryPrint = async (id: string) => {
     setRegistryPrintingId(id);
     try {
@@ -831,6 +842,7 @@ export const CartelaLabels: React.FC = () => {
                 printingId={registryPrintingId}
                 onEdit={(id) => void loadOne(id)}
                 onPrintCartela={(id) => void handleRegistryPrint(id)}
+                onPreviewCartela={(id) => void handleRegistryPreview(id)}
               />
             )
           ) : (
@@ -1545,6 +1557,40 @@ export const CartelaLabels: React.FC = () => {
         <CartelaColorSwatchesPanel cartelaId={selectedId} serialNo={form.serialNo} />
       )}
       </>
+      )}
+
+      {registryPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-xl bg-white p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-bold text-slate-800">{t('preview.title')}</span>
+              <span className="font-mono text-xs text-slate-500" dir="ltr">
+                {CARTELA_WIDTH_MM}×{CARTELA_HEIGHT_MM} mm
+              </span>
+            </div>
+            <CartelaPreviewFrame html={registryPreview.html} />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRegistryPreview(null)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                {t('tree.previewClose')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = registryPreview.id;
+                  setRegistryPreview(null);
+                  void handleRegistryPrint(id);
+                }}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white"
+              >
+                {t('tree.printCartelaSticker')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

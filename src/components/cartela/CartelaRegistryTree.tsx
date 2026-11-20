@@ -20,6 +20,8 @@ type Props = {
   onEdit: (cartelaId: string) => void;
   /** طباعة ستيكر الكارتيلة نفسه (80×50) عبر مسار الطباعة الحالي. */
   onPrintCartela: (cartelaId: string) => void;
+  /** معاينة ستيكر الكارتيلة قبل الطباعة (ملاحظة بشير). */
+  onPreviewCartela?: (cartelaId: string) => void;
 };
 
 /**
@@ -33,6 +35,7 @@ export const CartelaRegistryTree: React.FC<Props> = ({
   printingId,
   onEdit,
   onPrintCartela,
+  onPreviewCartela,
 }) => {
   const { t } = useTranslation('cartelaLabels');
   const { showToast } = useToast();
@@ -178,6 +181,15 @@ export const CartelaRegistryTree: React.FC<Props> = ({
                                     <Pencil className="w-3.5 h-3.5" />
                                     {t('registry.edit')}
                                   </button>
+                                  {onPreviewCartela && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onPreviewCartela(cartela.id)}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                    >
+                                      {t('tree.previewCartelaSticker')}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     disabled={printingId === cartela.id}

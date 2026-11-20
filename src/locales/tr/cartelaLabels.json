@@ -30,14 +30,12 @@
   "toast.selectAtLeastOne": "Toplu yazdırma için en az bir kartela seçin.",
   "toast.batchPrintFailed": "Toplu yazdırma başarısız oldu",
   "toast.fontSizeSaved": "Varsayılan yazı tipi boyutu kaydedildi: {{value}} pt — yeni kartelalara uygulanır.",
-
   "header.title": "Kartela",
   "header.subtitle": "80×50 mm etiket + renk kartelası (Code128) — QR içermeyen termal baskı.",
   "tab.generate": "Kartela Oluştur",
   "tab.registry": "Kartela Kayıtları",
   "toggle.hideLogo": "CLOTEX Logosunu Gizle",
   "toggle.showLogo": "CLOTEX Logosunu Göster",
-
   "workflow.title": "İş Akışı — Renk Kartelası",
   "workflow.step1Before": "Bir kartela oluşturun/açın ve ",
   "workflow.step1After": " numarasıyla kaydedin (örn. 0013).",
@@ -45,7 +43,6 @@
   "workflow.step2After": " barkodunu alır.",
   "workflow.step3": "Renkleri seçin → «3×1 Yazdır» → ölçüyü ayarlayın → ayarları varsayılan olarak kaydedin.",
   "workflow.step4": "Barkodu yukarıdan veya Zebra'dan okutun — sistem malzeme ve rengi sunucudan getirir.",
-
   "registry.title": "Kartela Kayıtları",
   "registry.subtitle": "Oluşturulan tüm etiketler — düzenleme, kaydetme ve yeniden yazdırma.",
   "registry.searchPlaceholder": "Ara...",
@@ -67,10 +64,8 @@
   "registry.selectRowAria": "{{name}} seç",
   "registry.colorCount": "{{count}} renk",
   "registry.edit": "Düzenle",
-
   "print": "Yazdır",
   "delete": "Sil",
-
   "form.editTitle": "Kartelayı Düzenle",
   "form.newTitle": "Yeni Kartela Oluştur",
   "form.savedBadge": "Kaydedildi — düzenleyebilir veya yeni kopya olarak kaydedebilirsiniz",
@@ -120,12 +115,9 @@
   "form.saveUpdateButton": "Değişiklikleri Kaydet",
   "form.saveAsNewButton": "Yeni Kartela Olarak Kaydet",
   "form.printSilentButton": "Sessiz Yazdır",
-
   "preview.title": "Yazdırmadan Önce Önizleme",
   "preview.subtitle": "Aynı oranlarda büyütülmüş önizleme — gerçek baskı 80×50 mm termaldir.",
-
   "colorPanels.colorStickerPrintSent": "Renk etiketi yazdırmaya gönderildi",
-
   "colorPanels.scan.title": "Kartela Renk Barkodu Okut (Code128)",
   "colorPanels.scan.subtitle": "Örnek: 0013-C01 — sunucudan tüm malzemeyi + rengi getirir.",
   "colorPanels.scan.enterBarcode": "Renk barkodunu girin",
@@ -154,7 +146,6 @@
   "colorPanels.scan.auditWarehouseAll": "Tüm Depolar",
   "colorPanels.scan.auditShowAllColors": "Tüm malzeme renklerini göster (tükenenler dahil)",
   "colorPanels.scan.auditExhausted": "Mevcut değil",
-
   "colorPanels.swatches.loadFailed": "Renkler yüklenemedi",
   "colorPanels.swatches.colorCodeRequired": "Renk kodu gerekli — örnek C-01",
   "colorPanels.swatches.updated": "Renk güncellendi",
@@ -189,7 +180,6 @@
   "colorPanels.swatches.cancelButton": "İptal",
   "colorPanels.swatches.saving": "Kaydediliyor...",
   "colorPanels.swatches.saveButton": "Kaydet",
-
   "tree.switchToTable": "Tablo görünümü",
   "tree.switchToTree": "Ağaç görünümü",
   "tree.noFabricName": "Kumaş adı yok",
@@ -225,5 +215,7 @@
   "batchPrintModal.saveDefaultsToast": "Renk yazdırma ayarları varsayılan olarak kaydedildi",
   "batchPrintModal.selectAtLeastOneColor": "En az bir renk seçin",
   "batchPrintModal.printSentMessage": "{{count}} satır (3×1) yazdırmaya gönderildi",
-  "batchPrintModal.printFailed": "Yazdırma başarısız oldu"
+  "batchPrintModal.printFailed": "Yazdırma başarısız oldu",
+  "tree.previewCartelaSticker": "Önizle",
+  "tree.previewClose": "Kapat"
 }
