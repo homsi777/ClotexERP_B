@@ -9,10 +9,11 @@ import {
 import { listPayrollEmployees, type PayrollEmployeeDto } from '../../lib/api/payrollApi';
 import { ATTENDANCE_STATUS_OPTIONS } from '../../lib/hr/attendanceStatusLabels';
 import { useToast } from '../NonBlockingToast';
+import { todayYmd } from '../../lib/businessDate';
 
 const money = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const inputCls = 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm';
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => todayYmd();
 
 type Props = {
   /** يُستدعى بعد تسجيل حالة ليُحدّث الجدول الرئيسي. */

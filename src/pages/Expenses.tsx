@@ -19,6 +19,7 @@ import { ApiRequestError } from '../lib/api/client';
 import { convertToUsd, getCurrencyName, normalizeExchangeRate, round2, SUPPORTED_CURRENCIES } from '../lib/currency';
 import { useToast } from '../components/NonBlockingToast';
 import { ExchangeRateField, resolveExchangeRate } from '../components/ExchangeRateField';
+import { todayYmd } from '../lib/businessDate';
 
 export const Expenses = () => {
   const { t, i18n } = useTranslation('expenses');
@@ -34,7 +35,7 @@ export const Expenses = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [err, setErr] = useState('');
 
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expenseDate, setExpenseDate] = useState(() => todayYmd());
   const [categoryId, setCategoryId] = useState('');
   const [cashboxId, setCashboxId] = useState('');
   const [beneficiaryName, setBeneficiaryName] = useState('');
@@ -106,7 +107,7 @@ export const Expenses = () => {
   };
 
   const resetForm = () => {
-    setExpenseDate(new Date().toISOString().slice(0, 10));
+    setExpenseDate(todayYmd());
     setBeneficiaryName('');
     setNewCategoryName('');
     setAmount('');

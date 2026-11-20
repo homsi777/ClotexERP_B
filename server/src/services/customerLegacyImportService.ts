@@ -3,6 +3,7 @@ import { createSalesInvoice } from './salesInvoiceService.js';
 import { postManualJournal } from './glPostingService.js';
 import { postCustomerOpeningBalance } from './customerOpeningBalanceService.js';
 import { ensureCompanyOpeningBalanceGlAccount, getGlAccountIdByKey, GL_KEYS } from './glCoaService.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 type ServiceErrorCode = 'VALIDATION' | 'NOT_FOUND' | 'DUPLICATE';
 
@@ -172,7 +173,7 @@ export async function importLegacyStatementAsRealRecords(
     const headerDebit = Number(group.header.debit ?? 0);
     const headerCredit = Number(group.header.credit ?? 0);
     const docNo = group.header.documentNo || `row-${group.header.rowIndex}`;
-    const docDate = group.header.documentDate || new Date().toISOString().slice(0, 10);
+    const docDate = group.header.documentDate || todayYmd();
 
     if (docType === 'فاتورة بيع') {
       const lines = group.details
@@ -282,7 +283,7 @@ export async function importLegacyStatementAsRealRecords(
         customerId: input.customerId,
         amount,
         direction,
-        asOfDate: new Date().toISOString().slice(0, 10),
+        asOfDate: todayYmd(),
         description: `رصيد افتتاحي من استيراد كشف حساب: ${input.fileName}`,
         currencyCode,
         exchangeRateToUsd: rate,

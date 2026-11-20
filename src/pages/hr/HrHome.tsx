@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, BarChart3, CalendarCheck, ClipboardCheck, Clock, FileText, Loader2, UserX, Users, Wallet } from 'lucide-react';
 import { fetchDailyAlerts, type AlertEmployee, type DailyAlerts } from '../../lib/api/hrInsightsApi';
+import { todayYmd } from '../../lib/businessDate';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayYmd();
 
 type AlertKey = 'notRecorded' | 'absent' | 'missingCheckout' | 'late';
 const ALERT_STYLE: Record<AlertKey, { tone: string; icon: React.ElementType }> = {

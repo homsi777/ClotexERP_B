@@ -41,6 +41,7 @@ import {OrderNotificationInbox} from '../components/orders/OrderNotificationInbo
 import { BRAND } from '../branding';
 import { useAnchoredPopoverStyle } from '../lib/useAnchoredPopoverStyle';
 import { fetchMe } from '../lib/api/authApi';
+import { getCheckDueSummary, type CheckDueItem } from '../lib/api/checksApi';
 import { applyCompanyDefaultLanguage } from '../i18n/applyCompanyLanguage';
 
 /** أيام حتى موعد التوريد المتوقع (تاريخ محلي) */
@@ -84,7 +85,16 @@ const Topbar = () => {
 
   const pickupAlerts = useMemo(() => selectNearPickupOrders(customerOrders), [customerOrders]);
   const notifyPanelStyle = useAnchoredPopoverStyle(notifyRef, notifyOpen);
-  const hasAlerts = pickupAlerts.length > 0;
+  const [checkDue, setCheckDue] = useState<{ overdue: number; dueSoon: number; items: CheckDueItem[] }>({ overdue: 0, dueSoon: 0, items: [] });
+  useEffect(() => {
+    let active = true;
+    const load = () => getCheckDueSummary().then((r) => { if (active) setCheckDue(r.data); }).catch(() => undefined);
+    void load();
+    const id = window.setInterval(load, 5 * 60 * 1000);
+    return () => { active = false; window.clearInterval(id); };
+  }, [location.pathname]);
+  const checkAlertCount = checkDue.overdue + checkDue.dueSoon;
+  const hasAlerts = pickupAlerts.length > 0 || checkAlertCount > 0;
 
   useEffect(() => {
     if (!notifyOpen) return;
@@ -281,7 +291,7 @@ const Topbar = () => {
         <Bell className={`w-5 h-5 ${hasAlerts ? 'text-amber-600' : ''}`} strokeWidth={2} />
         {hasAlerts && (
           <span className="notify-badge-pulse absolute -top-0.5 -start-0.5 min-w-[18px] h-[18px] px-0.5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-[9px] font-bold text-white flex items-center justify-center shadow-md ring-2 ring-white md:min-w-[20px] md:h-5 md:px-1 md:text-[10px]">
-            {pickupAlerts.length > 99 ? '99+' : pickupAlerts.length}
+            {pickupAlerts.length + checkAlertCount > 99 ? '99+' : pickupAlerts.length + checkAlertCount}
           </span>
         )}
       </button>
@@ -306,6 +316,23 @@ const Topbar = () => {
             </p>
           </div>
           <OrderNotificationInbox/>
+          {checkAlertCount > 0 && (
+            <div className="border-b border-amber-100 bg-amber-50/50 px-3 py-2">
+              <p className="mb-1 text-xs font-black text-amber-900">{t('dueNotice.title', { ns: 'checksVault' })} ({checkAlertCount})</p>
+              <ul className="space-y-1">
+                {checkDue.items.slice(0, 6).map((c) => (
+                  <li key={c.id}>
+                    <Link to="/treasury/checks-vault" onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-amber-100/60">
+                      <span className="truncate font-mono font-bold">{c.check_no} · {c.party_name || c.bank_name}</span>
+                      <span className={`shrink-0 font-bold ${c.days_remaining < 0 ? 'text-rose-700' : 'text-amber-800'}`}>
+                        {c.days_remaining === 0 ? t('countdown.today', { ns: 'checksVault' }) : c.days_remaining > 0 ? t('countdown.in', { ns: 'checksVault', count: c.days_remaining }) : t('countdown.overdue', { ns: 'checksVault', count: -c.days_remaining })}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="max-h-[min(22rem,55vh)] overflow-y-auto custom-scrollbar">
             {!hasAlerts ? (
               <p className="px-4 py-8 text-sm text-center text-[var(--text-muted)]">{t('noAlertsCurrently', { ns: 'common' })}</p>

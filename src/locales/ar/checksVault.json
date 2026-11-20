@@ -89,5 +89,12 @@
   "addWithoutVoucher": "تسجيل شيك بدون سند",
   "form.noVoucherWarning": "هذا التسجيل لا ينشئ سند قبض ولا يظهر في كشف العميل ولا يؤثر على الحسابات. لاستلام شيك من عميل استخدم سند القبض.",
   "col.voucher": "سند القبض",
-  "noVoucher": "بدون سند"
+  "noVoucher": "بدون سند",
+  "countdown.today": "يستحق اليوم",
+  "countdown.in": "بعد {{count}} يوم",
+  "countdown.overdue": "متأخر {{count}} يوم",
+  "closePaid.button": "إقفال: اندفع",
+  "closeReturn.button": "إقفال: ارتدّ",
+  "dueNotice.title": "شيكات تستحق قريباً أو متأخرة",
+  "dueNotice.open": "فتح خزينة الشيكات"
 }

@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import { getPool } from '../db/pool.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
+import { todayYmd, daysUntilYmd } from '../utils/businessDate.js';
 import { postCheckDepositToGl, postCheckReturnToGl } from './glPostingService.js';
 
 type ServiceErrorCode = 'VALIDATION' | 'NOT_FOUND' | 'INVALID_STATE' | 'CONFLICT';
@@ -209,7 +210,7 @@ export async function depositCheck(
   const bankBoxId = bankBox.rows[0].id;
   const checksNext = round2(Number(checksBox.rows[0].current_balance) - amount);
   const bankNext = round2(Number(bankBox.rows[0].current_balance) + amount);
-  const depositDate = input.depositDate ?? new Date().toISOString().slice(0, 10);
+  const depositDate = input.depositDate ?? todayYmd();
 
   await client.query(`UPDATE cashboxes SET current_balance=$3, updated_at=now() WHERE id=$1 AND company_id=$2`, [checksBoxId, input.companyId, checksNext]);
   await client.query(`UPDATE cashboxes SET current_balance=$3, updated_at=now() WHERE id=$1 AND company_id=$2`, [bankBoxId, input.companyId, bankNext]);
@@ -258,7 +259,8 @@ export async function markCheckCleared(
   input: { companyId: string; checkId: string; userId: string | null },
 ): Promise<CheckRow> {
   const check = await lockCheck(client, input.companyId, input.checkId);
-  if (check.status !== 'DEPOSITED') fail('لا يمكن تأكيد التحصيل إلا بعد إيداع الشيك', 'INVALID_STATE');
+  // شيك مودَع بالبنك، أو شيك مُعطى لمورد (PAID_OUT) يقرر المحاسب إقفاله بعد أن اندفع.
+  if (check.status !== 'DEPOSITED' && check.status !== 'PAID_OUT') fail('لا يمكن تأكيد التحصيل إلا لشيك مودَع أو مدفوع به', 'INVALID_STATE');
 
   const updated = await client.query<CheckRow>(
     `UPDATE checks SET status='CLEARED', updated_at=now() WHERE id=$1 AND company_id=$2
@@ -266,7 +268,10 @@ export async function markCheckCleared(
                amount, currency_code, received_date, due_date, image_data, status, needs_review, created_at, updated_at`,
     [check.id, input.companyId],
   );
-  await insertStatusHistory(client, { checkId: check.id, fromStatus: 'DEPOSITED', toStatus: 'CLEARED', userId: input.userId });
+  await insertStatusHistory(client, {
+    checkId: check.id, fromStatus: check.status, toStatus: 'CLEARED',
+    note: check.status === 'PAID_OUT' ? 'إقفال: اندفع الشيك المُعطى للمستفيد' : null, userId: input.userId,
+  });
   return updated.rows[0];
 }
 
@@ -277,11 +282,22 @@ export async function returnCheck(
   input: { companyId: string; checkId: string; note?: string | null; returnDate?: string; userId: string | null },
 ): Promise<CheckRow> {
   const check = await lockCheck(client, input.companyId, input.checkId);
+  if (check.status === 'PAID_OUT') {
+    // شيك مُعطى لمورد وارتدّ: يُقفل كمرتجع ويُعلَّم للمراجعة. لا قيد آلي هنا؛ المحاسب يسوّي ذمة المورد/العميل يدوياً.
+    const closed = await client.query<CheckRow>(
+      `UPDATE checks SET status='RETURNED', needs_review=true, updated_at=now() WHERE id=$1 AND company_id=$2
+       RETURNING id, check_no, bank_name, account_holder_name, party_type, party_id, party_name,
+                 amount, currency_code, received_date, due_date, image_data, status, needs_review, created_at, updated_at`,
+      [check.id, input.companyId],
+    );
+    await insertStatusHistory(client, { checkId: check.id, fromStatus: 'PAID_OUT', toStatus: 'RETURNED', note: input.note ?? 'إقفال: ارتدّ الشيك المُعطى للمستفيد', userId: input.userId });
+    return closed.rows[0];
+  }
   if (check.status !== 'RECEIVED' && check.status !== 'DEPOSITED') {
     fail('لا يمكن ارتجاع شيك بهذه الحالة', 'INVALID_STATE');
   }
   const amount = Number(check.amount);
-  const returnDate = input.returnDate ?? new Date().toISOString().slice(0, 10);
+  const returnDate = input.returnDate ?? todayYmd();
 
   // إخراج المبلغ من الحساب الذي يحمله حالياً (خزينة الشيكات إن لم يُودَع بعد،
   // أو الحساب البنكي المودَع به إن كان قد أُودع فعلاً).
@@ -347,4 +363,16 @@ export async function getCheckImage(companyId: string, checkId: string): Promise
   );
   if (!r.rows.length) fail('الشيك غير موجود', 'NOT_FOUND');
   return r.rows[0].image_data;
+}
+
+/** ملخص الاستحقاق للتنبيه: الشيوك المفتوحة (مستلم أو مُعطى للمورد) المتأخرة أو المستحقة خلال N يوماً. */
+export async function dueSummary(companyId: string, withinDays = 7) {
+  const rows = (await getPool().query<{ id: string; check_no: string; bank_name: string; party_name: string | null; amount: string; currency_code: string; due_date: string; status: string }>(
+    `SELECT id, check_no, bank_name, party_name, amount, currency_code, due_date, status
+       FROM checks WHERE company_id=$1 AND status IN ('RECEIVED','PAID_OUT') AND due_date <= $2::date + $3::int
+       ORDER BY due_date ASC LIMIT 100`,
+    [companyId, todayYmd(), withinDays],
+  )).rows;
+  const items = rows.map((r) => ({ ...r, days_remaining: daysUntilYmd(r.due_date) }));
+  return { overdue: items.filter((i) => i.days_remaining < 0).length, dueSoon: items.filter((i) => i.days_remaining >= 0).length, items };
 }

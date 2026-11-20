@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { lookupCartelaColorByScan, normalizeCartelaScanInput } from './cartelaColorService.js';
 import { computeCustody, diffDays, resolveDueDate, type CustodyStatus } from './cartelaCustodyMath.js';
+import { todayYmd as businessTodayYmd } from '../utils/businessDate.js';
 
 /**
  * عهدة الكارتيلات (TASK 023): تسليم/إرجاع نسخ الكارتيلات للعملاء بالباركود.
@@ -17,7 +18,7 @@ export class CustodyError extends Error {
   }
 }
 
-export const todayYmd = () => new Date().toISOString().slice(0, 10);
+export const todayYmd = () => businessTodayYmd();
 
 export type ResolvedCopy = {
   copyId: string | null;

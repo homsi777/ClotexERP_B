@@ -19,6 +19,7 @@ import {
 import { computeDailyAlerts, computeAnnualReport } from '../services/hr/hrInsights.js';
 import { ATTENDANCE_STATUS_CODES } from '../services/hr/attendanceStatus.js';
 import { insertAuditLog } from '../services/auditLogService.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 function requirePermission(user: { role: string; permissions: string[] } | undefined, code: string): boolean {
   if (!user) return false;
@@ -154,7 +155,7 @@ export const attendanceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/alerts', { preHandler: authenticateRequest }, async (req, reply) => {
     if (!requirePermission(req.user, 'attendance.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     const q = req.query as Record<string, string>;
-    const date = q.date && /^\d{4}-\d{2}-\d{2}$/.test(q.date) ? q.date : new Date().toISOString().slice(0, 10);
+    const date = q.date && /^\d{4}-\d{2}-\d{2}$/.test(q.date) ? q.date : todayYmd();
     return reply.send({ ok: true, data: await computeDailyAlerts(req.user!.companyId, date) });
   });
 

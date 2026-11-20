@@ -21,8 +21,9 @@ import { renderChecksSheetA4Html } from '../../lib/printing/renderChecksSheetA4'
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { CheckImage, CheckImageInput } from '../../components/treasury/CheckEntryFields';
 import { useDefaultCurrency, savePreferredCurrency } from '../../hooks/useDefaultCurrency';
+import { todayYmd, toYmd, daysUntil } from '../../lib/businessDate';
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => todayYmd();
 
 const STATUS_BADGE: Record<CheckStatus, string> = {
   RECEIVED: 'bg-slate-100 text-slate-700',
@@ -111,12 +112,15 @@ export const ChecksVault: React.FC = () => {
     })();
   }, []);
 
-  const isOverdue = (c: CheckDto) => c.status === 'RECEIVED' && c.due_date < todayStr();
-  const isDueSoon = (c: CheckDto) => {
-    if (c.status !== 'RECEIVED') return false;
-    const due = new Date(c.due_date).getTime();
-    const diffDays = (due - Date.now()) / 86400000;
-    return diffDays >= 0 && diffDays <= 7;
+  const isOpen = (c: CheckDto) => c.status === 'RECEIVED' || c.status === 'PAID_OUT';
+  const daysLeft = (c: CheckDto) => (isOpen(c) ? daysUntil(c.due_date) : null);
+  const isOverdue = (c: CheckDto) => { const d = daysLeft(c); return d !== null && d < 0; };
+  const isDueSoon = (c: CheckDto) => { const d = daysLeft(c); return d !== null && d >= 0 && d <= 7; };
+  const countdownText = (c: CheckDto) => {
+    const d = daysLeft(c);
+    if (d === null) return '';
+    if (d === 0) return t('countdown.today');
+    return d > 0 ? t('countdown.in', { count: d }) : t('countdown.overdue', { count: -d });
   };
 
   const resetForm = () => setForm({
@@ -351,7 +355,7 @@ export const ChecksVault: React.FC = () => {
                   {c.voucher_id && <Link to={`/bonds/records/${c.voucher_id}`} className="block text-xs font-bold text-indigo-700 hover:underline">{t('col.voucher')}: {c.voucher_no}</Link>}
                   <div className="font-mono font-bold text-slate-900">{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {c.currency_code}</div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className={isOverdue(c) ? 'font-bold text-rose-700' : isDueSoon(c) ? 'font-bold text-amber-700' : 'text-slate-500'}>{t('gallery.due')}: {c.due_date}</span>
+                    <span className={isOverdue(c) ? 'font-bold text-rose-700' : isDueSoon(c) ? 'font-bold text-amber-700' : 'text-slate-500'}>{t('gallery.due')}: {toYmd(c.due_date)}{daysLeft(c) !== null ? ` · ${countdownText(c)}` : ''}</span>
                     <label className="inline-flex items-center gap-1 text-slate-500"><input type="checkbox" checked={isSelected(c.id)} onChange={() => toggleSelect(c)} />{t('print.button')}</label>
                   </div>
                 </div>
@@ -370,8 +374,8 @@ export const ChecksVault: React.FC = () => {
               <div><span className="text-slate-500">{t('col.bank')}: </span><b>{viewing.bank_name}</b></div>
               <div><span className="text-slate-500">{t('col.party')}: </span><b>{viewing.party_name || viewing.account_holder_name || '—'}</b></div>
               <div><span className="text-slate-500">{t('col.amount')}: </span><b className="font-mono">{Number(viewing.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {viewing.currency_code}</b></div>
-              <div><span className="text-slate-500">{t('gallery.received')}: </span><b>{viewing.received_date}</b></div>
-              <div><span className="text-slate-500">{t('gallery.due')}: </span><b>{viewing.due_date}</b></div>
+              <div><span className="text-slate-500">{t('gallery.received')}: </span><b>{toYmd(viewing.received_date)}</b></div>
+              <div><span className="text-slate-500">{t('gallery.due')}: </span><b>{toYmd(viewing.due_date)}{daysLeft(viewing) !== null ? ` · ${countdownText(viewing)}` : ''}</b></div>
               {viewing.voucher_id && <div className="col-span-2"><span className="text-slate-500">{t('col.voucher')}: </span><Link to={`/bonds/records/${viewing.voucher_id}`} className="font-bold text-indigo-700 hover:underline">{viewing.voucher_no}</Link></div>}
             </div>
             <div className="flex justify-end"><button type="button" onClick={() => setViewing(null)} className="rounded-lg border px-4 py-2 text-sm">{t('gallery.close')}</button></div>
@@ -412,12 +416,15 @@ export const ChecksVault: React.FC = () => {
                   <td className="p-3 text-slate-700">{c.bank_name}</td>
                   <td className="p-3 text-slate-700">{c.party_name || c.account_holder_name || '—'}</td>
                   <td className="p-3 font-mono text-slate-800">{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {c.currency_code}</td>
-                  <td className="p-3 text-slate-600 text-xs">{c.received_date}</td>
+                  <td className="p-3 text-slate-600 text-xs">{toYmd(c.received_date)}</td>
                   <td className="p-3 text-xs">
                     <span className={isOverdue(c) ? 'text-rose-700 font-bold' : isDueSoon(c) ? 'text-amber-700 font-bold' : 'text-slate-600'}>
-                      {c.due_date}
+                      {toYmd(c.due_date)}
                       {isOverdue(c) && <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />}
                     </span>
+                    {daysLeft(c) !== null && (
+                      <div className={`mt-0.5 text-[11px] font-bold ${isOverdue(c) ? 'text-rose-700' : isDueSoon(c) ? 'text-amber-700' : 'text-slate-500'}`}>{countdownText(c)}</div>
+                    )}
                   </td>
                   <td className="p-3">
                     <span className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${STATUS_BADGE[c.status]}`}>
@@ -467,9 +474,14 @@ export const ChecksVault: React.FC = () => {
                           <CheckCircle2 className="w-3.5 h-3.5" /> {t('clear.button')}
                         </button>
                       )}
-                      {(c.status === 'RECEIVED' || c.status === 'DEPOSITED') && (
+                      {c.status === 'PAID_OUT' && (
+                        <button type="button" onClick={() => void clear(c.id)} className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> {t('closePaid.button')}
+                        </button>
+                      )}
+                      {(c.status === 'RECEIVED' || c.status === 'DEPOSITED' || c.status === 'PAID_OUT') && (
                         <button type="button" onClick={() => void doReturn(c.id)} className="text-xs bg-rose-50 text-rose-700 px-2 py-1 rounded border border-rose-100 flex items-center gap-1">
-                          <Undo2 className="w-3.5 h-3.5" /> {t('return.button')}
+                          <Undo2 className="w-3.5 h-3.5" /> {c.status === 'PAID_OUT' ? t('closeReturn.button') : t('return.button')}
                         </button>
                       )}
                     </div>

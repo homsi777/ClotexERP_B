@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
 import { ensureCompanyGlCoa, ensureCompanyInvoiceGlAccounts, ensureCompanyOperatingExpenseCoa, ensureCompanyExternalJobCoa, getGlAccountIdByKey, resolveCashboxGlAccountId, GL_KEYS } from './glCoaService.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -890,7 +891,7 @@ async function reverseJournalBySource(
   );
 
   const entryNo = generateDocumentNo('JE');
-  const entryDate = new Date().toISOString().slice(0, 10);
+  const entryDate = todayYmd();
   const insE = await client.query<{ id: string }>(
     `INSERT INTO journal_entries (
        company_id, entry_no, entry_date, description, source_type, source_id, status, reversed_entry_id, created_by_user_id

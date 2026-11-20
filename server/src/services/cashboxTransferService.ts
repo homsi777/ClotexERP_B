@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { getPool } from '../db/pool.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
 import { getExchangeRateToUsdTx } from './exchangeRateService.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 type ServiceErrorCode = 'VALIDATION' | 'NOT_FOUND' | 'INVALID_STATE' | 'INSUFFICIENT_BALANCE';
 
@@ -76,7 +77,7 @@ function normalizePayload(payload: CashboxTransferPayload) {
   if (payload.fromCashboxId === payload.toCashboxId) fail('لا يمكن المناقلة إلى نفس الصندوق', 'VALIDATION');
   if (!Number.isFinite(amount) || amount <= 0) fail('قيمة المناقلة يجب أن تكون أكبر من صفر', 'VALIDATION');
   return {
-    transferDate: payload.transferDate ? payload.transferDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    transferDate: payload.transferDate ? payload.transferDate.slice(0, 10) : todayYmd(),
     fromCashboxId: payload.fromCashboxId,
     toCashboxId: payload.toCashboxId,
     amount,

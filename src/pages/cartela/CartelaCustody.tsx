@@ -16,9 +16,10 @@ import {
 } from '../../lib/api/cartelaCustodyApi';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { useToast } from '../../components/NonBlockingToast';
+import { todayYmd } from '../../lib/businessDate';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayYmd();
 const TONE: Record<CustodyStatus, string> = {
   HELD: 'bg-sky-100 text-sky-800',
   LATE: 'bg-rose-100 text-rose-800',

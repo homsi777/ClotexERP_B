@@ -94,3 +94,8 @@ export async function getCheckImage(id: string): Promise<string | null> {
   const res = await apiFetch<{ ok: boolean; data: { image: string | null } }>(`/api/checks/${id}/image`);
   return res.data.image;
 }
+
+export interface CheckDueItem { id: string; check_no: string; bank_name: string; party_name: string | null; amount: string; currency_code: string; due_date: string; status: CheckStatus; days_remaining: number }
+export async function getCheckDueSummary() {
+  return apiFetch<{ ok: boolean; data: { overdue: number; dueSoon: number; items: CheckDueItem[] } }>('/api/checks/due-summary');
+}

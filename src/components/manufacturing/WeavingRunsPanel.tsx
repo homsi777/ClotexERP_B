@@ -9,6 +9,7 @@ import {
   type WeavingOptions,
   type WeavingRun,
 } from "../../lib/api/manufacturingWeavingApi";
+import { todayYmd } from '../../lib/businessDate';
 const cls = "rounded-lg border px-3 py-2 text-sm";
 export function WeavingRunsPanel({ canManage }: { canManage: boolean }) {
   const [rows, setRows] = useState<WeavingRun[]>([]),
@@ -180,7 +181,7 @@ export function WeavingRunsPanel({ canManage }: { canManage: boolean }) {
                         if (Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(downtime))
                           void run(() =>
                             addWeavingShiftLog(r.id, {
-                              productionDate: new Date().toISOString().slice(0, 10),
+                              productionDate: todayYmd(),
                               counterStart: start,
                               counterEnd: end,
                               downtimeMinutes: downtime,

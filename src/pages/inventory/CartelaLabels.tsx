@@ -84,6 +84,7 @@ import {
   loadDefaultCartelaFontSizePt,
   saveDefaultCartelaFontSizePt,
 } from '../../lib/cartela/cartelaFontSettings';
+import { todayYmd } from '../../lib/businessDate';
 
 function CartelaPreviewFrame({ html }: { html: string }) {
   return (
@@ -756,7 +757,7 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
         labelDataList.push(await prepareCartelaLabelData(id));
       }
       const html = buildCartelaLabelsBatchHtml(labelDataList);
-      await printHtml(html, mode, `cartela-batch-${new Date().toISOString().slice(0, 10)}`);
+      await printHtml(html, mode, `cartela-batch-${todayYmd()}`);
     } catch (e) {
       showToast({ type: 'error', message: e instanceof Error ? e.message : t('toast.batchPrintFailed') });
     } finally {
@@ -1726,7 +1727,7 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
                 onClick={() => {
                   const html = bulkPreview.html;
                   setBulkPreview(null);
-                  void printHtml(html, 'dialog', `cartela-batch-${new Date().toISOString().slice(0, 10)}`);
+                  void printHtml(html, 'dialog', `cartela-batch-${todayYmd()}`);
                 }}
                 className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-bold text-white"
               >

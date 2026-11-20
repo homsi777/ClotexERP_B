@@ -8,6 +8,7 @@ import {
   createCheck,
   depositCheck,
   getCheckImage,
+  dueSummary,
   listChecks,
   markCheckCleared,
   returnCheck,
@@ -39,7 +40,24 @@ const returnBody = z.object({
   returnDate: z.string().optional(),
 });
 
+function isAccountant(role: string | undefined) {
+  return role === 'admin' || role === 'accountant';
+}
+
+/** إقفال شيك مُعطى لمورد (اندفع/ارتدّ) قرار المحاسب أو المدير فقط. */
+async function isPaidOutLocked(companyId: string, checkId: string, role: string | undefined): Promise<boolean> {
+  if (isAccountant(role)) return false;
+  const r = await getPool().query<{ status: string }>('SELECT status FROM checks WHERE id=$1 AND company_id=$2', [checkId, companyId]);
+  return r.rows[0]?.status === 'PAID_OUT';
+}
+
 export const checksRoutes: FastifyPluginAsync = async (app) => {
+  // تنبيه الاستحقاق (للجرس): متأخر أو خلال 7 أيام.
+  app.get('/due-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    return reply.send({ ok: true, data: await dueSummary(companyId, 7) });
+  });
+
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const q = req.query as Record<string, string>;
@@ -145,6 +163,7 @@ export const checksRoutes: FastifyPluginAsync = async (app) => {
   app.post('/:id/clear', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
+    if (await isPaidOutLocked(companyId, id, req.user!.role)) return sendError(reply, 403, 'إقفال الشيك المُعطى للمستفيد من صلاحية المحاسب أو المدير', 'FORBIDDEN');
 
     const pool = getPool();
     const client = await pool.connect();
@@ -170,6 +189,7 @@ export const checksRoutes: FastifyPluginAsync = async (app) => {
     const parsed = returnBody.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
     const d = parsed.data;
+    if (await isPaidOutLocked(req.user!.companyId, id, req.user!.role)) return sendError(reply, 403, 'إقفال الشيك المُعطى للمستفيد من صلاحية المحاسب أو المدير', 'FORBIDDEN');
 
     const pool = getPool();
     const client = await pool.connect();

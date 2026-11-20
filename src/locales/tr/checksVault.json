@@ -89,5 +89,12 @@
   "addWithoutVoucher": "Fişsiz çek kaydı",
   "form.noVoucherWarning": "Bu kayıt tahsilat fişi oluşturmaz, müşteri ekstresinde görünmez ve hesapları etkilemez. Müşteriden çek almak için tahsilat fişini kullanın.",
   "col.voucher": "Tahsilat fişi",
-  "noVoucher": "Fişsiz"
+  "noVoucher": "Fişsiz",
+  "countdown.today": "Bugün vadesi doluyor",
+  "countdown.in": "{{count}} gün sonra",
+  "countdown.overdue": "{{count}} gün gecikmiş",
+  "closePaid.button": "Kapat: ödendi",
+  "closeReturn.button": "Kapat: iade",
+  "dueNotice.title": "Yaklaşan veya gecikmiş çekler",
+  "dueNotice.open": "Çek kasasını aç"
 }

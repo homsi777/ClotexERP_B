@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { createPurchaseInvoice, confirmPurchaseInvoice } from './purchaseInvoiceService.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 export type IntakeDispatchSlipRow = {
   id: string;
@@ -253,7 +254,7 @@ export async function createPurchaseInvoiceFromDispatchSlip(
 
   const created = await createPurchaseInvoice(client, companyId, userId, {
     invoiceNo: 'AUTO',
-    invoiceDate: new Date().toISOString().slice(0, 10),
+    invoiceDate: todayYmd(),
     supplierId: slip.supplier_id,
     warehouseId: slip.warehouse_id,
     currencyCode: 'USD',

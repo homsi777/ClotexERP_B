@@ -1,5 +1,6 @@
 import { getPool } from '../../db/pool.js';
 import { getCustomerStatement } from '../partyStatementService.js';
+import { todayYmd } from '../../utils/businessDate.js';
 
 const MAX_ROWS = 25;
 
@@ -264,7 +265,7 @@ export async function getRecentContainers(companyId: string, limit = 5) {
 export async function getSalesSummaryByDateRange(companyId: string, from: string, to: string) {
   const pool = getPool();
   const fromDate = from?.trim() || '1970-01-01';
-  const toDate = to?.trim() || new Date().toISOString().slice(0, 10);
+  const toDate = to?.trim() || todayYmd();
   const { rows } = await pool.query(
     `SELECT
        COUNT(*)::int AS invoice_count,
@@ -290,7 +291,7 @@ export async function getSalesSummaryByDateRange(companyId: string, from: string
 export async function getTopSellingFabrics(companyId: string, from: string, to: string) {
   const pool = getPool();
   const fromDate = from?.trim() || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
-  const toDate = to?.trim() || new Date().toISOString().slice(0, 10);
+  const toDate = to?.trim() || todayYmd();
   const { rows } = await pool.query(
     `SELECT
        COALESCE(fi.name, sil.description, 'غير محدد') AS fabric_name,

@@ -17,6 +17,7 @@ import {
   validatePayrollItems,
 } from '../services/hr/payrollLineItems.js';
 import { computeAnnualLeaveBalance, tenYearsInsuranceDateFrom } from '../services/hr/leaveBalance.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 const employeeBody = z.object({
   employeeCode: z.string().min(1),
@@ -430,7 +431,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const parsed = employeeSalaryPaymentBody.safeParse(req.body ?? {});
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
     const d = parsed.data;
-    const paymentDate = (d.paymentDate?.trim() || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const paymentDate = (d.paymentDate?.trim() || todayYmd()).slice(0, 10);
     const payment = new Date(`${paymentDate}T00:00:00`);
     const periodMonth = payment.getMonth() + 1;
     const periodYear = payment.getFullYear();
@@ -567,7 +568,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const parsed = employeeAdvanceBody.safeParse(req.body ?? {});
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
     const d = parsed.data;
-    const advanceDate = (d.advanceDate?.trim() || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const advanceDate = (d.advanceDate?.trim() || todayYmd()).slice(0, 10);
 
     const pool = getPool();
     const client = await pool.connect();
@@ -1401,7 +1402,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
       );
     }
 
-    const paymentDate = (parsed.data.paymentDate?.trim() || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const paymentDate = (parsed.data.paymentDate?.trim() || todayYmd()).slice(0, 10);
     const cashboxId = parsed.data.cashboxId;
 
     const pool = getPool();

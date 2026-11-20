@@ -29,6 +29,7 @@ import { BRAND } from '../branding';
 import { CustomerStatementImportModal } from '../components/customers/CustomerStatementImportModal';
 import { A4PreviewModal } from '../components/printing/A4PreviewModal';
 import { sendTelegramAccountStatementPdf } from '../lib/telegramStatement';
+import { todayYmd } from '../lib/businessDate';
 
 const emptyForm = (): CustomerPayload => ({
   name: '', code: '', phone: '', email: '', address: '', notes: '',
@@ -47,7 +48,7 @@ export const Customers = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [page, setPage] = useState(1);
   const pageSize = 20;
-  const [reminderDate, setReminderDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [reminderDate, setReminderDate] = useState<string>(() => todayYmd());
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -68,7 +69,7 @@ export const Customers = () => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
   });
-  const [telegramToDate, setTelegramToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [telegramToDate, setTelegramToDate] = useState(() => todayYmd());
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState('');
 

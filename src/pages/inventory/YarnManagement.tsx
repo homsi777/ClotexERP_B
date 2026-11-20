@@ -19,6 +19,7 @@ import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { listCustomers, type ApiCustomer } from '../../lib/api/customersApi';
 import { createSalesInvoice } from '../../lib/api/salesInvoicesApi';
 import { useToast } from '../../components/NonBlockingToast';
+import { todayYmd } from '../../lib/businessDate';
 
 /**
  * إدارة الخيط/الغزل — صنف منفصل تماماً عن توب القماش، يُقاس بالوزن (كج) لا
@@ -180,7 +181,7 @@ export function YarnManagement() {
       const lineTotal = Math.round(weight * price * 100) / 100;
       await createSalesInvoice({
         invoiceNo: 'AUTO',
-        invoiceDate: new Date().toISOString().slice(0, 10),
+        invoiceDate: todayYmd(),
         customerId: sellForm.customerId,
         currencyCode: 'USD',
         exchangeRateToUsd: 1,

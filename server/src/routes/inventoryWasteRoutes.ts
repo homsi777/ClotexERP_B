@@ -6,6 +6,7 @@ import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
 import { calcWeight, type RollStatus } from '../utils/rollHelpers.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 const wasteTypeSchema = z.enum([
   'DAMAGE',
@@ -161,7 +162,7 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const wasteNo = generateDocumentNo('WST');
-    const wasteDate = d.wasteDate ? d.wasteDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const wasteDate = d.wasteDate ? d.wasteDate.slice(0, 10) : todayYmd();
 
     const client = await pool.connect();
     try {
@@ -263,7 +264,7 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
       if (!loc.rows.length) return sendError(reply, 400, 'الموقع غير صالح لهذا المستودع', 'VALIDATION');
     }
 
-    const wasteDate = d.wasteDate ? d.wasteDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const wasteDate = d.wasteDate ? d.wasteDate.slice(0, 10) : todayYmd();
 
     const client = await pool.connect();
     try {

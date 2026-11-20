@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { TransferInput } from './inventoryTransferValidation.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 export class TransferError extends Error {
   constructor(message: string, public code = 'VALIDATION', public statusCode = 400) { super(message); }
@@ -99,7 +100,7 @@ export async function saveTransfer(client: PoolClient, companyId: string, userId
   }
   await validateTransferWarehouses(client, companyId, d);
   await lockTransferRolls(client, companyId, d);
-  const date = d.transferDate ?? new Date().toISOString().slice(0, 10);
+  const date = d.transferDate ?? todayYmd();
   let row;
   if (id) {
     const result = await client.query(

@@ -5,6 +5,9 @@ const { Pool } = pg;
 
 let pool: pg.Pool | null = null;
 
+// أعمدة DATE تُعاد نصاً YYYY-MM-DD كما هي (لا كائن Date): يمنع انزياح اليوم بالمناطق الزمنية وظهور 2026-11-22T00:00:00.000Z بالواجهة.
+pg.types.setTypeParser(1082, (value: string) => value);
+
 export function getPool(): pg.Pool {
   if (!pool) {
     const { DATABASE_URL } = getEnv();

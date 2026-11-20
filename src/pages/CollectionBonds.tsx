@@ -21,6 +21,7 @@ import {
   getReceiptPurposeOptions,
   type VoucherPurpose,
 } from '../lib/voucherPurpose';
+import { todayYmd } from '../lib/businessDate';
 
 type PartyKind = 'CUSTOMER' | 'SUPPLIER' | 'OTHER';
 
@@ -53,7 +54,7 @@ export const CollectionBonds = () => {
   const [currentVoucher, setCurrentVoucher] = useState<VoucherRow | null>(null);
 
   const [amount, setAmount] = useState('');
-  const [voucherDate, setVoucherDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [voucherDate, setVoucherDate] = useState(() => todayYmd());
   const [cashboxId, setCashboxId] = useState('');
   const [partyKind, setPartyKind] = useState<PartyKind>('CUSTOMER');
   const [partyId, setPartyId] = useState('');

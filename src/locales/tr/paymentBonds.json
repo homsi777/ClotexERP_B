@@ -78,5 +78,7 @@
       "WALLET": "Elektronik Cüzdan",
       "CHECKS": "Çek Kasası"
     }
-  }
+  },
+  "method.cashbox": "Kasadan",
+  "method.check": "Alınan çek ile"
 }

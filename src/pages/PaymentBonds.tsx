@@ -20,6 +20,7 @@ import {
   getPaymentPurposeOptions,
   type VoucherPurpose,
 } from '../lib/voucherPurpose';
+import { todayYmd } from '../lib/businessDate';
 
 type PartyKind = 'CUSTOMER' | 'SUPPLIER' | 'OTHER';
 
@@ -58,7 +59,7 @@ export const PaymentBonds = () => {
   const [currentVoucher, setCurrentVoucher] = useState<VoucherRow | null>(null);
 
   const [amount, setAmount] = useState('');
-  const [voucherDate, setVoucherDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [voucherDate, setVoucherDate] = useState(() => todayYmd());
   const [cashboxId, setCashboxId] = useState('');
   const [partyKind, setPartyKind] = useState<PartyKind>('SUPPLIER');
   const [partyId, setPartyId] = useState('');
@@ -113,6 +114,18 @@ export const PaymentBonds = () => {
   const pickSplitLineCheck = (localId: string, checkId: string) => {
     const check = availableChecks.find((c) => c.id === checkId);
     updateSplitLine(localId, { checkId, amount: check ? check.amount : '' });
+    // دفع بشيك واحد: المبلغ والعملة من الشيك نفسه.
+    if (check && splitLines.length === 1) {
+      setAmount(String(check.amount));
+      setCurrencyCode(String(check.currency_code).toUpperCase() as typeof currencyCode);
+    }
+  };
+
+  const payByCheckOnly = splitMode && splitLines.length === 1 && splitLines[0].isCheck;
+  const choosePayMethod = (method: 'cashbox' | 'check') => {
+    if (method === 'cashbox') { setSplitMode(false); return; }
+    setSplitMode(true);
+    setSplitLines([{ localId: nextSplitLineId(), cashboxId: checksCashbox?.id || '', amount: '', transactionRef: '', transactionDate: '', isCheck: true, checkId: '' }]);
   };
 
   const buildSplitLinesPayload = (): VoucherLineInput[] | undefined =>
@@ -469,6 +482,10 @@ export const PaymentBonds = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between border-b pb-2">
                   <h4 className="text-sm font-bold text-slate-900">{t('sections.paymentMethod')}</h4>
+                  <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 text-xs font-bold">
+                    <button type="button" onClick={() => choosePayMethod('cashbox')} className={`rounded-md px-3 py-1.5 ${!payByCheckOnly ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>{t('method.cashbox')}</button>
+                    <button type="button" disabled={!checksCashbox} onClick={() => choosePayMethod('check')} className={`rounded-md px-3 py-1.5 disabled:opacity-40 ${payByCheckOnly ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>{t('method.check')}</button>
+                  </div>
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
                     <input
                       type="checkbox"

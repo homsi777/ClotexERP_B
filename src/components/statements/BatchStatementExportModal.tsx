@@ -15,6 +15,7 @@ import { getCustomerStatement, getSupplierStatement } from '../../lib/api/partyS
 import { loadCustomerSaleInvoiceDetails } from '../../lib/customerStatementInvoiceDetails';
 import i18n from '../../i18n/config';
 import { arAccountingCreditSide, arAccountingDebitSide } from '../../lib/i18n/arTerminology';
+import { todayYmd } from '../../lib/businessDate';
 
 const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns: 'terminology', ...options });
 const loc = () => (i18n.language === 'ar' ? 'ar' : 'tr');
@@ -39,7 +40,7 @@ interface BatchStatementExportModalProps {
   onClose: () => void;
 }
 
-const todayToken = () => new Date().toISOString().slice(0, 10);
+const todayToken = () => todayYmd();
 
 const makeRowId = () => `batch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 

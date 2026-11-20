@@ -4,6 +4,7 @@ import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import { createProcessingExternalJob } from './externalJobService.js';
 import { validateAndBuildReturnDraft, type CreateReturnBody } from './returnInvoiceDraftValidation.js';
 import { createSalesInvoice } from './salesInvoiceService.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 const createIntakeOperationSchema = z.object({
   // اختياري فقط عند actionType='RETURN' (الجهة الفعلية عميل لا مورّد) — يبقى
@@ -241,7 +242,7 @@ export async function finalizeIntakeOperation(
       const subtotal = Math.round(saleLines.reduce((sum, l) => sum + l.lineTotal, 0) * 100) / 100;
       const invoiceResult = await createSalesInvoice(client, companyId, userId, {
         invoiceNo: 'AUTO',
-        invoiceDate: new Date().toISOString().slice(0, 10),
+        invoiceDate: todayYmd(),
         customerId: saleInput.customerId,
         warehouseId: op.warehouse_id,
         currencyCode: 'USD',

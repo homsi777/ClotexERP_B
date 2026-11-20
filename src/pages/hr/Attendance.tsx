@@ -17,9 +17,10 @@ import {
 import { listPayrollEmployees, type PayrollEmployeeDto } from '../../lib/api/payrollApi';
 import { parseAttendanceWorkbook } from '../../lib/hrAttendanceExcelParser';
 import { usePermissions } from '../../hooks/usePermissions';
+import { todayYmd } from '../../lib/businessDate';
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayYmd();
 }
 
 function firstOfMonthIso(): string {

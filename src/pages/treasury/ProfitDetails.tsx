@@ -10,11 +10,12 @@ import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { exportReportPdf, printReport } from '../../lib/reports/printReport';
 import type { UnifiedReportPayload } from '../../lib/reports/types';
 import i18n from '../../i18n/config';
+import { todayYmd } from '../../lib/businessDate';
 
 type DetailLevel = 'invoice' | 'line';
 type GroupBy = 'none' | 'customer' | 'material' | 'supplier' | 'date';
 
-const today = new Date().toISOString().slice(0, 10);
+const today = todayYmd();
 const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
 
 const fmtMoney = (value: unknown) => `${Number(value || 0).toLocaleString('en-US', {

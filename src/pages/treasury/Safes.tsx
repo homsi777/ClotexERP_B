@@ -13,8 +13,9 @@ import {
 import { useToast } from '../../components/NonBlockingToast';
 import { ExchangeRatePopupButton } from '../../components/treasury/ExchangeRatePopupButton';
 import { SUPPORTED_CURRENCIES, getCurrencyName } from '../../lib/currency';
+import { todayYmd } from '../../lib/businessDate';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayYmd();
 
 export const Safes = () => {
   const { t } = useTranslation('safes');

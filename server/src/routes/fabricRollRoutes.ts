@@ -24,6 +24,7 @@ import {
 } from '../utils/rollHelpers.js';
 import { DRAFT_SALE_LATERAL_JOIN } from '../utils/salesDraftRollLinkSql.js';
 import { sanitizeRollDtoRow, sanitizeRollDtoRows } from '../utils/inventoryDisplayValues.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 // ─── Zod schemas ────────────────────────────────────────────────────────────
 
@@ -1007,7 +1008,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
 
       const invoice = await createPurchaseInvoice(client, companyId, userId, {
         invoiceNo: 'AUTO',
-        invoiceDate: new Date().toISOString().slice(0, 10),
+        invoiceDate: todayYmd(),
         supplierId,
         warehouseId: firstWarehouseId,
         warehouseLabel: firstWarehouseName,

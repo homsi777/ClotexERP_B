@@ -41,6 +41,7 @@ import { getPrintAdapter, isElectronRenderer, canUseSilentLabelPrinting } from '
 import { ElectronPrintAdapter } from '../../lib/printing/electronPrintAdapter';
 import { useElectronSettings } from '../../lib/electron/useElectronSettings';
 import type { PrintResult } from '../../lib/printing/printAdapters';
+import { todayYmd } from '../../lib/businessDate';
 
 // â”€â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -765,7 +766,7 @@ useEffect(() => {
     try {
       const fileName = mode === 'batch' && selectedBatchId
         ? `labels-batch-${selectedBatchId.slice(0, 8)}.pdf`
-        : `labels-${new Date().toISOString().slice(0, 10)}.pdf`;
+        : `labels-${todayYmd()}.pdf`;
       const widthMm = template?.width_mm ?? settings?.labelWidthMm ?? 100;
       const heightMm = template?.height_mm ?? settings?.labelHeightMm ?? 80;
 

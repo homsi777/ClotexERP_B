@@ -7,6 +7,7 @@ import { thermalBrandLogoBlockCss, thermalBrandLogoHtml } from '../../lib/printi
 import { ElectronPrintAdapter } from '../../lib/printing/electronPrintAdapter';
 import { canUseSilentLabelPrinting, getPrintAdapter, isElectronRenderer } from '../../lib/printing/printAdapters';
 import { useElectronSettings } from '../../lib/electron/useElectronSettings';
+import { todayYmd } from '../../lib/businessDate';
 
 type CustomStickerField = {
   id: string;
@@ -235,7 +236,7 @@ export const CustomStickerPrinting: React.FC = () => {
           pageSize: 'ROLL_LABEL',
           widthMm,
           heightMm,
-          defaultFileName: `custom-label-${new Date().toISOString().slice(0, 10)}.pdf`,
+          defaultFileName: `custom-label-${todayYmd()}.pdf`,
         });
         setMessage(result.ok ? t('pdfExportSuccess') : result.error || t('pdfExportFailed'));
         return;

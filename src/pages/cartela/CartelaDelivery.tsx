@@ -8,11 +8,12 @@ import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { renderCartelaDeliveryVoucherHtml } from '../../lib/printing/renderCartelaDeliveryVoucher';
 import { BRAND } from '../../branding';
 import { useToast } from '../../components/NonBlockingToast';
+import { todayYmd } from '../../lib/businessDate';
 
 type Line = { copy: ScannedCopy; qty: number; days: string; dueDate: string };
 const poolKey = (c: ScannedCopy) => `${c.cartelaId}|${c.levelColorId ?? ''}`;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayYmd();
 const addDays = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
 export const CartelaDelivery: React.FC = () => {

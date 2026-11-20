@@ -26,6 +26,7 @@ import {
   mergeVoucherDescription,
   type VoucherPurpose,
 } from '../utils/voucherPurpose.js';
+import { todayYmd } from '../utils/businessDate.js';
 
 const partyTypeSchema = z.enum(['CUSTOMER', 'SUPPLIER', 'EMPLOYEE', 'OTHER']).optional().nullable();
 const paymentMethodSchema = z.enum(['CASH', 'BANK', 'TRANSFER', 'OTHER']);
@@ -377,7 +378,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const vd = d.voucherDate ? d.voucherDate : new Date().toISOString().slice(0, 10);
+    const vd = d.voucherDate ? d.voucherDate : todayYmd();
 
     const pool = getPool();
     const client = await pool.connect();
@@ -491,7 +492,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
       }
 
       await validateCustomerOrderVoucherLink(client,companyId,d);
-      const vd = d.voucherDate ? d.voucherDate : new Date().toISOString().slice(0, 10);
+      const vd = d.voucherDate ? d.voucherDate : todayYmd();
       const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
 
       let exchangeRateToUsd = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : NaN;
