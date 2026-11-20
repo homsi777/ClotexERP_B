@@ -16,13 +16,18 @@ const text = z.string().trim().min(1).max(2000);
 const amount = z.coerce.number().finite().positive().max(999999999).refine(n => Math.abs(n * 1000 - Math.round(n * 1000)) < 0.0001, 'الدقة القصوى ثلاثة منازل');
 const optionalAmount = amount.nullable().optional();
 const milli = (n: unknown) => Math.round(Number(n || 0) * 1000);
+/** ترتيب بنود الإرسال للتوزيع التلقائي: الأقدم ثم الباركود (رقمي) ثم المعرّف — ثابت وقابل للتوقع (كل البنود تُنشأ بمعاملة واحدة بوقت واحد). */
+const byLineOrder = (x: { created_at: string | Date; sent_barcode?: string | null; id: string }, y: { created_at: string | Date; sent_barcode?: string | null; id: string }) =>
+  new Date(x.created_at).getTime() - new Date(y.created_at).getTime()
+  || String(x.sent_barcode ?? '').localeCompare(String(y.sent_barcode ?? ''), 'en', { numeric: true })
+  || String(x.id).localeCompare(String(y.id));
 const serviceInput = z.object({ name: text, quantity: amount, basis: z.enum(['METER', 'KG', 'FIXED']) }).strict();
 
 // Keep only the outstanding physical quantity on the non-available source roll;
 // immutable sent_* snapshots retain its original dispatch identity and quantities.
 async function syncManufacturingSourceBalances(db: Db, companyId: string, userId: string, jobId: string) {
   const lines = (await db.query(`SELECT l.*,r.length_m,r.actual_weight_kg,r.width_cm,r.gsm,
-    COALESCE((SELECT SUM(q.length_m) FROM external_job_return_lines q WHERE q.source_line_id=l.id AND q.company_id=l.company_id),0) AS returned,
+    COALESCE((SELECT SUM(q.length_m) FROM external_job_return_allocations q WHERE q.source_line_id=l.id AND q.company_id=l.company_id),0) AS returned,
     COALESCE((SELECT SUM(s.amount_m) FROM external_job_settlements s WHERE s.source_line_id=l.id AND s.company_id=l.company_id AND s.kind='SHORTAGE'),0) AS shortage
     FROM external_job_lines l JOIN fabric_rolls r ON r.id=l.roll_id AND r.company_id=l.company_id
     WHERE l.job_id=$1 AND l.company_id=$2 AND l.line_status='SENT' AND r.status='AT_EXTERNAL_JOB' ORDER BY r.id FOR UPDATE OF r`, [jobId, companyId])).rows;
@@ -123,7 +128,7 @@ export async function manufacturingOverview(db: Db, companyId: string, jobId: st
     i.name AS item_name,i.internal_code,c.name_ar AS color_name,
     (SELECT o.order_no FROM customer_orders o WHERE o.company_id=l.company_id AND o.id=l.customer_order_id) AS customer_order_no,
     (SELECT ol.line_no FROM customer_order_lines ol WHERE ol.company_id=l.company_id AND ol.id=l.customer_order_line_id) AS customer_order_line_no,
-    COALESCE((SELECT SUM(x.length_m) FROM external_job_return_lines x WHERE x.source_line_id=l.id AND x.company_id=l.company_id),0) AS returned_m,
+    COALESCE((SELECT SUM(x.length_m) FROM external_job_return_allocations x WHERE x.source_line_id=l.id AND x.company_id=l.company_id),0) AS returned_m,
     COALESCE((SELECT SUM(x.amount_m) FROM external_job_settlements x WHERE x.source_line_id=l.id AND x.company_id=l.company_id AND x.kind='SHORTAGE'),0) AS shortage_m,
     COALESCE((SELECT SUM(x.amount_m) FROM external_job_settlements x WHERE x.source_line_id=l.id AND x.company_id=l.company_id AND x.kind='EXCESS'),0) AS excess_m
     FROM external_job_lines l JOIN fabric_rolls r ON r.id=l.roll_id AND r.company_id=l.company_id
@@ -157,7 +162,9 @@ const returnSchema = z.object({
   attachments: z.array(z.string().max(1000).refine(v => /^https:\/\//i.test(v) || /^\/uploads\//.test(v), 'رابط مرفق غير صالح')).max(10).default([]),
   destinationWarehouseId: uuid, destinationLocationId: uuid.nullable().optional(),
   completedServiceIds: z.array(uuid).max(30).default([]),
-  lines: z.array(z.object({ sourceLineId: uuid, lengthM: amount, weightKg: optionalAmount,
+  lines: z.array(z.object({ sourceLineId: uuid.optional(), itemId: uuid.optional(),
+    targetRef: z.object({ customerOrderId: uuid.nullable(), customerOrderLineId: uuid.nullable() }).strict().optional(),
+    lengthM: amount, weightKg: optionalAmount,
     barcode: z.string().trim().min(1).max(200).optional(), colorId: uuid.nullable().optional(),
     colorName: z.string().trim().max(200).optional(), colorCode: z.string().trim().max(100).optional(),
     widthCm: optionalAmount, gsm: optionalAmount,
@@ -185,39 +192,82 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
   const sourceLines = (await db.query(`SELECT l.*,r.item_id,r.unit_cost,r.currency_code,r.width_cm,r.gsm,r.status AS roll_status
     FROM external_job_lines l JOIN fabric_rolls r ON r.id=l.roll_id AND r.company_id=l.company_id
     WHERE l.job_id=$1 AND l.company_id=$2 ORDER BY r.id FOR UPDATE OF l,r`, [jobId, companyId])).rows;
-  const requested = new Map<string, number>();
-  for (const l of input.lines) requested.set(l.sourceLineId, (requested.get(l.sourceLineId) || 0) + milli(l.lengthM));
-  for (const [lineId, qty] of requested) {
-    const line = sourceLines.find(l => l.id === lineId);
-    if (!line || line.line_status !== 'SENT' || line.roll_status !== 'AT_EXTERNAL_JOB') fail('البند غير متاح للاستلام');
-    const totals = (await db.query(`SELECT
-      COALESCE((SELECT SUM(length_m) FROM external_job_return_lines WHERE company_id=$1 AND source_line_id=$2),0) AS received,
-      COALESCE((SELECT SUM(CASE WHEN kind='SHORTAGE' THEN amount_m ELSE -amount_m END) FROM external_job_settlements WHERE company_id=$1 AND source_line_id=$2),0) AS settled`, [companyId, lineId])).rows[0];
-    if (qty > milli(line.sent_length_m) - milli(totals.received) - milli(totals.settled)) fail('الكمية تتجاوز المتبقي؛ راجع التسويات المعتمدة');
+  // الاستلام بمرجع الكمية الإجمالية (ملاحظة بشير): لا يختار المستخدم «البكرة المرسلة». يُوزَّع كل رول راجع تلقائياً
+  // على بنود الإرسال بحدود المتبقي لكل بند: يُفضَّل بند واحد يتسع له، وإلا يُقسَّم بالتتابع (الأقدم أولاً).
+  // sourceLineId اختياري لفرض بند بعينه، وitemId/targetRef اختياريان لحصر التوزيع بخامة أو بأوردر/سطر لون معيّن.
+  const receivedTotals = (await db.query(`SELECT l.id,
+    COALESCE((SELECT SUM(a.length_m) FROM external_job_return_allocations a WHERE a.company_id=l.company_id AND a.source_line_id=l.id),0) AS received,
+    COALESCE((SELECT SUM(CASE WHEN s.kind='SHORTAGE' THEN s.amount_m ELSE -s.amount_m END) FROM external_job_settlements s WHERE s.company_id=l.company_id AND s.source_line_id=l.id),0) AS settled
+    FROM external_job_lines l WHERE l.company_id=$1 AND l.job_id=$2`, [companyId, jobId])).rows;
+  const remaining = new Map<string, number>();
+  for (const sl of sourceLines) {
+    const t = receivedTotals.find(x => x.id === sl.id);
+    remaining.set(sl.id, sl.line_status === 'SENT' && sl.roll_status === 'AT_EXTERNAL_JOB' ? milli(sl.sent_length_m) - milli(t?.received) - milli(t?.settled) : 0);
   }
+  const fifo = [...sourceLines].sort(byLineOrder);
+  const itemOf = (sl: { sent_item_id?: string | null; item_id: string }) => String(sl.sent_item_id ?? sl.item_id);
+  type Slice = { line: (typeof sourceLines)[number]; milli: number };
+  const allocate = (want: { sourceLineId?: string; itemId?: string; targetRef?: { customerOrderId: string | null; customerOrderLineId: string | null }; lengthM: number }): Slice[] => {
+    const need = milli(want.lengthM);
+    let pool = fifo.filter(sl => (remaining.get(sl.id) ?? 0) > 0);
+    if (want.sourceLineId) {
+      const only = sourceLines.find(sl => sl.id === want.sourceLineId);
+      if (!only || (remaining.get(only.id) ?? 0) <= 0) fail('البند غير متاح للاستلام');
+      pool = [only!];
+    }
+    if (want.itemId) pool = pool.filter(sl => itemOf(sl) === want.itemId);
+    if (want.targetRef) pool = pool.filter(sl => (sl.customer_order_id ?? null) === want.targetRef!.customerOrderId && (sl.customer_order_line_id ?? null) === want.targetRef!.customerOrderLineId);
+    if (new Set(pool.map(itemOf)).size > 1) fail('حدد الخامة للرول الراجع؛ في المهمة أكثر من خامة');
+    const total = pool.reduce((n, sl) => n + (remaining.get(sl.id) ?? 0), 0);
+    if (!pool.length || need > total) fail('الكمية تتجاوز المتبقي؛ راجع التسويات المعتمدة');
+    const single = pool.find(sl => (remaining.get(sl.id) ?? 0) >= need);
+    const slices: Slice[] = [];
+    if (single) slices.push({ line: single, milli: need });
+    else {
+      let left = need;
+      for (const sl of pool) {
+        const take = Math.min(left, remaining.get(sl.id) ?? 0);
+        if (take > 0) { slices.push({ line: sl, milli: take }); left -= take; }
+        if (!left) break;
+      }
+    }
+    for (const sl of slices) remaining.set(sl.line.id, (remaining.get(sl.line.id) ?? 0) - sl.milli);
+    return slices;
+  };
   const batch = (await db.query(`INSERT INTO external_job_return_batches(company_id,job_id,request_id,request_hash,dye_paper_no,notes,attachments,received_by)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [companyId, jobId, input.requestId, hash, input.dyePaperNo, input.notes || null, JSON.stringify(input.attachments), userId])).rows[0];
   for (const l of input.lines) {
-    const source = sourceLines.find(s => s.id === l.sourceLineId)!;
+    const slices = allocate(l);
+    const source = slices[0].line;
     if (l.defective && (!l.defectReason || !l.responsibleParty)) fail('سبب العيب والجهة المسؤولة مطلوبان');
     if (l.colorId && !(await db.query('SELECT 1 FROM fabric_colors WHERE company_id=$1 AND id=$2', [companyId, l.colorId])).rows.length) fail('اللون غير صالح');
     const barcode = l.barcode || await generateBarcode(db as PoolClient, companyId);
     if ((await db.query('SELECT 1 FROM fabric_rolls WHERE company_id=$1 AND barcode=$2', [companyId, barcode])).rows.length) fail('الباركود مستخدم؛ اختر باركوداً جديداً مع الاحتفاظ بارتباطه بالأصلي', 'DUPLICATE');
     const status = l.defective ? 'RESERVED' : 'AVAILABLE';
     const colorId = l.colorName || l.colorCode ? await findOrCreateColor(db as PoolClient, companyId, l.colorName || '', l.colorCode || '') : l.colorId ?? source.sent_color_id;
-    const width = l.widthCm ?? source.sent_width_cm ?? source.width_cm;
-    const gsm = l.gsm ?? source.sent_gsm ?? source.gsm;
+    const width = l.widthCm ?? job.finished_width_cm ?? source.sent_width_cm ?? source.width_cm;
+    const gsm = l.gsm ?? job.finished_gsm ?? source.sent_gsm ?? source.gsm;
     const calculatedWeight = calcWeight(l.lengthM, width == null ? null : Number(width), gsm == null ? null : Number(gsm));
+    // رول يغطي أكثر من بند: تكلفة الوحدة متوسط مرجّح بالأمتار إن اتحدت العملة وتوفرت التكلفة، وإلا تكلفة البند الأساسي.
+    const lineCost = (sl: Slice) => sl.line.sent_unit_cost ?? sl.line.unit_cost;
+    const lineCcy = (sl: Slice) => String(sl.line.sent_currency_code ?? sl.line.currency_code);
+    const unitCost = slices.length > 1 && slices.every(sl => lineCost(sl) != null && lineCcy(sl) === lineCcy(slices[0]))
+      ? Math.round(slices.reduce((n, sl) => n + Number(lineCost(sl)) * sl.milli, 0) / slices.reduce((n, sl) => n + sl.milli, 0) * 10000) / 10000
+      : lineCost(slices[0]);
     const roll = (await db.query(`INSERT INTO fabric_rolls(company_id,item_id,color_id,supplier_id,warehouse_id,location_id,barcode,
       length_m,actual_weight_kg,width_cm,gsm,unit_cost,currency_code,status,notes,created_by_user_id,calculated_weight_kg)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, [companyId, source.sent_item_id ?? source.item_id,
       colorId, job.supplier_id, input.destinationWarehouseId, input.destinationLocationId || null, barcode,
       l.lengthM, l.weightKg ?? null, width, gsm,
-      source.sent_unit_cost ?? source.unit_cost, source.sent_currency_code ?? source.currency_code, status, l.notes || null, userId, calculatedWeight])).rows[0];
+      unitCost, source.sent_currency_code ?? source.currency_code, status, l.notes || null, userId, calculatedWeight])).rows[0];
     await db.query(`INSERT INTO inventory_movements(company_id,roll_id,movement_type,to_warehouse_id,to_location_id,new_status,length_delta_m,weight_delta_kg,reference_type,reference_id,reference_no,created_by_user_id)
       VALUES($1,$2,'EXTERNAL_JOB_RETURNED',$3,$4,$5,$6,$7,'EXTERNAL_JOB_RETURN',$8,$9,$10)`, [companyId, roll.id, input.destinationWarehouseId, input.destinationLocationId || null, status, l.lengthM, l.weightKg ?? null, batch.id, job.job_no, userId]);
-    await db.query(`INSERT INTO external_job_return_lines(company_id,job_id,batch_id,source_line_id,source_roll_id,original_barcode,result_roll_id,
-      length_m,weight_kg,defective,defect_reason,responsible_party,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [companyId, jobId, batch.id, l.sourceLineId, source.roll_id, source.sent_barcode, roll.id, l.lengthM, l.weightKg ?? null, l.defective, l.defectReason || null, l.responsibleParty || null, l.notes || null]);
+    const returnLine = (await db.query(`INSERT INTO external_job_return_lines(company_id,job_id,batch_id,source_line_id,source_roll_id,original_barcode,result_roll_id,
+      length_m,weight_kg,defective,defect_reason,responsible_party,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, [companyId, jobId, batch.id, source.id, source.roll_id, source.sent_barcode, roll.id, l.lengthM, l.weightKg ?? null, l.defective, l.defectReason || null, l.responsibleParty || null, l.notes || null])).rows[0];
+    // استبدال التوزيع الافتراضي 1:1 (يضيفه مشغّل القاعدة) بالتوزيع الفعلي على بنود الإرسال.
+    await db.query('DELETE FROM external_job_return_allocations WHERE company_id=$1 AND return_line_id=$2', [companyId, returnLine.id]);
+    for (const sl of slices) await db.query(`INSERT INTO external_job_return_allocations(company_id,job_id,return_line_id,source_line_id,length_m) VALUES($1,$2,$3,$4,$5)`,
+      [companyId, jobId, returnLine.id, sl.line.id, sl.milli / 1000]);
   }
   for (const serviceId of input.completedServiceIds) await db.query('INSERT INTO external_job_return_services(batch_id,service_id) VALUES($1,$2)', [batch.id, serviceId]);
   await syncManufacturingSourceBalances(db, companyId, userId, jobId);
@@ -225,15 +275,36 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
 }
 
 export async function settleManufacturingShortage(db: Db, companyId: string, userId: string, jobId: string, raw: unknown) {
-  const input = z.object({ sourceLineId: uuid, amountM: amount, reason: text, kind: z.enum(['SHORTAGE','EXCESS']).default('SHORTAGE') }).strict().parse(raw);
+  const input = z.object({ sourceLineId: uuid.optional(), amountM: amount, reason: text, kind: z.enum(['SHORTAGE','EXCESS']).default('SHORTAGE') }).strict().parse(raw);
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.lifecycle_closed_at) fail('المهمة مغلقة');
   await assertNewReceiptMode(db, companyId, jobId);
   await captureManufacturingSnapshots(db, companyId, jobId);
   const overview = await manufacturingOverview(db, companyId, jobId);
-  const line = overview.lines.find(l => l.id === input.sourceLineId);
-  if (!line || (input.kind === 'SHORTAGE' && milli(input.amountM) > milli(line.sent_length_m) + milli(line.excess_m) - milli(line.returned_m) - milli(line.shortage_m))) fail('النقص يتجاوز الفرق غير المحسوم');
-  await db.query(`INSERT INTO external_job_settlements(company_id,job_id,source_line_id,amount_m,reason,approved_by,kind) VALUES($1,$2,$3,$4,$5,$6,$7)`, [companyId, jobId, input.sourceLineId, input.amountM, input.reason, userId, input.kind]);
+  const fifo = [...overview.lines].sort(byLineOrder);
+  const diff = (l: { sent_length_m: string; excess_m: string; returned_m: string; shortage_m: string }) =>
+    milli(l.sent_length_m) + milli(l.excess_m) - milli(l.returned_m) - milli(l.shortage_m);
+  // التسوية بمرجع الكمية الإجمالية: بلا بند محدد يُوزَّع النقص تلقائياً على الفروق غير المحسومة (الأقدم أولاً)،
+  // وتُسجَّل الزيادة على أول بند. يبقى sourceLineId اختيارياً لفرض بند بعينه.
+  const rows: { lineId: string; amount: number }[] = [];
+  if (input.sourceLineId) {
+    const line = fifo.find(l => l.id === input.sourceLineId);
+    if (!line || (input.kind === 'SHORTAGE' && milli(input.amountM) > diff(line))) fail('النقص يتجاوز الفرق غير المحسوم');
+    rows.push({ lineId: line!.id, amount: milli(input.amountM) });
+  } else if (input.kind === 'EXCESS') {
+    if (!fifo.length) fail('البند غير متاح للاستلام');
+    rows.push({ lineId: fifo[0].id, amount: milli(input.amountM) });
+  } else {
+    let left = milli(input.amountM);
+    for (const l of fifo) {
+      const take = Math.min(left, Math.max(0, diff(l)));
+      if (take > 0) { rows.push({ lineId: l.id, amount: take }); left -= take; }
+      if (!left) break;
+    }
+    if (left > 0) fail('النقص يتجاوز الفرق غير المحسوم');
+  }
+  for (const r of rows) await db.query(`INSERT INTO external_job_settlements(company_id,job_id,source_line_id,amount_m,reason,approved_by,kind) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+    [companyId, jobId, r.lineId, r.amount / 1000, input.reason, userId, input.kind]);
   await syncManufacturingSourceBalances(db, companyId, userId, jobId);
 }
 

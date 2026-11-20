@@ -125,11 +125,11 @@ export async function addManufacturingCharge(db: Db, company: string, user: stri
 }
 export const manufacturingGenealogy = `WITH RECURSIVE lineage(id) AS (
  SELECT o.result_fabric_roll_id FROM manufacturing_raw_roll_outputs o JOIN manufacturing_weaving_runs r ON r.id=o.weaving_run_id AND r.company_id=o.company_id WHERE r.company_id=$1 AND r.work_order_id=$2 AND o.result_fabric_roll_id IS NOT NULL
- UNION SELECT q.result_roll_id FROM external_job_return_lines q JOIN lineage p ON p.id=q.source_roll_id WHERE q.company_id=$1
+ UNION SELECT q.result_roll_id FROM external_job_return_sources q JOIN lineage p ON p.id=q.source_roll_id WHERE q.company_id=$1
 )`;
 export async function manufacturingDispatchOrder(db: Db, company: string, rollIds: string[]): Promise<string | null> {
     const orders = (await db.query(`WITH RECURSIVE ancestors(id) AS (
-    SELECT unnest($2::uuid[]) UNION SELECT q.source_roll_id FROM external_job_return_lines q JOIN ancestors a ON a.id=q.result_roll_id WHERE q.company_id=$1
+    SELECT unnest($2::uuid[]) UNION SELECT q.source_roll_id FROM external_job_return_sources q JOIN ancestors a ON a.id=q.result_roll_id WHERE q.company_id=$1
    ) SELECT DISTINCT r.work_order_id FROM ancestors a JOIN manufacturing_raw_roll_outputs o ON o.result_fabric_roll_id=a.id AND o.company_id=$1
    JOIN manufacturing_weaving_runs r ON r.id=o.weaving_run_id AND r.company_id=o.company_id`, [company, rollIds])).rows;
     if (orders.length > 1)

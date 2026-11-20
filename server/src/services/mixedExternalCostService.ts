@@ -8,7 +8,7 @@ export async function assertExternalCostUnfrozen(db:Db,company:string,job:string
 }
 export async function mixedExternalOrigins(db:Db,company:string,rollIds:string[]){
   const rows=(await db.query(`WITH RECURSIVE ancestors(seed,id) AS (SELECT r,r FROM unnest($2::uuid[]) r
-    UNION SELECT a.seed,q.source_roll_id FROM external_job_return_lines q JOIN ancestors a ON a.id=q.result_roll_id WHERE q.company_id=$1)
+    UNION SELECT a.seed,q.source_roll_id FROM external_job_return_sources q JOIN ancestors a ON a.id=q.result_roll_id WHERE q.company_id=$1)
     SELECT DISTINCT a.seed,r.work_order_id FROM ancestors a JOIN manufacturing_raw_roll_outputs o ON o.company_id=$1 AND o.result_fabric_roll_id=a.id
     JOIN manufacturing_weaving_runs r ON r.company_id=o.company_id AND r.id=o.weaving_run_id ORDER BY r.work_order_id`,[company,rollIds])).rows;
   if(rollIds.some(id=>new Set(rows.filter(r=>r.seed===id).map(r=>r.work_order_id)).size>1))throw Object.assign(new Error('مصدر إحدى الرولات متعدد وغير محسوم؛ راجع التتبع قبل توزيع التكلفة'),{code:'VALIDATION'});

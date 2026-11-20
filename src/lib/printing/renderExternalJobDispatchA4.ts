@@ -109,6 +109,13 @@ export function renderExternalJobDispatchA4Html(opts: {
       <div class="row"><span class="lbl">${t('processingNew.summaryOrderNo')}:</span><span class="val mono">#${escapeHtml(job.supplier_order_no ?? '—')}</span></div>
       <div class="row"><span class="lbl">${t('processingNew.sourceWarehouseLabel')}:</span><span class="val">${escapeHtml(job.source_warehouse_name || '—')}</span></div>
       ` : ''}
+      ${([
+        ['print.rawWidth', job.raw_width_cm],
+        ['print.finishedWidth', job.finished_width_cm],
+        ['print.rawGsm', job.raw_gsm],
+        ['print.finishedGsm', job.finished_gsm],
+      ] as const).filter(([, v]) => v != null && String(v) !== '').map(([k, v]) =>
+        `<div class="row"><span class="lbl">${t(k)}:</span><span class="val mono">${escapeHtml(Number(v))}</span></div>`).join('')}
     </div>
 
     ${isProcessing && job.process_description ? `

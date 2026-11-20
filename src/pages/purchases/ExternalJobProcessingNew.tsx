@@ -1,4 +1,5 @@
 import { ExternalOrderLinePicker } from '../../components/purchases/ExternalOrderLinePicker';
+import { ExternalBulkOrderLink, type BulkLinkRef } from '../../components/purchases/ExternalBulkOrderLink';
 import type { ExternalLineReference } from '../../lib/api/externalJobsApi';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -52,6 +53,14 @@ export const ExternalJobProcessingNew = () => {
   const [saving, setSaving] = useState(false);
   const [references, setReferences] = useState<Record<string, ExternalLineReference>>({});
   const [traceabilityOnly, setTraceabilityOnly] = useState(false);
+  /** الربط الجماعي: أتواب محددة بالمربعات، وتسميات الأوردر المطبّقة للعرض. */
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [linkLabels, setLinkLabels] = useState<Record<string, string>>({});
+  /** الورقة العامة: العرض ووزن المتر المربع خام/محضّر (اختياري). */
+  const [rawWidth, setRawWidth] = useState('');
+  const [finishedWidth, setFinishedWidth] = useState('');
+  const [rawGsm, setRawGsm] = useState('');
+  const [finishedGsm, setFinishedGsm] = useState('');
 
   const loadPrepTypes = async () => {
     try {
@@ -124,6 +133,33 @@ export const ExternalJobProcessingNew = () => {
 
   const removeRoll = (rollId: string) => {
     setSelectedRolls((prev) => prev.filter((r) => r.id !== rollId));
+    setCheckedIds((prev) => { const next = new Set(prev); next.delete(rollId); return next; });
+  };
+
+  const applyBulkLink = (ids: string[], ref: BulkLinkRef, label: string) => {
+    setReferences((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        if (ref === null) delete next[id];
+        else next[id] = { rollId: id, customerOrderId: ref.customerOrderId, customerOrderLineId: ref.customerOrderLineId };
+      }
+      return next;
+    });
+    setLinkLabels((prev) => {
+      const next = { ...prev };
+      for (const id of ids) {
+        if (label) next[id] = label;
+        else delete next[id];
+      }
+      return next;
+    });
+  };
+
+  const linkText = (rollId: string) => {
+    const ref = references[rollId];
+    if (!ref) return t('traceability.inherit');
+    if (ref.customerOrderId === null) return t('traceability.stock');
+    return linkLabels[rollId] ?? t('traceability.linked');
   };
 
   const handleScanKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -158,6 +194,12 @@ export const ExternalJobProcessingNew = () => {
 
   const handleSave = async () => {
     if (!canSave || !fabricStage) return;
+    const sheetNum = (v: string) => (v.trim() === '' ? null : Number(v));
+    const sheet = { rawWidthCm: sheetNum(rawWidth), finishedWidthCm: sheetNum(finishedWidth), rawGsm: sheetNum(rawGsm), finishedGsm: sheetNum(finishedGsm) };
+    if (Object.values(sheet).some((v) => v !== null && (!Number.isFinite(v) || v < 0))) {
+      showToast({ type: 'error', message: t('processingNew.sheetInvalid') });
+      return;
+    }
     setSaving(true);
     try {
       const res = await createProcessingExternalJob({
@@ -171,6 +213,7 @@ export const ExternalJobProcessingNew = () => {
         rollIds: selectedRolls.map((r) => r.id),
         lineReferences: selectedRolls.flatMap(r => references[r.id] ? [references[r.id]] : []),
         traceabilityOnly,
+        ...sheet,
       });
       showToast({ type: 'success', message: t('processingNew.createdSuccess', { jobNo: res.data.jobNo }) });
       navigate(`/purchases/external-jobs/${res.data.id}${manufacturing?'?from=manufacturing':''}`);
@@ -314,6 +357,32 @@ export const ExternalJobProcessingNew = () => {
               />
             </div>
 
+            <fieldset className="space-y-2 rounded-lg border border-slate-200 p-3">
+              <legend className="px-1 text-sm font-bold text-slate-700">{t('processingNew.sheetTitle')}</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {([
+                  ['rawWidthLabel', rawWidth, setRawWidth],
+                  ['finishedWidthLabel', finishedWidth, setFinishedWidth],
+                  ['rawGsmLabel', rawGsm, setRawGsm],
+                  ['finishedGsmLabel', finishedGsm, setFinishedGsm],
+                ] as const).map(([key, value, set]) => (
+                  <label key={key} className="block text-xs font-bold text-slate-600">
+                    {t(`processingNew.${key}`)}
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={value}
+                      onChange={(e) => set(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      dir="ltr"
+                    />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             {(selectedPrepType || selectedSupplier || selectedWarehouse) && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 grid sm:grid-cols-2 gap-1.5 text-sm">
                 {selectedSupplier && <div><span className="text-slate-500">{t('processingNew.summaryParty')}: </span><strong>{selectedSupplier.name}</strong></div>}
@@ -361,11 +430,20 @@ export const ExternalJobProcessingNew = () => {
               </div>
             )}
 
+            {selectedRolls.length > 0 && <ExternalBulkOrderLink rolls={selectedRolls} checkedIds={checkedIds} onApply={applyBulkLink} />}
             {selectedRolls.length > 0 ? (
               <div className="overflow-x-auto border border-emerald-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead className="bg-emerald-50 text-emerald-700">
                     <tr>
+                      <th className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          aria-label={t('traceability.checkAll')}
+                          checked={selectedRolls.length > 0 && selectedRolls.every((r) => checkedIds.has(r.id))}
+                          onChange={(e) => setCheckedIds(e.target.checked ? new Set(selectedRolls.map((r) => r.id)) : new Set())}
+                        />
+                      </th>
                       <th className="px-3 py-2 text-right">{t('processingNew.colBarcode')}</th>
                       <th className="px-3 py-2 text-right">{t('processingNew.colItem')}</th>
                       <th className="px-3 py-2 text-right">{t('processingNew.colColor')}</th>
@@ -377,9 +455,21 @@ export const ExternalJobProcessingNew = () => {
                   <tbody className="divide-y divide-slate-100">
                     {selectedRolls.map((r) => (
                       <tr key={r.id}>
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            aria-label={r.barcode}
+                            checked={checkedIds.has(r.id)}
+                            onChange={(e) => setCheckedIds((prev) => { const next = new Set(prev); if (e.target.checked) next.add(r.id); else next.delete(r.id); return next; })}
+                          />
+                        </td>
                         <td className="px-3 py-2 font-mono text-xs text-slate-600" dir="ltr">{r.barcode}</td>
                         <td className="px-3 py-2 font-medium text-slate-800">{r.item_name}
-                          <ExternalOrderLinePicker rollId={r.id} value={references[r.id]} onChange={value => setReferences(prev => ({...prev,[r.id]:value}))} />
+                          <p className="mt-1 text-xs font-normal text-indigo-700">{linkText(r.id)}</p>
+                          <details className="text-xs font-normal">
+                            <summary className="cursor-pointer text-slate-500">{t('traceability.changeOne')}</summary>
+                            <ExternalOrderLinePicker rollId={r.id} value={references[r.id]} onChange={value => { setReferences(prev => ({...prev,[r.id]:value})); setLinkLabels(prev => { const next = {...prev}; delete next[r.id]; return next; }); }} />
+                          </details>
                         </td>
                         <td className="px-3 py-2 text-slate-600">{r.color_name_ar} {r.color_code ? `(${r.color_code})` : ''}</td>
                         <td className="px-3 py-2 font-mono text-slate-600">{r.length_m}</td>
@@ -394,7 +484,7 @@ export const ExternalJobProcessingNew = () => {
                   </tbody>
                   <tfoot className="bg-slate-50 font-bold">
                     <tr>
-                      <td colSpan={3} className="px-3 py-2">{t('processingNew.totalsLabel', { count: selectedRolls.length })}</td>
+                      <td colSpan={4} className="px-3 py-2">{t('processingNew.totalsLabel', { count: selectedRolls.length })}</td>
                       <td className="px-3 py-2 font-mono">{totals.totalM.toFixed(2)}</td>
                       <td className="px-3 py-2 font-mono">{totals.totalKg.toFixed(2)}</td>
                       <td />

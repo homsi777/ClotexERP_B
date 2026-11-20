@@ -10,10 +10,17 @@ import { postExternalJobFee } from '../../lib/api/externalJobsApi';
 import { renderExternalManufacturingBatch } from '../../lib/printing/renderExternalManufacturingBatch';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 
-type Row = { sourceLineId: string; lengthM: string; weightKg: string; barcode: string; colorName: string; colorCode: string; widthCm: string; gsm: string; defective: boolean; defectReason: 'DYE_HOUSE' | 'INTERNAL_KNITTING' | 'OTHER'; responsibleParty: string; notes: string };
-const blank = (): Row => ({ sourceLineId: '', lengthM: '', weightKg: '', barcode: '', colorName: '', colorCode: '', widthCm: '', gsm: '', defective: false, defectReason: 'DYE_HOUSE', responsibleParty: '', notes: '' });
+type Row = { itemId: string; targetKey: string; lengthM: string; weightKg: string; barcode: string; colorName: string; colorCode: string; widthCm: string; gsm: string; defective: boolean; defectReason: 'DYE_HOUSE' | 'INTERNAL_KNITTING' | 'OTHER'; responsibleParty: string; notes: string };
+const blank = (defaults: { widthCm?: string | null; gsm?: string | null } = {}): Row => ({ itemId: '', targetKey: '', lengthM: '', weightKg: '', barcode: '', colorName: '', colorCode: '', widthCm: defaults.widthCm ?? '', gsm: defaults.gsm ?? '', defective: false, defectReason: 'DYE_HOUSE', responsibleParty: '', notes: '' });
 const inputClass = 'border rounded p-2 w-full text-sm';
 const remaining = (l: { sent_length_m: string; returned_m: string; shortage_m: string; excess_m: string }) => Math.max(0, Math.round((Number(l.sent_length_m) + Number(l.excess_m) - Number(l.returned_m) - Number(l.shortage_m)) * 1000) / 1000);
+
+/** مفتاح الربط «أوردر|سطر لون» ← مرجع الخادم (فارغ = تلقائي، «|» = مخزون عام). */
+const targetRefOf = (key: string) => {
+  if (!key) return undefined;
+  const [order, line] = key.split('|');
+  return { customerOrderId: order || null, customerOrderLineId: line || null };
+};
 
 export function ExternalManufacturingLifecycle({ jobId, receiving = false, initialTab }: { jobId: string; receiving?: boolean; initialTab?: 'quality' }) {
   const [query]=useSearchParams();
@@ -29,6 +36,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
   const [notes, setNotes] = useState('');
   const [attachments, setAttachments] = useState('');
   const [completed, setCompleted] = useState<string[]>([]);
+  const [receiveStep, setReceiveStep] = useState<1 | 2>(1);
   const [tab, setTab] = useState<'overview'|'receive'|'quality'|'settlements'|'pricing'>(initialTab || (query.get('quality')==='1'?'quality':'overview'));
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -60,13 +68,13 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
   const receive = () => run(async () => {
     const payload = { destinationWarehouseId: warehouseId, destinationLocationId: locationId || null, dyePaperNo: paper.trim(), notes: notes.trim() || undefined,
       attachments: attachments.split('\n').map(v => v.trim()).filter(Boolean), completedServiceIds: completed,
-      lines: rows.map(r => ({ sourceLineId: r.sourceLineId, lengthM: Number(r.lengthM), weightKg: r.weightKg === '' ? null : Number(r.weightKg),
+      lines: rows.map(r => ({ itemId: r.itemId || undefined, targetRef: targetRefOf(r.targetKey), lengthM: Number(r.lengthM), weightKg: r.weightKg === '' ? null : Number(r.weightKg),
         barcode: r.barcode.trim() || undefined, colorName: r.colorName.trim() || undefined, colorCode: r.colorCode.trim() || undefined, widthCm: r.widthCm === '' ? null : Number(r.widthCm), gsm: r.gsm === '' ? null : Number(r.gsm),
         defective: r.defective, defectReason: r.defective ? r.defectReason : undefined, responsibleParty: r.defective ? r.responsibleParty.trim() : undefined, notes: r.notes.trim() || undefined })) };
     const signature = JSON.stringify(payload);
     if (!retry.current || retry.current.payload !== signature) retry.current = { payload: signature, id: crypto.randomUUID() };
     await manufacturingAction(jobId, 'returns', { ...payload, requestId: retry.current.id });
-    retry.current = null; setRows([blank()]); setPaper(''); setNotes(''); setAttachments(''); setCompleted([]);setTab('overview');
+    retry.current = null; setRows([blank()]); setPaper(''); setNotes(''); setAttachments(''); setCompleted([]); setReceiveStep(1); setTab('quality');
   }, lifecycleT('lifecycle.returnSaved'));
   if (!response) return <section className="p-4 border rounded">{error || lifecycleT('lifecycle.loading')}</section>;
   const { data, canPrice, canManage, canReceive } = response;
@@ -77,6 +85,21 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
   const excess = data.lines.reduce((n, l) => n + Number(l.excess_m), 0);
   const defective = data.batches.flatMap(b => b.lines).filter(l => l.defective).reduce((n, l) => n + Number(l.length_m), 0);
   const open = !data.job.lifecycle_closed_at && data.job.document_status === 'CONFIRMED' && !data.legacyMode;
+  const remainingTotal = Math.max(0, Math.round((sent + excess - received - shortage) * 1000) / 1000);
+  // الاستلام بمرجع الكمية الإجمالية: لا اختيار لبكرة مرسلة. تظهر قوائم الخامة/الأوردر فقط عند تعدّدها في المهمة.
+  const openLines = data.lines.filter(l => remaining(l) > 0);
+  const itemChoices = [...new Map(openLines.map(l => [String(l.sent_item_id ?? l.item_id ?? ''), `${l.item_name} / ${l.internal_code}`])).entries()].filter(([k]) => k);
+  const targetChoices = [...new Map(openLines.map(l => [`${l.customer_order_id ?? ''}|${l.customer_order_line_id ?? ''}`,
+    l.customer_order_no ? `${l.customer_order_no} / ${l.customer_order_line_no ?? ''}` : lifecycleT('traceability.stock')])).entries()];
+  const jobDefaults = { widthCm: data.job.finished_width_cm ?? null, gsm: data.job.finished_gsm ?? null };
+  const enteredTotal = rows.reduce((n, r) => n + Number(r.lengthM || 0), 0);
+  const missing = [
+    ...(!warehouseId ? [lifecycleT('lifecycle.missing.warehouse')] : []),
+    ...(!paper.trim() ? [lifecycleT('lifecycle.missing.paper')] : []),
+    ...(rows.some(r => !(Number(r.lengthM) > 0)) ? [lifecycleT('lifecycle.missing.lengths')] : []),
+    ...(enteredTotal > remainingTotal + 0.0005 ? [lifecycleT('lifecycle.missing.exceeds')] : []),
+    ...(rows.some(r => r.defective && !r.responsibleParty.trim()) ? [lifecycleT('lifecycle.missing.responsible')] : []),
+  ];
   return <section data-external-lifecycle className="min-w-0 bg-white border rounded-xl p-4 space-y-4" dir={lifecycleI18n.dir()}>
     <h3 className="font-bold">{lifecycleT('lifecycle.title')}{data.job.job_no} — {data.job.supplier_name}</h3>
     {data.job.traceability_only && <p className="rounded bg-amber-50 p-3 text-amber-900">{lifecycleT('traceability.costNotice')}</p>}
@@ -89,6 +112,12 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
     </div>}
     <p>{lifecycleT('lifecycle.sentPrefix')}{sent.toFixed(3)}{lifecycleT('lifecycle.receivedPrefix')}{received.toFixed(3)}{lifecycleT('lifecycle.remainingPrefix')}{Math.max(0, sent + excess - received - shortage).toFixed(3)}{lifecycleT('lifecycle.shortagePrefix')}{shortage.toFixed(3)}{lifecycleT('lifecycle.excessPrefix')}{excess.toFixed(3)}{lifecycleT('lifecycle.defectivePrefix')}{data.legacyMode ? lifecycleT('lifecycle.unknown') : defective.toFixed(3)}{lifecycleT('lifecycle.meterSuffix')}</p>
     <p>{data.legacyMode ? lifecycleT(`status.${data.job.document_status.toLowerCase()}`) : data.job.lifecycle_closed_at ? lifecycleT('lifecycle.closed') : lifecycleT('lifecycle.open')} — {data.job.fee_posted_at ? lifecycleT('lifecycle.posted') : data.job.fee_amount !== null ? lifecycleT('lifecycle.pricedPending') : lifecycleT('lifecycle.unpriced')}</p>
+    {(data.job.raw_width_cm || data.job.finished_width_cm || data.job.raw_gsm || data.job.finished_gsm) && <p className="text-sm text-slate-700">{lifecycleT('lifecycle.sheetPrefix')}{[
+      data.job.raw_width_cm ? `${lifecycleT('print.rawWidth')}: ${Number(data.job.raw_width_cm)}` : '',
+      data.job.finished_width_cm ? `${lifecycleT('print.finishedWidth')}: ${Number(data.job.finished_width_cm)}` : '',
+      data.job.raw_gsm ? `${lifecycleT('print.rawGsm')}: ${Number(data.job.raw_gsm)}` : '',
+      data.job.finished_gsm ? `${lifecycleT('print.finishedGsm')}: ${Number(data.job.finished_gsm)}` : '',
+    ].filter(Boolean).join(lifecycleT('lifecycle.separator'))}</p>}
     <nav aria-label={lifecycleT('workflow.label')} className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">{([
       ['overview',lifecycleT('workflow.overview')],...(receiving&&canReceive&&open?[['receive',lifecycleT('workflow.receive')]]:[]),['quality',lifecycleT('workflow.quality')],...(canManage?[['settlements',lifecycleT('workflow.settlements')]]:[]),['pricing',lifecycleT('workflow.pricing')]
     ] as Array<[typeof tab,string]>).map(([id,label])=><button key={id} data-external-tab={id} aria-current={tab===id?'page':undefined} className={`rounded-lg border px-3 py-2 text-sm font-bold ${tab===id?'bg-indigo-600 text-white':'bg-white text-slate-700'}`} onClick={()=>setTab(id)}>{label}</button>)}</nav>
@@ -111,94 +140,108 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
           لم يتغيّرا بحرف واحد، تعديل عرض فقط. */}
       {tab==='receive'&&receiving && canReceive && open && <fieldset disabled={busy} className="space-y-3 border rounded-xl p-4 bg-slate-50">
         <legend className="font-bold px-1">{lifecycleT('lifecycle.receiptLegend')}</legend>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <label className="text-sm">{lifecycleT('lifecycle.warehouse')}<select aria-label={lifecycleT('lifecycle.warehouse')} className={inputClass} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}><option value="">{lifecycleT('lifecycle.chooseWarehouse')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
-          <label className="text-sm">{lifecycleT('lifecycle.location')}<select aria-label={lifecycleT('lifecycle.location')} className={inputClass} value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">{lifecycleT('lifecycle.noLocation')}</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-          <label className="text-sm">{lifecycleT('lifecycle.dyePaper')}<input aria-label={lifecycleT('lifecycle.dyePaper')} className={inputClass} required value={paper} onChange={e => setPaper(e.target.value)}/></label>
+        <div className="grid grid-cols-3 gap-2 rounded-lg border bg-white p-3 text-center text-sm">
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalSent')}</div><b>{(sent + excess).toFixed(3)}</b></div>
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalReceived')}</div><b>{received.toFixed(3)}</b></div>
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalRemaining')}</div><b className={remainingTotal > 0 ? 'text-amber-700' : 'text-emerald-700'}>{remainingTotal.toFixed(3)}</b></div>
         </div>
-
-        <div className="overflow-x-auto bg-white border rounded-lg">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-slate-600">
-              <tr>
-                <th className="p-2 text-right min-w-[220px]">{lifecycleT('lifecycle.sentRoll')}</th>
-                <th className="p-2 text-right">{lifecycleT('lifecycle.actualMeters')}</th>
-                <th className="p-2 text-right">{lifecycleT('lifecycle.actualWeight')}</th>
-                <th className="p-2 text-right">{lifecycleT('lifecycle.newBarcode')}</th>
-                <th className="p-2 text-right">{lifecycleT('lifecycle.width')}</th>
-                <th className="p-2 text-right">{lifecycleT('lifecycle.gsm')}</th>
-                <th className="p-2 text-right min-w-[140px]">{lifecycleT('lifecycle.returnedColor')}</th>
-                <th className="p-2 text-right">{lifecycleT('lifecycle.defectiveCheck')}</th>
-                <th className="p-2 text-right min-w-[160px]">{lifecycleT('lifecycle.lineNotes')}</th>
-                <th className="p-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <React.Fragment key={i}>
-                  <tr className="border-t align-top">
-                    <td className="p-2">
-                      <select aria-label={lifecycleT('lifecycle.sentRoll')} className={inputClass} value={r.sourceLineId} onChange={e => { const l=data.lines.find(x=>x.id===e.target.value);patch(i,{sourceLineId:e.target.value,widthCm:l?.width_cm??'',gsm:l?.gsm??''}); }}>
-                        <option value="">{lifecycleT('lifecycle.chooseRoll')}</option>
-                        {data.lines.filter(l=>remaining(l)>0).map(l=><option key={l.id} value={l.id}>{l.item_name} — {l.color_name} — {l.sent_barcode}{lifecycleT('lifecycle.remainingOption')}{remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}
-                      </select>
-                    </td>
-                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.actualMeters')} className={inputClass} type="number" min="0" step="0.001" value={r.lengthM} onChange={e=>patch(i,{lengthM:e.target.value})}/></td>
-                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.actualWeight')} className={inputClass} type="number" min="0" step="0.001" value={r.weightKg} onChange={e=>patch(i,{weightKg:e.target.value})}/></td>
-                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.newBarcode')} className={inputClass} value={r.barcode} onChange={e=>patch(i,{barcode:e.target.value})}/></td>
-                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.width')} className={inputClass} type="number" min="0" step="0.001" value={r.widthCm} onChange={e=>patch(i,{widthCm:e.target.value})}/></td>
-                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.gsm')} className={inputClass} type="number" min="0" step="0.001" value={r.gsm} onChange={e=>patch(i,{gsm:e.target.value})}/></td>
-                    <td className="p-2 space-y-1">
-                      <input placeholder={lifecycleT('lifecycle.returnedColor')} className={inputClass} value={r.colorName} onChange={e=>patch(i,{colorName:e.target.value})}/>
-                      <input placeholder={lifecycleT('lifecycle.returnedColorCode')} className={inputClass} value={r.colorCode} onChange={e=>patch(i,{colorCode:e.target.value})}/>
-                    </td>
-                    <td className="p-2 text-center"><input aria-label={lifecycleT('lifecycle.defectiveCheck')} type="checkbox" checked={r.defective} onChange={e=>patch(i,{defective:e.target.checked})}/></td>
-                    <td className="p-2"><input aria-label={lifecycleT('lifecycle.lineNotes')} placeholder={lifecycleT('lifecycle.lineNotes')} className={inputClass} value={r.notes} onChange={e=>patch(i,{notes:e.target.value})}/></td>
-                    <td className="p-2"><button type="button" onClick={()=>setRows(a=>a.filter((_,j)=>j!==i))}>{lifecycleT('lifecycle.deleteLine')}</button></td>
-                  </tr>
-                  {r.defective && (
-                    <tr className="bg-amber-50 border-t">
-                      <td className="p-2 text-amber-800 text-[11px]">{lifecycleT('lifecycle.defectiveCheck')}</td>
-                      <td className="p-2" colSpan={2}>
-                        <select aria-label={lifecycleT('lifecycle.defectReason')} className={inputClass} value={r.defectReason} onChange={e=>patch(i,{defectReason:e.target.value as Row['defectReason']})}>
-                          <option value="DYE_HOUSE">{lifecycleT('lifecycle.dyeDefect')}</option>
-                          <option value="INTERNAL_KNITTING">{lifecycleT('lifecycle.knittingDefect')}</option>
-                          <option value="OTHER">{lifecycleT('lifecycle.otherDefect')}</option>
-                        </select>
+        {receiveStep === 1 ? <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <label className="text-sm">{lifecycleT('lifecycle.warehouse')}<select aria-label={lifecycleT('lifecycle.warehouse')} className={inputClass} value={warehouseId} onChange={e => setWarehouseId(e.target.value)}><option value="">{lifecycleT('lifecycle.chooseWarehouse')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+            <label className="text-sm">{lifecycleT('lifecycle.location')}<select aria-label={lifecycleT('lifecycle.location')} className={inputClass} value={locationId} onChange={e => setLocationId(e.target.value)}><option value="">{lifecycleT('lifecycle.noLocation')}</option>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+            <label className="text-sm">{lifecycleT('lifecycle.dyePaper')}<input aria-label={lifecycleT('lifecycle.dyePaper')} className={inputClass} required value={paper} onChange={e => setPaper(e.target.value)}/></label>
+          </div>
+          <button type="button" disabled={!warehouseId || !paper.trim()} onClick={() => { setRows(r => (r.length === 1 && !r[0].lengthM ? [blank(jobDefaults)] : r)); setReceiveStep(2); }} className="bg-indigo-700 text-white px-4 py-2 rounded font-bold disabled:opacity-40">{lifecycleT('lifecycle.continueToRolls')}</button>
+          {(!warehouseId || !paper.trim()) && <p className="text-xs text-amber-700">{lifecycleT('lifecycle.step1Hint')}</p>}
+        </> : <>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-2 text-sm">
+            <span>{warehouses.find(w => w.id === warehouseId)?.name}{locationId ? ` / ${locations.find(l => l.id === locationId)?.name ?? ''}` : ''} — {lifecycleT('lifecycle.dyePaper')}: <b>{paper}</b></span>
+            <button type="button" className="text-indigo-700 font-bold" onClick={() => setReceiveStep(1)}>{lifecycleT('lifecycle.editHeader')}</button>
+          </div>
+          <h4 className="font-bold text-sm">{lifecycleT('lifecycle.rollsStepTitle')}</h4>
+          <div className="overflow-x-auto bg-white border rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-100 text-slate-600">
+                <tr>
+                  {itemChoices.length > 1 && <th className="p-2 text-right min-w-[160px]">{lifecycleT('lifecycle.itemColumnShort')}</th>}
+                  {targetChoices.length > 1 && <th className="p-2 text-right min-w-[160px]">{lifecycleT('lifecycle.targetColumn')}</th>}
+                  <th className="p-2 text-right">{lifecycleT('lifecycle.actualMeters')}</th>
+                  <th className="p-2 text-right">{lifecycleT('lifecycle.actualWeight')}</th>
+                  <th className="p-2 text-right">{lifecycleT('lifecycle.newBarcode')}</th>
+                  <th className="p-2 text-right">{lifecycleT('lifecycle.width')}</th>
+                  <th className="p-2 text-right">{lifecycleT('lifecycle.gsm')}</th>
+                  <th className="p-2 text-right min-w-[140px]">{lifecycleT('lifecycle.returnedColor')}</th>
+                  <th className="p-2 text-right">{lifecycleT('lifecycle.defectiveCheck')}</th>
+                  <th className="p-2 text-right min-w-[160px]">{lifecycleT('lifecycle.lineNotes')}</th>
+                  <th className="p-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <React.Fragment key={i}>
+                    <tr className="border-t align-top">
+                      {itemChoices.length > 1 && <td className="p-2"><select aria-label={lifecycleT('lifecycle.itemColumnShort')} className={inputClass} value={r.itemId} onChange={e => patch(i, { itemId: e.target.value })}><option value="">{lifecycleT('lifecycle.chooseItem')}</option>{itemChoices.map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></td>}
+                      {targetChoices.length > 1 && <td className="p-2"><select aria-label={lifecycleT('lifecycle.targetColumn')} className={inputClass} value={r.targetKey} onChange={e => patch(i, { targetKey: e.target.value })}><option value="">{lifecycleT('lifecycle.targetAuto')}</option>{targetChoices.map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></td>}
+                      <td className="p-2"><input aria-label={lifecycleT('lifecycle.actualMeters')} className={inputClass} type="number" min="0" step="0.001" value={r.lengthM} onChange={e=>patch(i,{lengthM:e.target.value})}/></td>
+                      <td className="p-2"><input aria-label={lifecycleT('lifecycle.actualWeight')} className={inputClass} type="number" min="0" step="0.001" value={r.weightKg} onChange={e=>patch(i,{weightKg:e.target.value})}/></td>
+                      <td className="p-2"><input aria-label={lifecycleT('lifecycle.newBarcode')} className={inputClass} value={r.barcode} onChange={e=>patch(i,{barcode:e.target.value})}/></td>
+                      <td className="p-2"><input aria-label={lifecycleT('lifecycle.width')} className={inputClass} type="number" min="0" step="0.001" value={r.widthCm} onChange={e=>patch(i,{widthCm:e.target.value})}/></td>
+                      <td className="p-2"><input aria-label={lifecycleT('lifecycle.gsm')} className={inputClass} type="number" min="0" step="0.001" value={r.gsm} onChange={e=>patch(i,{gsm:e.target.value})}/></td>
+                      <td className="p-2 space-y-1">
+                        <input placeholder={lifecycleT('lifecycle.returnedColor')} className={inputClass} value={r.colorName} onChange={e=>patch(i,{colorName:e.target.value})}/>
+                        <input placeholder={lifecycleT('lifecycle.returnedColorCode')} className={inputClass} value={r.colorCode} onChange={e=>patch(i,{colorCode:e.target.value})}/>
                       </td>
-                      <td className="p-2" colSpan={2}>
-                        <input placeholder={lifecycleT('lifecycle.responsible')} className={inputClass} value={r.responsibleParty} onChange={e=>patch(i,{responsibleParty:e.target.value})}/>
-                      </td>
-                      <td colSpan={5}></td>
+                      <td className="p-2 text-center"><input aria-label={lifecycleT('lifecycle.defectiveCheck')} type="checkbox" checked={r.defective} onChange={e=>patch(i,{defective:e.target.checked})}/></td>
+                      <td className="p-2"><input aria-label={lifecycleT('lifecycle.lineNotes')} placeholder={lifecycleT('lifecycle.lineNotes')} className={inputClass} value={r.notes} onChange={e=>patch(i,{notes:e.target.value})}/></td>
+                      <td className="p-2"><button type="button" onClick={()=>setRows(a=>a.length > 1 ? a.filter((_,j)=>j!==i) : [blank(jobDefaults)])}>{lifecycleT('lifecycle.deleteLine')}</button></td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t bg-slate-100 font-bold">
-                <td className="p-2">{lifecycleT('lifecycle.reviewPrefix')}{rows.length}{lifecycleT('lifecycle.rollsSuffix')}</td>
-                <td className="p-2">{rows.reduce((n,r)=>n+Number(r.lengthM||0),0).toFixed(3)}{lifecycleT('lifecycle.metersSeparator')}</td>
-                <td className="p-2">{rows.reduce((n,r)=>n+Number(r.weightKg||0),0).toFixed(3)}{lifecycleT('lifecycle.weightNote')}</td>
-                <td colSpan={7}></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <button type="button" onClick={()=>setRows(a=>[...a,blank()])} className="text-indigo-700 font-bold">+ {lifecycleT('lifecycle.addRoll')}</button>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t">
-          <div>
-            <p className="text-sm font-bold mb-1">{lifecycleT('lifecycle.completedServices')}</p>
-            {data.services.map(s=><label className="block text-sm" key={s.id}><input type="checkbox" checked={completed.includes(s.id)} onChange={e=>setCompleted(a=>e.target.checked?[...new Set([...a,s.id])]:a.filter(id=>id!==s.id))}/> {s.name}</label>)}
+                    {r.defective && (
+                      <tr className="bg-amber-50 border-t">
+                        <td className="p-2 text-amber-800 text-[11px]" colSpan={itemChoices.length > 1 || targetChoices.length > 1 ? 2 : 1}>{lifecycleT('lifecycle.defectiveCheck')}</td>
+                        <td className="p-2" colSpan={2}>
+                          <select aria-label={lifecycleT('lifecycle.defectReason')} className={inputClass} value={r.defectReason} onChange={e=>patch(i,{defectReason:e.target.value as Row['defectReason']})}>
+                            <option value="DYE_HOUSE">{lifecycleT('lifecycle.dyeDefect')}</option>
+                            <option value="INTERNAL_KNITTING">{lifecycleT('lifecycle.knittingDefect')}</option>
+                            <option value="OTHER">{lifecycleT('lifecycle.otherDefect')}</option>
+                          </select>
+                        </td>
+                        <td className="p-2" colSpan={2}>
+                          <input placeholder={lifecycleT('lifecycle.responsible')} className={inputClass} value={r.responsibleParty} onChange={e=>patch(i,{responsibleParty:e.target.value})}/>
+                        </td>
+                        <td colSpan={5}></td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t bg-slate-100 font-bold">
+                  <td className="p-2" colSpan={(itemChoices.length > 1 ? 1 : 0) + (targetChoices.length > 1 ? 1 : 0) + 1}>{lifecycleT('lifecycle.reviewPrefix')}{rows.length}{lifecycleT('lifecycle.rollsSuffix')}{enteredTotal.toFixed(3)}{lifecycleT('lifecycle.metersSeparator')}</td>
+                  <td className="p-2">{rows.reduce((n,r)=>n+Number(r.weightKg||0),0).toFixed(3)}{lifecycleT('lifecycle.weightNote')}</td>
+                  <td colSpan={7}></td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-          <div className="space-y-2">
-            <textarea placeholder={lifecycleT('lifecycle.receiptNotes')} className={inputClass} value={notes} onChange={e=>setNotes(e.target.value)}/>
-            <textarea placeholder={lifecycleT('lifecycle.attachments')} className={inputClass} value={attachments} onChange={e=>setAttachments(e.target.value)}/>
-          </div>
-        </div>
+          <button type="button" onClick={()=>setRows(a=>[...a,blank(jobDefaults)])} className="text-indigo-700 font-bold">+ {lifecycleT('lifecycle.addRoll')}</button>
 
-        <button disabled={!warehouseId||!paper.trim()||!rows.length||rows.some(r=>!r.sourceLineId||Number(r.lengthM)<=0)} onClick={receive} className="bg-emerald-700 text-white px-4 py-2 rounded font-bold">{lifecycleT('lifecycle.confirmReceipt')}</button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t">
+            <div>
+              <p className="text-sm font-bold mb-1">{lifecycleT('lifecycle.completedServices')}</p>
+              {data.services.map(s=><label className="block text-sm" key={s.id}><input type="checkbox" checked={completed.includes(s.id)} onChange={e=>setCompleted(a=>e.target.checked?[...new Set([...a,s.id])]:a.filter(id=>id!==s.id))}/> {s.name}</label>)}
+            </div>
+            <div className="space-y-2">
+              <textarea placeholder={lifecycleT('lifecycle.receiptNotes')} className={inputClass} value={notes} onChange={e=>setNotes(e.target.value)}/>
+              <textarea placeholder={lifecycleT('lifecycle.attachments')} className={inputClass} value={attachments} onChange={e=>setAttachments(e.target.value)}/>
+            </div>
+          </div>
+
+          <button disabled={missing.length > 0} onClick={receive} className="bg-emerald-700 text-white px-4 py-2 rounded font-bold disabled:opacity-40">{lifecycleT('lifecycle.confirmReceipt')}</button>
+          {missing.length > 0 && <div role="status" className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            <p className="font-bold">{lifecycleT('lifecycle.confirmDisabledHint')}</p>
+            <ul className="list-disc pr-5">{missing.map(m => <li key={m}>{m}</li>)}</ul>
+          </div>}
+        </>}
       </fieldset>}
       {(tab==='overview'||tab==='quality')&&data.batches.map(b=><details key={b.id} open><summary>{lifecycleT('lifecycle.batchPrefix')}{b.dye_paper_no} — {new Date(b.received_at).toLocaleString(lifecycleI18n.language)}</summary><button type="button" className="my-2 rounded-lg border px-3 py-2 text-sm font-bold text-indigo-700" onClick={()=>{if(!openDocumentPrintWindow(renderExternalManufacturingBatch(data,b),`${data.job.job_no} — ${b.dye_paper_no}`))setError(lifecycleT('workflow.popupBlocked'));}}>{lifecycleT('workflow.printBatch')}</button><p>{b.notes}</p><p>{lifecycleT('lifecycle.servicesPrefix')}{b.service_ids.map(id=>data.services.find(s=>s.id===id)?.name??id).join(lifecycleT('lifecycle.separator'))}</p>{b.attachments.map(url=><a className="block text-indigo-600" key={url} href={url} target="_blank" rel="noopener noreferrer">{lifecycleT('lifecycle.attachment')}</a>)}
         {b.lines.map(l=><div key={l.id} className="border p-2"><p>{l.original_barcode} ← {l.barcode} — {l.length_m}{lifecycleT('lifecycle.meterWeightSeparator')}{l.weight_kg??lifecycleT('lifecycle.unknown')}{lifecycleT('lifecycle.kgSeparator')}{lifecycleT(`lifecycle.rollStatus.${l.status}`, { defaultValue: l.status })}</p><p>{l.defect_reason ? lifecycleT(`lifecycle.defect.${l.defect_reason}`) : ''} {l.responsible_party} {l.notes} {l.resolution ? lifecycleT(`lifecycle.decision.${l.resolution}`) : ''} {l.resolution_notes}</p>
@@ -209,9 +252,9 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
       {tab==='settlements'&&<><h4>{lifecycleT('lifecycle.settlements')}</h4>{data.settlements.map(s=><p key={s.id}>{s.kind==='EXCESS'?lifecycleT('lifecycle.approvedExcess'):lifecycleT('lifecycle.approvedShortage')} — {s.amount_m}{lifecycleT('lifecycle.metersSeparator')}{s.reason} — {new Date(s.approved_at).toLocaleString(lifecycleI18n.language)}</p>)}</>}
       {tab==='settlements'&&canManage&&open&&<fieldset disabled={busy} className="border p-3 space-y-2"><legend>{lifecycleT('lifecycle.settlementLegend')}</legend>
         <select aria-label={lifecycleT('lifecycle.settlementType')} className={inputClass} value={settlement.kind} onChange={e=>setSettlement({...settlement,kind:e.target.value})}><option value="SHORTAGE">{lifecycleT('lifecycle.shortage')}</option><option value="EXCESS">{lifecycleT('lifecycle.excess')}</option></select>
-        <select className={inputClass} value={settlement.sourceLineId} onChange={e=>setSettlement({...settlement,sourceLineId:e.target.value})}><option value="">{lifecycleT('lifecycle.sourceLine')}</option>{data.lines.filter(l=>settlement.kind==='EXCESS'||remaining(l)>0).map(l=><option value={l.id} key={l.id}>{l.sent_barcode} — {remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}</select>
+        <select className={inputClass} value={settlement.sourceLineId} onChange={e=>setSettlement({...settlement,sourceLineId:e.target.value})}><option value="">{lifecycleT('lifecycle.autoSource')}</option>{data.lines.filter(l=>settlement.kind==='EXCESS'||remaining(l)>0).map(l=><option value={l.id} key={l.id}>{l.sent_barcode} — {remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}</select>
         <input aria-label={lifecycleT('lifecycle.settlementQuantity')} className={inputClass} type="number" min="0.001" step="0.001" value={settlement.amountM} onChange={e=>setSettlement({...settlement,amountM:e.target.value})}/><input placeholder={lifecycleT('lifecycle.settlementReason')} className={inputClass} value={settlement.reason} onChange={e=>setSettlement({...settlement,reason:e.target.value})}/>
-        <button onClick={()=>run(async()=>{await manufacturingAction(jobId,'settlements',{...settlement,amountM:Number(settlement.amountM)});setSettlement({sourceLineId:'',amountM:'',reason:'',kind:'SHORTAGE'});},lifecycleT('lifecycle.settlementSaved'))}>{lifecycleT('lifecycle.approveSettlement')}</button><button className="mr-4" onClick={()=>run(()=>manufacturingAction(jobId,'close',{}),lifecycleT('lifecycle.closedSuccess'))}>{lifecycleT('lifecycle.close')}</button>
+        <button onClick={()=>run(async()=>{await manufacturingAction(jobId,'settlements',{...(settlement.sourceLineId?{sourceLineId:settlement.sourceLineId}:{}),kind:settlement.kind,reason:settlement.reason,amountM:Number(settlement.amountM)});setSettlement({sourceLineId:'',amountM:'',reason:'',kind:'SHORTAGE'});},lifecycleT('lifecycle.settlementSaved'))}>{lifecycleT('lifecycle.approveSettlement')}</button><button className="mr-4" onClick={()=>run(()=>manufacturingAction(jobId,'close',{}),lifecycleT('lifecycle.closedSuccess'))}>{lifecycleT('lifecycle.close')}</button>
       </fieldset>}
     </> : <div className="space-y-3">
       <p>{lifecycleT(data.job.production_cost_closed?'workflow.costLocked':'lifecycle.pricingInfo')}</p>

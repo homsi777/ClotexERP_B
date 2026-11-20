@@ -20,12 +20,13 @@ export async function externalOrderLineSummaries(db:Pick<PoolClient,'query'>,com
     SUM(COALESCE(q.quality_pending,0)) AS quality_pending,SUM(COALESCE(q.rejected,0)) AS rejected,SUM(COALESCE(q.rework,0)) AS rework
     FROM external_job_lines l JOIN external_jobs j ON j.company_id=l.company_id AND j.id=l.job_id
     LEFT JOIN external_job_preparation_types p ON p.company_id=j.company_id AND p.id=j.preparation_type_id
-    LEFT JOIN LATERAL (SELECT SUM(r.length_m) AS received,
-      COALESCE(SUM(r.length_m) FILTER(WHERE NOT r.defective OR r.resolution='ACCEPT'),0) AS accepted,
-      COALESCE(SUM(r.length_m) FILTER(WHERE r.defective AND r.resolution IS NULL),0) AS quality_pending,
-      COALESCE(SUM(r.length_m) FILTER(WHERE r.defective AND r.resolution='WRITE_OFF'),0) AS rejected,
-      COALESCE(SUM(r.length_m) FILTER(WHERE r.defective AND r.resolution='REWORK'),0) AS rework
-      FROM external_job_return_lines r WHERE r.company_id=l.company_id AND r.source_line_id=l.id) q ON true
+    LEFT JOIN LATERAL (SELECT SUM(a.length_m) AS received,
+      COALESCE(SUM(a.length_m) FILTER(WHERE NOT r.defective OR r.resolution='ACCEPT'),0) AS accepted,
+      COALESCE(SUM(a.length_m) FILTER(WHERE r.defective AND r.resolution IS NULL),0) AS quality_pending,
+      COALESCE(SUM(a.length_m) FILTER(WHERE r.defective AND r.resolution='WRITE_OFF'),0) AS rejected,
+      COALESCE(SUM(a.length_m) FILTER(WHERE r.defective AND r.resolution='REWORK'),0) AS rework
+      FROM external_job_return_allocations a JOIN external_job_return_lines r ON r.id=a.return_line_id AND r.company_id=a.company_id
+      WHERE a.company_id=l.company_id AND a.source_line_id=l.id) q ON true
     LEFT JOIN LATERAL (SELECT SUM(amount_m) FILTER(WHERE kind='SHORTAGE') AS shortage,
       SUM(amount_m) FILTER(WHERE kind='EXCESS') AS excess FROM external_job_settlements
       WHERE company_id=l.company_id AND source_line_id=l.id) s ON true

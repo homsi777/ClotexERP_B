@@ -730,6 +730,11 @@ const processingCreateSchema = z.object({
   processDescription: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   rollIds: z.array(z.string().uuid()).min(1),
+  // الورقة العامة (ملاحظة بشير): العرض ووزن المتر المربع خام/محضّر — اختيارية.
+  rawWidthCm: z.number().nonnegative().max(100000).nullable().optional(),
+  finishedWidthCm: z.number().nonnegative().max(100000).nullable().optional(),
+  rawGsm: z.number().nonnegative().max(100000).nullable().optional(),
+  finishedGsm: z.number().nonnegative().max(100000).nullable().optional(),
   lineReferences: z.array(externalLineReferenceSchema).optional(),
   traceabilityOnly: z.boolean().default(false),
 });
@@ -854,8 +859,9 @@ export async function createProcessingExternalJob(
     `INSERT INTO external_jobs (
        company_id, job_no, supplier_id, sent_date, notes, document_status,
        job_kind, fabric_stage, preparation_type_id, source_warehouse_id,
-       supplier_order_no, process_description, created_by_user_id
-     ) VALUES ($1,$2,$3,current_date,$4,'CONFIRMED','PROCESSING',$5,$6,$7,$8,$9,$10)
+       supplier_order_no, process_description, created_by_user_id,
+       raw_width_cm, finished_width_cm, raw_gsm, finished_gsm
+     ) VALUES ($1,$2,$3,current_date,$4,'CONFIRMED','PROCESSING',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      RETURNING id`,
     [
       companyId,
@@ -868,6 +874,10 @@ export async function createProcessingExternalJob(
       supplierOrderNo,
       cleanText(input.processDescription) || null,
       userId,
+      input.rawWidthCm ?? null,
+      input.finishedWidthCm ?? null,
+      input.rawGsm ?? null,
+      input.finishedGsm ?? null,
     ],
   );
   const jobId = ins.rows[0].id;

@@ -29,6 +29,10 @@ export interface ExternalJob {
   source_warehouse_name?: string | null;
   supplier_order_no: number | null;
   process_description: string | null;
+  raw_width_cm?: string | null;
+  finished_width_cm?: string | null;
+  raw_gsm?: string | null;
+  finished_gsm?: string | null;
   line_count?: number;
   received_count?: number;
   sent_m?: string;
@@ -60,6 +64,11 @@ export interface CreateProcessingJobPayload {
   processDescription?: string | null;
   notes?: string | null;
   rollIds: string[];
+  /** الورقة العامة: العرض ووزن المتر المربع خام/محضّر (اختياري). */
+  rawWidthCm?: number | null;
+  finishedWidthCm?: number | null;
+  rawGsm?: number | null;
+  finishedGsm?: number | null;
   lineReferences?: ExternalLineReference[];
   traceabilityOnly?: boolean;
 }
