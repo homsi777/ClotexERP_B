@@ -471,5 +471,12 @@
   "receiptScreen.subtitle": "نفس شاشة إدخال الأتواب — المرجع الكمية الإجمالية للمهمة",
   "receiptScreen.confirmAll": "تأكيد الاستلام الفعلي",
   "receiptScreen.itemRequired": "اختر الخامة للرول (في المهمة أكثر من خامة)",
-  "receiptScreen.sentItem": "الخامة المرسلة المخصوم منها"
+  "receiptScreen.sentItem": "الخامة المرسلة المخصوم منها",
+  "lifecycle.reasonCat.SHORTAGE": "نقص",
+  "lifecycle.reasonCat.WASTE": "هالك",
+  "lifecycle.reasonCat.SPOILAGE": "خيسان",
+  "lifecycle.reasonCat.EXCESS": "زيادة",
+  "lifecycle.totalSettled": "المسوّى (م)",
+  "lifecycle.useRemaining": "كل المتبقي",
+  "lifecycle.remainingAfter": "المتبقي بعد التسوية: "
 }

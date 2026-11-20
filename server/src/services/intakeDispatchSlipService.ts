@@ -6,7 +6,8 @@ import { todayYmd } from '../utils/businessDate.js';
 export type IntakeDispatchSlipRow = {
   id: string;
   company_id: string;
-  intake_operation_id: string;
+  intake_operation_id: string | null;
+  external_job_id?: string | null;
   slip_no: string;
   slip_type: 'STOCK' | 'PURCHASE';
   warehouse_id: string;
@@ -37,14 +38,16 @@ export type IntakeDispatchSlipLineRow = {
 
 export async function listDispatchSlips(pool: Pool, companyId: string): Promise<IntakeDispatchSlipRow[]> {
   const res = await pool.query<IntakeDispatchSlipRow>(
-    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, io.order_no, io.status AS operation_status,
+    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, COALESCE(io.order_no, 'مصنعية ' || ej.job_no) AS order_no,
+            COALESCE(io.status, 'COMPLETED') AS operation_status,
             pi.invoice_no AS purchase_invoice_no,
             (SELECT count(*) FROM intake_dispatch_slip_lines l WHERE l.slip_id = s.id) AS line_count,
             (SELECT count(*) FROM intake_dispatch_slip_lines l WHERE l.slip_id = s.id AND l.unit_price IS NOT NULL) AS priced_line_count
      FROM intake_dispatch_slips s
      JOIN warehouses w ON w.id = s.warehouse_id
      JOIN suppliers sup ON sup.id = s.supplier_id
-     JOIN intake_operations io ON io.id = s.intake_operation_id
+     LEFT JOIN intake_operations io ON io.id = s.intake_operation_id
+     LEFT JOIN external_jobs ej ON ej.id = s.external_job_id
      LEFT JOIN purchase_invoices pi ON pi.id = s.purchase_invoice_id
      WHERE s.company_id = $1
      ORDER BY s.created_at DESC`,
@@ -59,12 +62,14 @@ export async function getDispatchSlipWithLines(
   id: string,
 ): Promise<{ slip: IntakeDispatchSlipRow; lines: IntakeDispatchSlipLineRow[] } | null> {
   const slipRes = await pool.query<IntakeDispatchSlipRow>(
-    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, io.order_no, io.status AS operation_status,
+    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, COALESCE(io.order_no, 'مصنعية ' || ej.job_no) AS order_no,
+            COALESCE(io.status, 'COMPLETED') AS operation_status,
             pi.invoice_no AS purchase_invoice_no
      FROM intake_dispatch_slips s
      JOIN warehouses w ON w.id = s.warehouse_id
      JOIN suppliers sup ON sup.id = s.supplier_id
-     JOIN intake_operations io ON io.id = s.intake_operation_id
+     LEFT JOIN intake_operations io ON io.id = s.intake_operation_id
+     LEFT JOIN external_jobs ej ON ej.id = s.external_job_id
      LEFT JOIN purchase_invoices pi ON pi.id = s.purchase_invoice_id
      WHERE s.id = $1 AND s.company_id = $2`,
     [id, companyId],
@@ -141,6 +146,9 @@ export async function voidIntakeDispatchSlip(
     );
   }
   const opId = slipRow.rows[0].intake_operation_id;
+  if (!opId) {
+    throw Object.assign(new Error('إرسالية مصنعية: لا تُلغى من هنا؛ تُدار من مهمة المصنعية'), { code: 'INVALID_STATE' });
+  }
 
   const opRow = await client.query<{ status: string }>(
     `SELECT status FROM intake_operations WHERE id=$1 AND company_id=$2 FOR UPDATE`,

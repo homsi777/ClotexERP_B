@@ -82,7 +82,16 @@ test('external receipt by total quantity: automatic allocation, split rolls, aut
 
     // 4) تسوية نقص بلا اختيار بند: تُوزَّع تلقائياً على الفرق غير المحسوم، ثم الإغلاق
     await assert.rejects(() => settleManufacturingShortage(client, company, user, job.id, { amountM: 4.001, reason: 'too much' }), /النقص يتجاوز الفرق/);
-    await settleManufacturingShortage(client, company, user, job.id, { amountM: 4, reason: 'Approved process shrinkage' });
+    await settleManufacturingShortage(client, company, user, job.id, { amountM: 4, reason: 'Approved process shrinkage', reasonCategory: 'WASTE' });
+    // التسوية مرتبطة بشاشة «تسوية إرساليات المصنعية»: اعتماد نقص مسجَّل ومتطابق على سطر المهمة
+    const linked = await q(`SELECT m.match_type,m.matched_length_m,l.matched_length_m AS line_matched,l.sent_barcode FROM external_job_line_matches m
+      JOIN external_job_lines l ON l.id=m.external_job_line_id WHERE l.job_id=$1`, [job.id]);
+    assert.deepEqual(linked.map((r) => [r.match_type, Number(r.matched_length_m), Number(r.line_matched), r.sent_barcode]), [['LIFECYCLE_SETTLEMENT', 4, 4, 'S3']]);
+    assert.equal((await q('SELECT reason_category FROM external_job_settlements WHERE job_id=$1', [job.id]))[0].reason_category, 'WASTE');
+    // إرسالية مخزون بالمستلم (4 رولات) تظهر في إرساليات المخزون والشراء
+    const slip = await q(`SELECT s.slip_type,s.intake_operation_id,(SELECT count(*)::int FROM intake_dispatch_slip_lines l WHERE l.slip_id=s.id) AS n
+      FROM intake_dispatch_slips s WHERE s.external_job_id=$1`, [job.id]);
+    assert.deepEqual(slip.map((r) => [r.slip_type, r.intake_operation_id, r.n]), [['STOCK', null, 4]]);
     const settled = await q('SELECT s.amount_m,l.sent_barcode FROM external_job_settlements s JOIN external_job_lines l ON l.id=s.source_line_id WHERE s.job_id=$1', [job.id]);
     assert.deepEqual(settled.map((r) => [r.sent_barcode, Number(r.amount_m)]), [['S3', 4]]);
     await closeManufacturingJob(client, company, job.id);

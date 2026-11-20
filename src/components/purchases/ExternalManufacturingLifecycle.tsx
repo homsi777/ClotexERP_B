@@ -45,7 +45,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
   const retry = useRef<{ payload: string; id: string } | null>(null);
   const [services, setServices] = useState<{ name: string; quantity: string; basis: ServiceBasis }[]>([]);
   const [prices, setPrices] = useState<{ serviceId: string; unitPrice: string; currencyCode: string; basis: ServiceBasis; approvedQuantity: string }[]>([]);
-  const [settlement, setSettlement] = useState({ sourceLineId: '', amountM: '', reason: '', kind: 'SHORTAGE' });
+  const [settlement, setSettlement] = useState({ amountM: '', reason: '', category: 'SHORTAGE' as 'SHORTAGE' | 'WASTE' | 'SPOILAGE' | 'EXCESS' });
   const load = async () => {
     const result = await getManufacturing(jobId); setResponse(result);
     setServices(result.data.services.map(s => ({ name: s.name, quantity: s.quantity, basis: s.basis })));
@@ -249,12 +249,24 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
           {l.resolution==='REWORK'&&canReceive&&<Link className="text-indigo-700" to={`/purchases/external-jobs/processing/new?previousJobId=${jobId}${manufacturingOrigin?'&from=manufacturing':''}`}>{lifecycleT('lifecycle.createRework')}</Link>}
         </div>)}</details>)}
       {tab==='quality'&&!data.batches.length&&<p className="rounded bg-slate-50 p-4 text-slate-500">{lifecycleT('workflow.noBatches')}</p>}
-      {tab==='settlements'&&<><h4>{lifecycleT('lifecycle.settlements')}</h4>{data.settlements.map(s=><p key={s.id}>{s.kind==='EXCESS'?lifecycleT('lifecycle.approvedExcess'):lifecycleT('lifecycle.approvedShortage')} — {s.amount_m}{lifecycleT('lifecycle.metersSeparator')}{s.reason} — {new Date(s.approved_at).toLocaleString(lifecycleI18n.language)}</p>)}</>}
-      {tab==='settlements'&&canManage&&open&&<fieldset disabled={busy} className="border p-3 space-y-2"><legend>{lifecycleT('lifecycle.settlementLegend')}</legend>
-        <select aria-label={lifecycleT('lifecycle.settlementType')} className={inputClass} value={settlement.kind} onChange={e=>setSettlement({...settlement,kind:e.target.value})}><option value="SHORTAGE">{lifecycleT('lifecycle.shortage')}</option><option value="EXCESS">{lifecycleT('lifecycle.excess')}</option></select>
-        <select className={inputClass} value={settlement.sourceLineId} onChange={e=>setSettlement({...settlement,sourceLineId:e.target.value})}><option value="">{lifecycleT('lifecycle.autoSource')}</option>{data.lines.filter(l=>settlement.kind==='EXCESS'||remaining(l)>0).map(l=><option value={l.id} key={l.id}>{l.sent_barcode} — {remaining(l)}{lifecycleT('lifecycle.meterSuffix')}</option>)}</select>
-        <input aria-label={lifecycleT('lifecycle.settlementQuantity')} className={inputClass} type="number" min="0.001" step="0.001" value={settlement.amountM} onChange={e=>setSettlement({...settlement,amountM:e.target.value})}/><input placeholder={lifecycleT('lifecycle.settlementReason')} className={inputClass} value={settlement.reason} onChange={e=>setSettlement({...settlement,reason:e.target.value})}/>
-        <button onClick={()=>run(async()=>{await manufacturingAction(jobId,'settlements',{...(settlement.sourceLineId?{sourceLineId:settlement.sourceLineId}:{}),kind:settlement.kind,reason:settlement.reason,amountM:Number(settlement.amountM)});setSettlement({sourceLineId:'',amountM:'',reason:'',kind:'SHORTAGE'});},lifecycleT('lifecycle.settlementSaved'))}>{lifecycleT('lifecycle.approveSettlement')}</button><button className="mr-4" onClick={()=>run(()=>manufacturingAction(jobId,'close',{}),lifecycleT('lifecycle.closedSuccess'))}>{lifecycleT('lifecycle.close')}</button>
+      {tab==='settlements'&&<><h4>{lifecycleT('lifecycle.settlements')}</h4>{data.settlements.map(s=><p key={s.id}>{s.reason_category?lifecycleT(`lifecycle.reasonCat.${s.reason_category}`):s.kind==='EXCESS'?lifecycleT('lifecycle.approvedExcess'):lifecycleT('lifecycle.approvedShortage')} — {s.amount_m}{lifecycleT('lifecycle.metersSeparator')}{s.reason} — {new Date(s.approved_at).toLocaleString(lifecycleI18n.language)}</p>)}</>}
+      {tab==='settlements'&&canManage&&open&&<fieldset disabled={busy} className="border p-3 space-y-3"><legend>{lifecycleT('lifecycle.settlementLegend')}</legend>
+        <div className="grid grid-cols-2 gap-2 rounded-lg border bg-white p-3 text-center text-sm sm:grid-cols-4">
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalSent')}</div><b>{sent.toFixed(3)}</b></div>
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalReceived')}</div><b>{received.toFixed(3)}</b></div>
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalSettled')}</div><b>{(shortage - excess).toFixed(3)}</b></div>
+          <div><div className="text-xs text-slate-500">{lifecycleT('lifecycle.totalRemaining')}</div><b className={remainingTotal > 0 ? 'text-amber-700' : 'text-emerald-700'}>{remainingTotal.toFixed(3)}</b></div>
+        </div>
+        <select aria-label={lifecycleT('lifecycle.settlementType')} className={inputClass} value={settlement.category} onChange={e=>setSettlement({...settlement,category:e.target.value as typeof settlement.category})}>
+          {(['SHORTAGE','WASTE','SPOILAGE','EXCESS'] as const).map(c=><option key={c} value={c}>{lifecycleT(`lifecycle.reasonCat.${c}`)}</option>)}
+        </select>
+        <div className="flex items-center gap-2">
+          <input aria-label={lifecycleT('lifecycle.settlementQuantity')} className={inputClass} type="number" min="0.001" step="0.001" value={settlement.amountM} onChange={e=>setSettlement({...settlement,amountM:e.target.value})}/>
+          {settlement.category!=='EXCESS'&&<button type="button" className="shrink-0 rounded border px-2 py-1 text-xs" onClick={()=>setSettlement({...settlement,amountM:remainingTotal.toFixed(3)})}>{lifecycleT('lifecycle.useRemaining')}</button>}
+        </div>
+        <input placeholder={lifecycleT('lifecycle.settlementReason')} className={inputClass} value={settlement.reason} onChange={e=>setSettlement({...settlement,reason:e.target.value})}/>
+        {Number(settlement.amountM)>0&&settlement.category!=='EXCESS'&&<p className="text-xs text-slate-600">{lifecycleT('lifecycle.remainingAfter')}{Math.max(0,remainingTotal-Number(settlement.amountM)).toFixed(3)}</p>}
+        <button disabled={!(Number(settlement.amountM)>0)||!settlement.reason.trim()||(settlement.category!=='EXCESS'&&Number(settlement.amountM)>remainingTotal+0.0005)} onClick={()=>run(async()=>{await manufacturingAction(jobId,'settlements',{reasonCategory:settlement.category,reason:settlement.reason,amountM:Number(settlement.amountM)});setSettlement({amountM:'',reason:'',category:'SHORTAGE'});},lifecycleT('lifecycle.settlementSaved'))}>{lifecycleT('lifecycle.approveSettlement')}</button><button className="mr-4" onClick={()=>run(()=>manufacturingAction(jobId,'close',{}),lifecycleT('lifecycle.closedSuccess'))}>{lifecycleT('lifecycle.close')}</button>
       </fieldset>}
     </> : <div className="space-y-3">
       <p>{lifecycleT(data.job.production_cost_closed?'workflow.costLocked':'lifecycle.pricingInfo')}</p>

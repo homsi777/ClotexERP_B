@@ -471,5 +471,12 @@
   "receiptScreen.subtitle": "Top giriş ekranıyla aynı — referans işin toplam miktarıdır",
   "receiptScreen.confirmAll": "Fiili teslimi onayla",
   "receiptScreen.itemRequired": "Top için kumaşı seçin (işte birden fazla kumaş var)",
-  "receiptScreen.sentItem": "Düşülecek gönderilen kumaş"
+  "receiptScreen.sentItem": "Düşülecek gönderilen kumaş",
+  "lifecycle.reasonCat.SHORTAGE": "Eksik",
+  "lifecycle.reasonCat.WASTE": "Fire",
+  "lifecycle.reasonCat.SPOILAGE": "Bozulma",
+  "lifecycle.reasonCat.EXCESS": "Fazla",
+  "lifecycle.totalSettled": "Mahsup edilen (m)",
+  "lifecycle.useRemaining": "Tüm kalan",
+  "lifecycle.remainingAfter": "Mahsup sonrası kalan: "
 }

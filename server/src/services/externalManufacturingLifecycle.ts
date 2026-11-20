@@ -1,3 +1,4 @@
+import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import type { PoolClient } from 'pg';
 import {getMixedCostShares} from './mixedExternalCostService.js';
 import { createHash } from 'node:crypto';
@@ -238,6 +239,7 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
   };
   const batch = (await db.query(`INSERT INTO external_job_return_batches(company_id,job_id,request_id,request_hash,dye_paper_no,notes,attachments,received_by)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [companyId, jobId, input.requestId, hash, input.dyePaperNo, input.notes || null, JSON.stringify(input.attachments), userId])).rows[0];
+  const newRollIds: string[] = [];
   for (const l of input.lines) {
     const slices = allocate(l);
     const source = slices[0].line;
@@ -264,6 +266,7 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
       colorId, job.supplier_id, input.destinationWarehouseId, input.destinationLocationId || null, barcode,
       l.lengthM, l.weightKg ?? null, width, gsm,
       unitCost, source.sent_currency_code ?? source.currency_code, status, l.notes || null, userId, calculatedWeight, l.resultVariantId ?? null])).rows[0];
+    newRollIds.push(roll.id);
     await db.query(`INSERT INTO inventory_movements(company_id,roll_id,movement_type,to_warehouse_id,to_location_id,new_status,length_delta_m,weight_delta_kg,reference_type,reference_id,reference_no,created_by_user_id)
       VALUES($1,$2,'EXTERNAL_JOB_RETURNED',$3,$4,$5,$6,$7,'EXTERNAL_JOB_RETURN',$8,$9,$10)`, [companyId, roll.id, input.destinationWarehouseId, input.destinationLocationId || null, status, l.lengthM, l.weightKg ?? null, batch.id, job.job_no, userId]);
     const returnLine = (await db.query(`INSERT INTO external_job_return_lines(company_id,job_id,batch_id,source_line_id,source_roll_id,original_barcode,result_roll_id,
@@ -274,12 +277,20 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
       [companyId, jobId, returnLine.id, sl.line.id, sl.milli / 1000]);
   }
   for (const serviceId of input.completedServiceIds) await db.query('INSERT INTO external_job_return_services(batch_id,service_id) VALUES($1,$2)', [batch.id, serviceId]);
+  // إرسالية مخزون بالمستلم: تظهر الحركة في «إرساليات المخزون والشراء» (السعر يُضاف لاحقاً؛ لا قيد ولا فاتورة منها).
+  const slipNo = await generateSequentialDocumentNo(db as PoolClient, companyId, 'INTAKE_DISPATCH_SLIP');
+  const slip = (await db.query(`INSERT INTO intake_dispatch_slips(company_id,intake_operation_id,external_job_id,return_batch_id,slip_no,slip_type,warehouse_id,supplier_id,created_by_user_id)
+    VALUES($1,NULL,$2,$3,$4,'STOCK',$5,$6,$7) RETURNING id`, [companyId, jobId, batch.id, slipNo, input.destinationWarehouseId, job.supplier_id, userId])).rows[0];
+  for (const rollId of newRollIds) await db.query('INSERT INTO intake_dispatch_slip_lines(slip_id,fabric_roll_id) VALUES($1,$2)', [slip.id, rollId]);
   await syncManufacturingSourceBalances(db, companyId, userId, jobId);
   return { id: batch.id, duplicate: false };
 }
 
 export async function settleManufacturingShortage(db: Db, companyId: string, userId: string, jobId: string, raw: unknown) {
-  const input = z.object({ sourceLineId: uuid.optional(), amountM: amount, reason: text, kind: z.enum(['SHORTAGE','EXCESS']).default('SHORTAGE') }).strict().parse(raw);
+  const parsedInput = z.object({ sourceLineId: uuid.optional(), amountM: amount, reason: text, kind: z.enum(['SHORTAGE','EXCESS']).optional(),
+    reasonCategory: z.enum(['SHORTAGE','EXCESS','WASTE','SPOILAGE']).optional() }).strict().parse(raw);
+  // السبب يحدد النوع: زيادة ← EXCESS، وأما نقص/هالك/خيسان فكلها نقص.
+  const input = { ...parsedInput, kind: (parsedInput.reasonCategory ? (parsedInput.reasonCategory === 'EXCESS' ? 'EXCESS' : 'SHORTAGE') : parsedInput.kind ?? 'SHORTAGE') as 'SHORTAGE' | 'EXCESS' };
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.lifecycle_closed_at) fail('المهمة مغلقة');
   await assertNewReceiptMode(db, companyId, jobId);
@@ -307,8 +318,21 @@ export async function settleManufacturingShortage(db: Db, companyId: string, use
     }
     if (left > 0) fail('النقص يتجاوز الفرق غير المحسوم');
   }
-  for (const r of rows) await db.query(`INSERT INTO external_job_settlements(company_id,job_id,source_line_id,amount_m,reason,approved_by,kind) VALUES($1,$2,$3,$4,$5,$6,$7)`,
-    [companyId, jobId, r.lineId, r.amount / 1000, input.reason, userId, input.kind]);
+  for (const r of rows) {
+    await db.query(`INSERT INTO external_job_settlements(company_id,job_id,source_line_id,amount_m,reason,approved_by,kind,reason_category) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [companyId, jobId, r.lineId, r.amount / 1000, input.reason, userId, input.kind, input.reasonCategory ?? (input.kind === 'EXCESS' ? 'EXCESS' : 'SHORTAGE')]);
+    // ربط بشاشة «تسوية إرساليات المصنعية»: النقص المعتمد هنا يُسجَّل كاعتماد نقص فلا يبقى فرقاً مفتوحاً هناك.
+    if (input.kind === 'SHORTAGE') {
+      const ln = (await db.query('SELECT sent_length_m,matched_length_m FROM external_job_lines WHERE id=$1 AND company_id=$2 FOR UPDATE', [r.lineId, companyId])).rows[0];
+      const room = ln ? milli(ln.sent_length_m) - milli(ln.matched_length_m) : 0;
+      const take = Math.min(r.amount, Math.max(0, room));
+      if (take > 0) {
+        await db.query(`INSERT INTO external_job_line_matches(company_id,external_job_line_id,match_type,matched_length_m,notes,created_by_user_id) VALUES($1,$2,'LIFECYCLE_SETTLEMENT',$3,$4,$5)`,
+          [companyId, r.lineId, take / 1000, `تسوية مهمة ${job.job_no}: ${input.reasonCategory ?? 'SHORTAGE'} — ${input.reason}`, userId]);
+        await db.query('UPDATE external_job_lines SET matched_length_m = matched_length_m + $2 WHERE id=$1', [r.lineId, take / 1000]);
+      }
+    }
+  }
   await syncManufacturingSourceBalances(db, companyId, userId, jobId);
 }
 
