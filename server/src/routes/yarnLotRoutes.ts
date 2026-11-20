@@ -7,23 +7,9 @@ import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
+import { yarnStockOperation } from '../services/yarnStockService.js';
+import { receiveYarn, receiveYarnBatch,saveYarnProfile, dispatchYarn, returnExternalYarn, importYarnOpening } from '../services/yarnDomainService.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
-
-const createYarnLotSchema = z.object({
-  barcode: z.string().optional(),
-  lotNo: z.string().optional(),
-  itemId: z.string().uuid('معرّف الصنف غير صالح'),
-  colorId: z.string().uuid().nullable().optional(),
-  supplierId: z.string().uuid().nullable().optional(),
-  warehouseId: z.string().uuid('معرّف المستودع غير صالح'),
-  locationId: z.string().uuid().nullable().optional(),
-  weightKg: z.number().min(0, 'الوزن يجب أن يكون رقماً موجباً أو صفراً'),
-  unitCost: z.number().min(0).nullable().optional(),
-  currencyCode: z.string().nullable().optional(),
-  batchNo: z.string().nullable().optional(),
-  containerNo: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
-});
 
 const updateYarnLotSchema = z.object({
   itemId: z.string().uuid().optional(),
@@ -31,7 +17,7 @@ const updateYarnLotSchema = z.object({
   lotNo: z.string().nullable().optional(),
   supplierId: z.string().uuid().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
-  weightKg: z.number().min(0).optional(),
+  weightKg: z.never().optional(),
   unitCost: z.number().min(0).nullable().optional(),
   currencyCode: z.string().nullable().optional(),
   batchNo: z.string().nullable().optional(),
@@ -76,7 +62,7 @@ const YARN_LOT_COLUMNS = `
   yl.supplier_id, yl.warehouse_id, yl.location_id, yl.weight_kg,
   yl.unit_cost, yl.currency_code, yl.batch_no, yl.container_no,
   yl.purchase_invoice_id, yl.purchase_invoice_line_id, yl.status, yl.notes,
-  yl.created_at, yl.updated_at,
+  yl.created_at, yl.updated_at, yl.owner_type, yl.owner_customer_id, yl.yarn_properties, yl.receipt_packages, yl.parent_yarn_lot_id,
   fi.name AS item_name, fi.internal_code AS item_internal_code,
   fc.name_ar AS color_name_ar, s.name AS supplier_name, w.name AS warehouse_name
 `;
@@ -90,7 +76,85 @@ const YARN_LOT_JOINS = `
 `;
 
 export const yarnLotRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.addHook('preSerialization',async(req,_reply,payload)=>{
+    const u=req.user;if(u&&(u.role==='admin'||u.role==='accountant'||u.permissions.includes('inventory.yarn.cost.view')||u.permissions.includes('manufacturing.cost.view')))return payload;
+    const redact=(value:unknown):unknown=>{
+      if(Array.isArray(value))return value.map(redact);
+      if(value instanceof Date)return value;
+      if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([key])=>!['unit_cost','unitCost'].includes(key)).map(([key,child])=>[key,redact(child)]));
+      return value;
+    };return redact(payload);
+  });
+  app.setErrorHandler((error, _req, reply) => {
+    if (error instanceof z.ZodError) return sendError(reply, 400, error.issues.map(i => i.message).join('؛ '), 'VALIDATION');
+    const failure=error as {code?:string;statusCode?:number;message?:string};
+    if (failure.code === '23505') return sendError(reply, 409, 'المرجع أو الباركود مسجل مسبقاً', 'DUPLICATE');
+    if (typeof failure.statusCode==='number' && failure.statusCode>=400 && failure.statusCode<500) return sendError(reply,failure.statusCode,failure.message??'بيانات غير صالحة','VALIDATION');
+    app.log.error(error);
+    return sendError(reply,500,'تعذر إتمام عملية الخيط','INTERNAL_ERROR');
+  });
+  app.addHook('preHandler', async (req, reply) => {
+    await authenticateRequest(req, reply);
+    if (reply.sent) return;
+    const permission = req.method === 'GET' ? 'inventory.view' : 'inventory.manage';
+    if (req.user?.role !== 'admin' && !req.user?.permissions.includes(permission))
+      return sendError(reply, 403, 'لا تملك صلاحية العملية', 'FORBIDDEN');
+  });
+  app.get('/profiles', async (req, reply) => {
+    const rows = await getPool().query(`SELECT p.*,i.name AS item_name,i.internal_code FROM yarn_item_profiles p JOIN fabric_items i ON i.id=p.item_id AND i.company_id=p.company_id WHERE p.company_id=$1 ORDER BY i.name`,[req.user!.companyId]);
+    return reply.send({ok:true,data:rows.rows});
+  });
+  app.put('/profiles/:itemId', async (req, reply) => {
+    const {itemId}=z.object({itemId:z.string().uuid()}).parse(req.params);
+    return reply.send({ok:true,data:await saveYarnProfile(getPool(),req.user!.companyId,req.user!.sub,itemId,req.body)});
+  });
+  app.get('/external', async (req, reply) => {
+    const q=z.object({ownerType:z.enum(['COMPANY','CUSTOMER']).optional(),ownerCustomerId:z.string().uuid().optional(),openOnly:z.enum(['true','false']).optional(),page:z.coerce.number().int().positive().default(1)}).parse(req.query);
+    const params:unknown[]=[req.user!.companyId]; const filters=['d.company_id=$1'];
+    if(q.ownerType) {params.push(q.ownerType);filters.push(`d.owner_type=$${params.length}`);}
+    if(q.ownerCustomerId) {params.push(q.ownerCustomerId);filters.push(`d.owner_customer_id=$${params.length}`);}
+    if(q.openOnly==='true') filters.push('d.dispatched_kg>d.returned_kg+d.shortage_kg');
+    const r=await getPool().query(`SELECT d.*,y.barcode,y.lot_no,i.name AS item_name,s.name AS supplier_name,c.name AS owner_name,d.dispatched_kg-d.returned_kg-d.shortage_kg AS remaining_kg,count(*) OVER()::int AS total
+      FROM yarn_external_dispatches d JOIN yarn_lots y ON y.id=d.source_lot_id AND y.company_id=d.company_id JOIN fabric_items i ON i.id=y.item_id LEFT JOIN suppliers s ON s.id=d.supplier_id LEFT JOIN customers c ON c.id=d.owner_customer_id WHERE ${filters.join(' AND ')} ORDER BY d.created_at DESC LIMIT 100 OFFSET $${params.length+1}`,[...params,(q.page-1)*100]);
+    return reply.send({ok:true,data:r.rows,total:r.rows[0]?.total ?? 0});
+  });
+  app.post('/external/dispatch', async (req, reply) => reply.status(201).send({ok:true,data:await dispatchYarn(getPool(),req.user!.companyId,req.user!.sub,req.body)}));
+  app.post('/external/:id/return', async (req, reply) => {
+    const {id}=z.object({id:z.string().uuid()}).parse(req.params);
+    return reply.send({ok:true,data:await returnExternalYarn(getPool(),req.user!.companyId,req.user!.sub,id,req.body)});
+  });
+  app.get('/external/:id/returns', async (req, reply) => {
+    const {id}=z.object({id:z.string().uuid()}).parse(req.params);
+    const r=await getPool().query(`SELECT r.*,y.barcode,y.color_id FROM yarn_external_returns r LEFT JOIN yarn_lots y ON y.id=r.result_lot_id AND y.company_id=r.company_id WHERE r.company_id=$1 AND r.dispatch_id=$2 ORDER BY r.created_at`,[req.user!.companyId,id]);
+    return reply.send({ok:true,data:r.rows});
+  });
+  app.post('/opening/preview', async (req, reply) => reply.send({ok:true,data:await importYarnOpening(getPool(),req.user!.companyId,req.user!.sub,req.body,false)}));
+  app.post('/opening/commit', async (req, reply) => reply.status(201).send({ok:true,data:await importYarnOpening(getPool(),req.user!.companyId,req.user!.sub,req.body,true)}));
+  app.get('/:id/genealogy', async (req, reply) => {
+    const {id}=z.object({id:z.string().uuid()}).parse(req.params);
+    const r=await getPool().query(`WITH RECURSIVE ancestors AS (
+      SELECT id,parent_yarn_lot_id,barcode,weight_kg,owner_type,owner_customer_id,0 AS depth FROM yarn_lots WHERE company_id=$1 AND id=$2
+      UNION ALL SELECT y.id,y.parent_yarn_lot_id,y.barcode,y.weight_kg,y.owner_type,y.owner_customer_id,a.depth+1 FROM yarn_lots y JOIN ancestors a ON y.id=a.parent_yarn_lot_id WHERE y.company_id=$1 AND a.depth<50
+    ) SELECT * FROM ancestors ORDER BY depth`,[req.user!.companyId,id]);
+    const children=await getPool().query('SELECT id,barcode,weight_kg,owner_type,owner_customer_id FROM yarn_lots WHERE company_id=$1 AND parent_yarn_lot_id=$2 ORDER BY created_at',[req.user!.companyId,id]);
+    return reply.send({ok:true,data:{ancestors:r.rows,children:children.rows}});
+  });
+  app.get('/:id/movements', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const rows = await getPool().query(`SELECT m.* FROM yarn_lot_movements m WHERE m.company_id=$1 AND m.yarn_lot_id=$2 ORDER BY m.created_at DESC LIMIT 200`, [req.user!.companyId, id]);
+    return reply.send({ ok: true, data: rows.rows });
+  });
+  app.post('/:id/stock-operation', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      const data = await yarnStockOperation(getPool(), req.user!.companyId, req.user!.sub, id, req.body);
+      return reply.send({ ok: true, data });
+    } catch (error) {
+      if (error instanceof Error && 'statusCode' in error) return sendError(reply, Number(error.statusCode), error.message, 'VALIDATION');
+      throw error;
+    }
+  });
+  app.get('/', {}, async (req, reply) => {
     const { companyId } = req.user!;
     const q = req.query as Record<string, string>;
     const page = Math.max(1, parseInt(q.page) || 1);
@@ -101,12 +165,14 @@ export const yarnLotRoutes: FastifyPluginAsync = async (app) => {
     const params: unknown[] = [companyId];
     let p = 2;
 
+    if (q.ownerType) { conditions.push(`yl.owner_type=$${p++}`); params.push(q.ownerType); }
+    if (q.ownerCustomerId) { conditions.push(`yl.owner_customer_id=$${p++}`); params.push(q.ownerCustomerId); }
     if (q.itemId) { conditions.push(`yl.item_id=$${p}`); params.push(q.itemId); p++; }
     if (q.status) { conditions.push(`yl.status=$${p}`); params.push(q.status); p++; }
     if (q.warehouseId) { conditions.push(`yl.warehouse_id=$${p}`); params.push(q.warehouseId); p++; }
-    if (q.onlyAvailable === 'true') { conditions.push(`yl.status='AVAILABLE' AND yl.weight_kg > 0`); }
+    if (q.onlyAvailable === 'true') { conditions.push(`yl.status='AVAILABLE' AND yl.weight_kg > 0 AND yl.owner_type='COMPANY'`); }
     if (q.search) {
-      conditions.push(`(yl.barcode ILIKE $${p} OR yl.lot_no ILIKE $${p} OR fi.name ILIKE $${p})`);
+      conditions.push(`(yl.barcode ILIKE $${p} OR yl.lot_no ILIKE $${p} OR fi.name ILIKE $${p} OR yl.batch_no ILIKE $${p})`);
       params.push(`%${q.search.trim()}%`); p++;
     }
 
@@ -124,7 +190,7 @@ export const yarnLotRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: rows.rows, total: countRow.rows[0].total, page, pageSize });
   });
 
-  app.get('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/:id', {}, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();
@@ -136,111 +202,13 @@ export const yarnLotRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: row.rows[0] });
   });
 
-  app.post('/', { preHandler: authenticateRequest }, async (req, reply) => {
-    const { companyId, sub: userId } = req.user!;
-    const parsed = createYarnLotSchema.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
-    const d = parsed.data;
-    const pool = getPool();
-
-    const itemCheck = await pool.query(
-      `SELECT id, unit FROM fabric_items WHERE id=$1 AND company_id=$2`,
-      [d.itemId, companyId],
-    );
-    if (!itemCheck.rows.length) return sendError(reply, 404, 'الصنف غير موجود', 'NOT_FOUND');
-    if (itemCheck.rows[0].unit !== 'kg') {
-      return sendError(reply, 400, 'هذا الصنف ليس من أصناف الوزن (kg)', 'VALIDATION');
-    }
-
-    const whCheck = await pool.query(
-      'SELECT id FROM warehouses WHERE id=$1 AND company_id=$2',
-      [d.warehouseId, companyId],
-    );
-    if (!whCheck.rows.length) return sendError(reply, 404, 'المستودع غير موجود', 'NOT_FOUND');
-
-    if (d.locationId) {
-      const locCheck = await pool.query(
-        'SELECT id FROM warehouse_locations WHERE id=$1 AND warehouse_id=$2 AND company_id=$3',
-        [d.locationId, d.warehouseId, companyId],
-      );
-      if (!locCheck.rows.length)
-        return sendError(reply, 400, 'الموقع المحدد لا يتبع هذا المستودع', 'VALIDATION');
-    }
-
-    if (d.colorId) {
-      const colorCheck = await pool.query(
-        'SELECT id FROM fabric_colors WHERE id=$1 AND (company_id=$2 OR company_id IS NULL)',
-        [d.colorId, companyId],
-      );
-      if (!colorCheck.rows.length) return sendError(reply, 404, 'اللون غير موجود', 'NOT_FOUND');
-    }
-
-    if (d.supplierId) {
-      const supCheck = await pool.query(
-        'SELECT id FROM suppliers WHERE id=$1 AND company_id=$2',
-        [d.supplierId, companyId],
-      );
-      if (!supCheck.rows.length) return sendError(reply, 404, 'المورد غير موجود', 'NOT_FOUND');
-    }
-
-    if (d.currencyCode) {
-      const curCheck = await pool.query('SELECT code FROM currencies WHERE code=$1', [d.currencyCode]);
-      if (!curCheck.rows.length) return sendError(reply, 404, 'العملة غير موجودة', 'NOT_FOUND');
-    }
-
-    let barcode = normalizeSevenDigitBarcode(d.barcode);
-    if (!barcode) {
-      barcode = await generateYarnLotBarcode(companyId);
-    } else {
-      const dupCheck = await pool.query(
-        'SELECT id FROM yarn_lots WHERE company_id=$1 AND barcode=$2',
-        [companyId, barcode],
-      );
-      if (dupCheck.rows.length) return sendError(reply, 409, 'باركود دفعة الخيط موجود مسبقاً', 'DUPLICATE');
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const lotRow = await client.query(
-        `INSERT INTO yarn_lots
-           (company_id, lot_no, barcode, item_id, color_id, supplier_id,
-            warehouse_id, location_id, weight_kg, unit_cost, currency_code,
-            batch_no, container_no, notes, created_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-         RETURNING id`,
-        [
-          companyId, d.lotNo ?? null, barcode, d.itemId, d.colorId ?? null, d.supplierId ?? null,
-          d.warehouseId, d.locationId ?? null, d.weightKg, d.unitCost ?? null,
-          d.currencyCode ?? null, d.batchNo ?? null, d.containerNo ?? null, d.notes ?? null, userId,
-        ],
-      );
-      const lotId = lotRow.rows[0].id;
-
-      await client.query(
-        `INSERT INTO yarn_lot_movements
-           (company_id, yarn_lot_id, movement_type, weight_delta_kg, to_warehouse_id,
-            reference_type, notes, created_by_user_id)
-         VALUES ($1,$2,'RECEIVE',$3,$4,'MANUAL_RECEIVE',$5,$6)`,
-        [companyId, lotId, d.weightKg, d.warehouseId, d.notes ?? null, userId],
-      );
-
-      await client.query('COMMIT');
-
-      const full = await pool.query(
-        `SELECT ${YARN_LOT_COLUMNS} ${YARN_LOT_JOINS} WHERE yl.id=$1`,
-        [lotId],
-      );
-      return reply.status(201).send({ ok: true, data: full.rows[0] });
-    } catch (e) {
-      await client.query('ROLLBACK').catch(() => undefined);
-      throw e;
-    } finally {
-      client.release();
-    }
+  app.post('/', async (req, reply) => {
+    const lot = await receiveYarn(getPool(), req.user!.companyId, req.user!.sub, req.body);
+    return reply.status(201).send({ ok: true, data: lot });
   });
+  app.post('/receipts/batch',async(req,reply)=>reply.status(201).send({ok:true,data:await receiveYarnBatch(getPool(),req.user!.companyId,req.user!.sub,req.body)}));
 
-  app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.put('/:id', {}, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = updateYarnLotSchema.safeParse(req.body);
@@ -251,36 +219,21 @@ export const yarnLotRoutes: FastifyPluginAsync = async (app) => {
     const existing = await pool.query('SELECT id FROM yarn_lots WHERE id=$1 AND company_id=$2', [id, companyId]);
     if (!existing.rows.length) return sendError(reply, 404, 'دفعة الخيط غير موجودة', 'NOT_FOUND');
 
-    const row = await pool.query(
-      `UPDATE yarn_lots SET
-         item_id=COALESCE($3,item_id), color_id=$4, lot_no=$5, supplier_id=$6,
-         location_id=$7, weight_kg=COALESCE($8,weight_kg), unit_cost=$9,
-         currency_code=$10, batch_no=$11, container_no=$12, notes=$13, updated_at=now()
-       WHERE id=$1 AND company_id=$2 RETURNING id`,
-      [
-        id, companyId, d.itemId ?? null, d.colorId ?? null, d.lotNo ?? null, d.supplierId ?? null,
-        d.locationId ?? null, d.weightKg ?? null, d.unitCost ?? null, d.currencyCode ?? null,
-        d.batchNo ?? null, d.containerNo ?? null, d.notes ?? null,
-      ],
-    );
-
-    const full = await pool.query(`SELECT ${YARN_LOT_COLUMNS} ${YARN_LOT_JOINS} WHERE yl.id=$1`, [row.rows[0].id]);
+    const fields = { lotNo: 'lot_no', batchNo: 'batch_no', containerNo: 'container_no', notes: 'notes' } as const;
+    if (Object.keys(req.body as object).some(key => !(key in fields)))
+      return sendError(reply, 400, 'التعديل الوصفي فقط؛ استخدم مسار المخزون لتغيير الرصيد أو الموقع', 'VALIDATION');
+    const entries = Object.entries(d).filter(([key]) => key in fields);
+    if (!entries.length) return sendError(reply, 400, 'لا توجد تعديلات', 'VALIDATION');
+    await pool.query(`UPDATE yarn_lots SET ${entries.map(([key], i) => `${fields[key as keyof typeof fields]}=$${i+3}`).join(',')}, updated_at=now() WHERE id=$1 AND company_id=$2`, [id, companyId, ...entries.map(([,v]) => v)]);
+    const full = await pool.query(`SELECT ${YARN_LOT_COLUMNS} ${YARN_LOT_JOINS} WHERE yl.id=$1 AND yl.company_id=$2`, [id, companyId]);
     return reply.send({ ok: true, data: full.rows[0] });
   });
 
-  app.patch('/:id/status', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.patch('/:id/status', {}, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = statusSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
-    const pool = getPool();
-
-    const row = await pool.query(
-      `UPDATE yarn_lots SET status=$3, notes=COALESCE($4, notes), updated_at=now()
-       WHERE id=$1 AND company_id=$2 RETURNING id`,
-      [id, companyId, parsed.data.status, parsed.data.notes ?? null],
-    );
-    if (!row.rows.length) return sendError(reply, 404, 'دفعة الخيط غير موجودة', 'NOT_FOUND');
-    return reply.send({ ok: true, data: { id: row.rows[0].id, status: parsed.data.status } });
+    return sendError(reply, 400, 'تغيير الحالة المباشر غير مسموح', 'VALIDATION');
   });
 };

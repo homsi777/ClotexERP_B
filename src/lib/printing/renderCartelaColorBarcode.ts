@@ -31,7 +31,7 @@ const esc = (value: unknown) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-function resolveStickerMetrics(data: CartelaColorStickerData, settings: CartelaColorPrintSettings) {
+function resolveStickerMetrics(data: Pick<CartelaColorStickerData, 'widthMm' | 'heightMm' | 'codeFontPt' | 'barcodeHeightMm'>, settings: CartelaColorPrintSettings) {
   return {
     widthMm: data.widthMm ?? settings.cellWidthMm,
     heightMm: data.heightMm ?? settings.cellHeightMm,

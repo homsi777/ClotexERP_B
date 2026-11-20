@@ -408,5 +408,16 @@
   "lifecycle.decision.REWORK": "Yeniden işle",
   "lifecycle.decision.WRITE_OFF": "Stoktan düş",
   "lifecycle.errors.transferUnavailable": "Yalnızca kullanılabilir toplar transfer edilebilir; bloke, kusurlu veya fason işindeki toplar transfer edilemez",
-  "lifecycle.errors.moveUnavailable": "Yalnızca kullanılabilir toplar taşınabilir; bloke ve kusurlu toplar taşınamaz"
+  "lifecycle.errors.moveUnavailable": "Yalnızca kullanılabilir toplar taşınabilir; bloke ve kusurlu toplar taşınamaz",
+  "traceability": {
+    "search": "Sipariş / müşteri / renk ara",
+    "stock": "Genel stok (siparişsiz)",
+    "inherit": "Varsa önceki izleme, yoksa genel stok",
+    "costNotice": "Siparişler satır bazında izlenir. Karma işlerin her kaynak payı fiyatlandırmada muhasebeci tarafından onaylanır; ücret otomatik dağıtılmaz.",
+    "mixedCostMode": "Karma iş: üretim maliyetine otomatik bağlamadan yalnız izleme",
+    "order": "Sipariş / renk satırı",
+    "qualityEntry": "Birleşik kalite girişi",
+    "rawQuality": "Ham kalite",
+    "externalQuality": "Dış işlem dönüş kalitesi"
+  }
 }

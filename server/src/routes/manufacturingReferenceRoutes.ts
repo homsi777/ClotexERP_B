@@ -1,4 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import {manufacturingSpecificationRevisionRoutes} from './manufacturingSpecificationRevisionRoutes.js';
+import {manufacturingBeamQualityRoutes} from './manufacturingBeamQualityRoutes.js';
+import {manufacturingOperationalReportRoutes} from './manufacturingOperationalReportRoutes.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
@@ -134,6 +137,9 @@ function handleDbError(reply: FastifyReply, error: unknown) {
 
 export const manufacturingReferenceRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', authenticateRequest);
+  await app.register(manufacturingSpecificationRevisionRoutes);
+  await app.register(manufacturingBeamQualityRoutes);
+  await app.register(manufacturingOperationalReportRoutes);
 
   app.post('/specifications/preview', async (req, reply) => {
     if (!requireAny(req.user, ['manufacturing.reference.view', 'manufacturing.reference.manage'])) {

@@ -55,7 +55,7 @@ export async function verifyManufacturingScreens(app:FastifyInstance,token:strin
   assert.equal(completionCount,1);assert.deepEqual(failedRequests,[]);assert.deepEqual(errors,[]);
   await page.screenshot({path:path.join(root,'..',`clotex-manufacturing-fixed-${nextStage.toLowerCase()}.png`),fullPage:true});
   console.log(`Real browser + Fastify + PostgreSQL passed: three operational tabs and ${nextStage} beam handoff`);
- }finally{await browser?.close();await server?.close();await unlink(fixture).catch(()=>undefined);}
+ }finally{await browser?.close();if(server){await server.waitForRequestsIdle();await server.close();await server.watcher.close();}await unlink(fixture).catch(()=>undefined);}
 }
 
 export async function verifyExternalManufacturingUI(app:FastifyInstance,token:string,jobId:string,warehouseId:string,lineId:string){
@@ -122,6 +122,16 @@ export async function verifyExternalManufacturingUI(app:FastifyInstance,token:st
   const popup=await popupPromise;await popup.waitForFunction(()=>document.body.innerText.includes('DYE-UI-1'));await popup.close();
   assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);
   await page.screenshot({path:path.join(root,'..','clotex-external-quality-mobile.png'),fullPage:true});
+  await page.goto('http://127.0.0.1:51787/manufacturing-navigation-check.tmp.html',{waitUntil:'networkidle0'});
+  await page.click('[data-manufacturing-group="costs"]');
+  await page.waitForSelector('[data-manufacturing-section="reports"]');
+  await page.click('[data-manufacturing-section="reports"]');
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent?.trim()==='عرض التقرير'));
+  await page.evaluate(()=>{const button=Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.trim()==='عرض التقرير');button?.click();});
+  await page.waitForSelector('table tbody tr');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Operational report table must scroll inside its panel');
+  await page.screenshot({path:path.join(root,'..','clotex-manufacturing-report-mobile.png'),fullPage:true});
+  assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);
   console.log('Manufacturing hierarchy + actual external-job receipt UI + quality/pricing/settlement navigation + batch printing passed on real PostgreSQL');
- }catch(e){console.error('Browser JS failures:',errors,'API failures:',failed);if(browser){const pages=await browser.pages();console.error('Browser page:',await pages[pages.length-1]?.evaluate(()=>document.body.innerText.slice(0,3000)));}throw e;}finally{await browser?.close();await server?.close();await unlink(fixture).catch(()=>undefined);}
+ }catch(e){console.error('Browser JS failures:',errors,'API failures:',failed);if(browser){const pages=await browser.pages();console.error('Browser page:',await pages[pages.length-1]?.evaluate(()=>document.body.innerText.slice(0,3000)));}throw e;}finally{await browser?.close();if(server){await server.waitForRequestsIdle();await server.close();await server.watcher.close();}await unlink(fixture).catch(()=>undefined);}
 }

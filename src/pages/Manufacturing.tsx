@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {SpecificationRevisionEditor} from '../components/manufacturing/SpecificationRevisionEditor';
+import {ManufacturingOperationsReportPanel} from '../components/manufacturing/ManufacturingOperationsReportPanel';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Factory, FileSpreadsheet, Gauge, Plus, RefreshCw, Upload, Wrench } from "lucide-react";
@@ -59,7 +61,7 @@ export const Manufacturing = () => {
   const canRawInspection=has("manufacturing.raw_inspection.manage");
   const canInventoryManage=has("inventory.manage");
   const allowedSections=manufacturingSections.filter(s=>{
-    const permissions:Record<Tab,string[]>={machines:['manufacturing.reference.view','manufacturing.machines.manage'],departments:['manufacturing.reference.view','manufacturing.reference.manage'],downtime:['manufacturing.reference.view','manufacturing.reference.manage'],defects:['manufacturing.reference.view','manufacturing.quality.catalog.manage'],specifications:['manufacturing.specifications.view','manufacturing.specifications.import','manufacturing.specifications.approve'],workOrders:['manufacturing.work_orders.view','manufacturing.work_orders.manage'],warping:['manufacturing.warping.view','manufacturing.warping.manage'],sizing:['manufacturing.sizing.view','manufacturing.sizing.manage'],weaving:['manufacturing.weaving.view','manufacturing.weaving.manage'],rawInspection:['manufacturing.raw_inspection.manage','manufacturing.weaving.view'],costing:['manufacturing.cost.view','manufacturing.cost.manage','inventory.manage'],external:['inventory.manage','purchases.view','manufacturing.work_orders.view']};
+    const permissions:Record<Tab,string[]>={machines:['manufacturing.reference.view','manufacturing.machines.manage'],departments:['manufacturing.reference.view','manufacturing.reference.manage'],downtime:['manufacturing.reference.view','manufacturing.reference.manage'],defects:['manufacturing.reference.view','manufacturing.quality.catalog.manage'],specifications:['manufacturing.specifications.view','manufacturing.specifications.import','manufacturing.specifications.approve'],workOrders:['manufacturing.work_orders.view','manufacturing.work_orders.manage'],warping:['manufacturing.warping.view','manufacturing.warping.manage'],sizing:['manufacturing.sizing.view','manufacturing.sizing.manage'],weaving:['manufacturing.weaving.view','manufacturing.weaving.manage'],rawInspection:['manufacturing.raw_inspection.manage','manufacturing.weaving.view'],reports:['manufacturing.reports.view','reports.view'],costing:['manufacturing.cost.view','manufacturing.cost.manage','inventory.manage'],external:['inventory.manage','purchases.view','manufacturing.work_orders.view']};
     return permissions[s].some(has)||(s==='costing'&&user?.role==='accountant');
   });
   const load = useCallback(async () => {
@@ -172,6 +174,8 @@ export const Manufacturing = () => {
             <ProductionQualityPanel canInspect={canRawInspection} canReceive={canInventoryManage} defects={defects} />
           ) : tab === "costing" ? (
             <ManufacturingCostPanel />
+          ) : tab === 'reports' ? (
+            <ManufacturingOperationsReportPanel/>
           ) : tab === 'external' ? (
             <div className="p-3 sm:p-5"><ExternalJobs embedded/></div>
           ) : loading ? (
@@ -492,6 +496,7 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
   });
   const [library, setLibrary] = useState<ManufacturingSpecificationSummary[]>([]);
   const [versions, setVersions] = useState<ManufacturingSpecificationVersion[]>([]);
+  const [editingVersion,setEditingVersion]=useState<ManufacturingSpecificationVersion|null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const refreshLibrary = useCallback(async () => {
     try {
@@ -606,12 +611,14 @@ function WorkbookPreviewPanel({ t, canImport, canApprove }: { t: any; canImport:
                       {t("workbook.approve")}
                     </button>
                   )}
+                  {canImport&&<button disabled={saving} className="text-indigo-700 hover:underline" onClick={()=>setEditingVersion(v)}>نسخ / إصدار معدل</button>}
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+      {editingVersion&&<SpecificationRevisionEditor key={editingVersion.id} version={editingVersion} onClose={()=>setEditingVersion(null)} onSaved={async id=>{await refreshLibrary();await selectSpecification(id);}}/>}
       <div className="flex flex-wrap items-end gap-3">
         <label className="space-y-1">
           <span className="block text-xs font-bold">{t("workbook.documentType")}</span>

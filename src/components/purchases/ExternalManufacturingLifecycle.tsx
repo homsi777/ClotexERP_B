@@ -1,4 +1,5 @@
 import { manufacturingError } from '../../lib/externalManufacturingI18n';
+import {ExternalMixedCostPanel} from './ExternalMixedCostPanel';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { Link,useSearchParams } from 'react-router-dom';
@@ -14,7 +15,7 @@ const blank = (): Row => ({ sourceLineId: '', lengthM: '', weightKg: '', barcode
 const inputClass = 'border rounded p-2 w-full text-sm';
 const remaining = (l: { sent_length_m: string; returned_m: string; shortage_m: string; excess_m: string }) => Math.max(0, Math.round((Number(l.sent_length_m) + Number(l.excess_m) - Number(l.returned_m) - Number(l.shortage_m)) * 1000) / 1000);
 
-export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { jobId: string; receiving?: boolean }) {
+export function ExternalManufacturingLifecycle({ jobId, receiving = false, initialTab }: { jobId: string; receiving?: boolean; initialTab?: 'quality' }) {
   const [query]=useSearchParams();
   const manufacturingOrigin=query.get('from')==='manufacturing';
   const { t: lifecycleT, i18n: lifecycleI18n } = useTranslation('externalJobs');
@@ -28,7 +29,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
   const [notes, setNotes] = useState('');
   const [attachments, setAttachments] = useState('');
   const [completed, setCompleted] = useState<string[]>([]);
-  const [tab, setTab] = useState<'overview'|'receive'|'quality'|'settlements'|'pricing'>('overview');
+  const [tab, setTab] = useState<'overview'|'receive'|'quality'|'settlements'|'pricing'>(initialTab || (query.get('quality')==='1'?'quality':'overview'));
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -78,6 +79,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
   const open = !data.job.lifecycle_closed_at && data.job.document_status === 'CONFIRMED' && !data.legacyMode;
   return <section data-external-lifecycle className="min-w-0 bg-white border rounded-xl p-4 space-y-4" dir={lifecycleI18n.dir()}>
     <h3 className="font-bold">{lifecycleT('lifecycle.title')}{data.job.job_no} — {data.job.supplier_name}</h3>
+    {data.job.traceability_only && <p className="rounded bg-amber-50 p-3 text-amber-900">{lifecycleT('traceability.costNotice')}</p>}
     {data.job.previous_job_id && <Link to={`/purchases/external-jobs/${data.job.previous_job_id}${manufacturingOrigin?'?from=manufacturing':''}`} className="text-indigo-600">{lifecycleT('lifecycle.previous')}</Link>}
     {error && <p role="alert" className="text-red-700">{error}</p>}{message && <p role="status" className="text-green-700">{message}</p>}
     {data.legacyMode && <p className="text-amber-800">{lifecycleT('lifecycle.legacyNotice')}</p>}
@@ -93,7 +95,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
     {tab !== 'pricing' ? <>
       {tab==='overview'&&<>
       <div className="overflow-auto"><table className="w-full text-sm"><thead><tr>{[lifecycleT('lifecycle.itemColumn'),lifecycleT('lifecycle.rollColumn'),lifecycleT('lifecycle.sentColumn'),lifecycleT('lifecycle.receivedColumn'),lifecycleT('lifecycle.remainingColumn'),lifecycleT('lifecycle.shortageColumn')].map(h => <th key={h}>{h}</th>)}</tr></thead>
-        <tbody>{data.lines.map(l => <tr key={l.id}><td>{l.item_name} / {l.internal_code}</td><td>{l.color_name} / {l.roll_no} / {l.sent_barcode}</td><td>{l.sent_length_m} / {l.sent_weight_display ?? lifecycleT('lifecycle.unknown')}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : l.returned_m}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : remaining(l).toFixed(3)}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : l.shortage_m}</td></tr>)}</tbody></table></div>
+        <tbody>{data.lines.map(l => <tr key={l.id}><td>{l.item_name} / {l.internal_code}<p className="text-xs text-indigo-700">{l.customer_order_no ? `${l.customer_order_no} / ${l.customer_order_line_no ?? ''}` : lifecycleT('traceability.stock')}</p></td><td>{l.color_name} / {l.roll_no} / {l.sent_barcode}</td><td>{l.sent_length_m} / {l.sent_weight_display ?? lifecycleT('lifecycle.unknown')}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : l.returned_m}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : remaining(l).toFixed(3)}</td><td>{legacyAggregate ? lifecycleT('lifecycle.legacyUnallocated') : l.shortage_m}</td></tr>)}</tbody></table></div>
       <h4 className="font-bold">{lifecycleT('lifecycle.servicesTitle')}</h4>
       {data.services.map(s => <p key={s.id}>{s.name} — {s.quantity} — {s.basis === 'METER' ? lifecycleT('lifecycle.meter') : s.basis === 'KG' ? lifecycleT('lifecycle.kg') : lifecycleT('lifecycle.fixed')}</p>)}
       {canReceive && open && !data.batches.length && data.job.fee_amount === null && <details><summary>{lifecycleT('lifecycle.editServices')}</summary><fieldset disabled={busy} className="space-y-2">
@@ -213,6 +215,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false }: { j
       </fieldset>}
     </> : <div className="space-y-3">
       <p>{lifecycleT(data.job.production_cost_closed?'workflow.costLocked':'lifecycle.pricingInfo')}</p>
+      {canPrice&&<ExternalMixedCostPanel key={JSON.stringify([data.costShares,data.costAllocationTotalUsd])} jobId={jobId} data={data} onSaved={load}/>}
       {data.legacyMode ? <p>{lifecycleT('lifecycle.legacyPricing')}</p> : !canPrice?<p>{lifecycleT('lifecycle.pricingPermission')}</p>:<fieldset disabled={busy||!!data.job.fee_posted_at} className="space-y-3">
         {prices.map((p,i)=><div key={p.serviceId} className="border p-2 grid grid-cols-2 gap-2"><strong>{data.services.find(s=>s.id===p.serviceId)?.name}</strong><label>{lifecycleT('lifecycle.basis')}<select disabled={!!data.job.production_cost_closed} className={inputClass} value={p.basis} onChange={e=>setPrices(a=>a.map((v,j)=>i===j?{...v,basis:e.target.value as ServiceBasis}:v))}><option value="METER">{lifecycleT('lifecycle.meter')}</option><option value="KG">{lifecycleT('lifecycle.kg')}</option><option value="FIXED">{lifecycleT('lifecycle.fixed')}</option></select></label>{(['unitPrice','currencyCode','approvedQuantity'] as const).map((k,j)=><label key={k}>{[lifecycleT('lifecycle.unitPrice'),lifecycleT('lifecycle.currency'),lifecycleT('lifecycle.approvedQuantity')][j]}<input disabled={!!data.job.production_cost_closed} className={inputClass} type={k==='currencyCode'?'text':'number'} min="0" step="0.0001" value={p[k]} onChange={e=>setPrices(a=>a.map((v,n)=>n===i?{...v,[k]:e.target.value}:v))}/></label>)}<p>{lifecycleT('lifecycle.totalPrefix')}{(Number(p.unitPrice)*Number(p.approvedQuantity)).toFixed(4)} {p.currencyCode}</p></div>)}
         <button disabled={!!data.job.production_cost_closed||!prices.length||prices.some(p=>p.unitPrice===''||Number(p.unitPrice)<0||Number(p.approvedQuantity)<=0)} onClick={()=>run(()=>manufacturingAction(jobId,'service-pricing',{lines:prices.map(p=>({...p,unitPrice:Number(p.unitPrice),approvedQuantity:Number(p.approvedQuantity)}))}),lifecycleT('lifecycle.pricingSaved'))}>{lifecycleT('lifecycle.savePricing')}</button>

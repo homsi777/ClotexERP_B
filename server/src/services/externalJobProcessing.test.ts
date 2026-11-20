@@ -184,6 +184,7 @@ function createFakeDb() {
       return { rows: [] };
     }
 
+    if(sql.startsWith('select 1 from manufacturing_cost_closures')&&sql.includes('manufacturing_external_cost_shares'))return {rows:[]};
     throw new Error(`Unhandled fake query: ${sql}`);
   };
 

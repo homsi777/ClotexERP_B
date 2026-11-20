@@ -60,6 +60,8 @@ export interface CreateProcessingJobPayload {
   processDescription?: string | null;
   notes?: string | null;
   rollIds: string[];
+  lineReferences?: ExternalLineReference[];
+  traceabilityOnly?: boolean;
 }
 
 export interface CreateProcessingJobResult {
@@ -72,6 +74,8 @@ export interface CreateProcessingJobResult {
 }
 
 export interface ExternalJobLine {
+  customer_order_id: string | null;
+  customer_order_line_id: string | null;
   id: string;
   job_id: string;
   roll_id: string;
@@ -113,7 +117,7 @@ export interface CreateExternalJobPayload {
   notes?: string | null;
   feeAmount?: number | null;
   feeCurrencyCode?: string | null;
-  lines: { rollId: string }[];
+  lines: ExternalLineReference[];
 }
 
 export interface ReceiveExternalJobLinePayload {
@@ -304,3 +308,7 @@ export async function voidProcessingExternalJob(id: string, payload: { password:
     body: JSON.stringify(payload),
   });
 }
+
+export interface ExternalLineReference { rollId: string; customerOrderId?: string | null; customerOrderLineId?: string | null }
+export interface ExternalOrderChoice { order_id: string; order_no: string; customer_name: string; line_id: string; line_no: number; material_name: string; color_name: string; color_code: string }
+export const searchExternalOrderLines = (search: string) => apiFetch<{ok: boolean; data: ExternalOrderChoice[]}>(`/api/external-jobs/customer-order-lines?search=${encodeURIComponent(search)}`);

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { ExternalQualityEntry } from './ExternalQualityEntry';
 import { useCallback, useEffect, useState } from "react";
 import {
   listFabricColors,
@@ -56,7 +58,7 @@ const newRoll = (batchNo: string, index: number): RollLine => ({
   gsm: "",
 });
 
-export function ProductionQualityPanel({
+function RawProductionQualityPanel({
   canInspect,
   canReceive,
   defects,
@@ -742,4 +744,17 @@ export function ProductionQualityPanel({
       )}
     </div>
   );
+}
+
+// One entry point, existing domain actions and server authorization remain authoritative.
+export function ProductionQualityPanel(props: {canInspect:boolean;canReceive:boolean;defects:QualityDefect[]}) {
+  const {t}=useTranslation('externalJobs');
+  const [kind,setKind]=useState<'raw'|'external'>('raw');
+  return <section className="space-y-4">
+    <h2 className="font-bold">{t('traceability.qualityEntry')}</h2>
+    <nav aria-label={t('traceability.qualityEntry')} className="flex gap-2">
+      {(['raw','external'] as const).map(k=><button key={k} type="button" aria-pressed={kind===k} onClick={()=>setKind(k)} className={`rounded border px-4 py-2 ${kind===k?'bg-indigo-600 text-white':'bg-white'}`}>{t(k==='raw'?'traceability.rawQuality':'traceability.externalQuality')}</button>)}
+    </nav>
+    {kind==='raw'?<RawProductionQualityPanel {...props}/>:<ExternalQualityEntry/>}
+  </section>;
 }

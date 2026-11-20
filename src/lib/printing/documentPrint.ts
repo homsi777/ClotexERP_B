@@ -107,8 +107,8 @@ async function exportPrintHtmlToPdfInBrowser(
 
 function shouldFallbackToBrowserPdf(error: unknown): boolean {
   if (!(error instanceof ApiRequestError)) return false;
-  if (error.status === 0) return false;
-  return error.status === 503 || error.status >= 500;
+  if (error.statusCode === 0) return false;
+  return error.statusCode === 503 || error.statusCode >= 500;
 }
 
 /** تصدير PDF = Chromium على الخادم/Electron، مع تصدير احتياطي من المتصفح عند فشل الخادم */

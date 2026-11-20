@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { listOrderMetadataOptions, type OrderMetadataOptions } from '../../lib/api/customerOrdersApi';
+import { sampleStatusLabels } from '../../lib/customerOrderMetadata';
+import {OrderNotificationRouting} from '../../components/orders/OrderNotificationRouting';
+import React, { useEffect, useState } from 'react';
+import {useSearchParams} from 'react-router-dom';
+import {getCustomerOrderApi} from '../../lib/api/customerOrdersApi';
 import {
   ClipboardList,
   Eye,
@@ -60,12 +65,17 @@ const mapApiCustomer = (c: ApiCustomer): Customer => ({
 });
 
 export function CustomerOrdersPage() {
+  const [query]=useSearchParams();
   const { t, i18n } = useTranslation('customerOrdersPage');
   const dateLocale = i18n.language === 'ar' ? ar : tr;
   const inventory = useStore((s) => s.inventory);
   const { showToast } = useToast();
 
   const [tab, setTab] = useState<TabId>('registry');
+  const [metadataOptions,setMetadataOptions] = useState<OrderMetadataOptions>({offices:[],employees:[],users:[]});
+  const [orderPage,setOrderPage] = useState(1);
+  const [orderTotal,setOrderTotal] = useState(0);
+  const [metadataFilters,setMetadataFilters] = useState<Record<string,string>>({});
   const [search, setSearch] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
@@ -75,6 +85,7 @@ export function CustomerOrdersPage() {
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<CustomerOrder | null>(null);
   const [detailOrder, setDetailOrder] = useState<CustomerOrder | null>(null);
+  useEffect(()=>{const id=query.get('order');if(!id)return;let active=true;void getCustomerOrderApi(id).then(order=>{if(active)setDetailOrder(order);}).catch(e=>{if(active)setError(String(e));});return()=>{active=false;};},[query]);
   const [telegramBusyId, setTelegramBusyId] = useState<string | null>(null);
 
   const [tplModalOpen, setTplModalOpen] = useState(false);
@@ -86,13 +97,13 @@ export function CustomerOrdersPage() {
     setLoading(true);
     setError('');
     try {
-      const [customerRes, orderRes, templateRes] = await Promise.all([
+      const [customerRes, templateRes, metadataRes] = await Promise.all([
         listCustomers({ status: 'active', pageSize: 1000 }),
-        listCustomerOrders(),
         listOrderTemplatesApi(),
+        listOrderMetadataOptions(),
       ]);
       setCustomers(customerRes.data.map(mapApiCustomer));
-      setCustomerOrders(orderRes.data);
+      setMetadataOptions(metadataRes);
       setOrderTemplates(templateRes);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load customer orders');
@@ -105,19 +116,25 @@ export function CustomerOrdersPage() {
     void refreshData();
   }, []);
 
-  const filteredOrders = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return customerOrders.filter((o) => {
-      const c = customers.find((x) => x.id === o.customerId);
-      const name = c?.name?.toLowerCase() ?? '';
-      if (!q) return true;
-      return (
-        o.orderNumber.toLowerCase().includes(q) ||
-        name.includes(q) ||
-        (o.notes?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [customerOrders, customers, search]);
+  useEffect(() => { setOrderPage(1); }, [search,metadataFilters]);
+  useEffect(() => {
+    let active=true;
+    const timer=window.setTimeout(()=>{
+      setLoading(true); setError('');
+      listCustomerOrders({search,...metadataFilters,page:orderPage}).then(result=>{
+        if(active) {setCustomerOrders(result.data);setOrderTotal(result.total);}
+      }).catch(error=>{if(active)setError(error instanceof Error?error.message:'تعذر تحميل الأوردرات');})
+        .finally(()=>{if(active)setLoading(false);});
+    },250);
+    return ()=>{active=false;window.clearTimeout(timer);};
+  },[search,metadataFilters,orderPage]);
+  const filteredOrders = customerOrders;
+  const filterDirectories: Record<string,{id:string;name:string}[]> = {
+    receivedOfficeId:metadataOptions.offices,takenByEmployeeId:metadataOptions.employees,
+    followUpEmployeeId:metadataOptions.employees,followUpUserId:metadataOptions.users,
+    status:Object.entries(ORDER_STATUS_LABELS).map(([id,name])=>({id,name})),
+    sampleStatus:Object.entries(sampleStatusLabels).map(([id,name])=>({id,name})),
+  };
 
   const openNewOrder = () => {
     setEditingOrder(null);
@@ -135,36 +152,60 @@ export function CustomerOrdersPage() {
         date: payload.date,
         customerId: payload.customerId,
         currency: payload.currency,
+        receivedOfficeId: payload.receivedOfficeId,
+        takenByEmployeeId: payload.takenByEmployeeId,
+        followUpEmployeeId: payload.followUpEmployeeId,
+        followUpUserId: payload.followUpUserId,
+        sampleKind: payload.sampleKind,
+        sampleStatus: payload.sampleStatus,
+        sampleRequestedDate: payload.sampleRequestedDate,
+        sampleReceivedDate: payload.sampleReceivedDate,
+        sampleApprovedDate: payload.sampleApprovedDate,
         warehouse: payload.warehouse,
         shippingMethod: payload.shippingMethod,
         notes: payload.notes,
         items: payload.items,
-        status: payload.status,
+        status: 'draft',
         expectedDate: payload.expectedDate,
         templateId: payload.templateId,
         orderNumber: payload.orderNumber,
         advancePayment: payload.advancePayment,
       });
-      setCustomerOrders((rows) => [created, ...rows]);
+      if(payload.status!=='draft')await updateCustomerOrderStatusApi(created.id,'pending_supply');
+      const saved=payload.status==='draft'?created:await getCustomerOrderApi(created.id);
+      setCustomerOrders((rows) => [saved, ...rows]);
       return { cartelaDraftsCreated };
     }
     if (editingOrder) {
       const { order: updated, cartelaDraftsCreated } = await updateCustomerOrderApi(editingOrder.id, {
+        expectedUpdatedAt: payload.expectedUpdatedAt,
+        changeReason:payload.changeReason,
         date: payload.date,
         customerId: payload.customerId,
         currency: payload.currency,
+        receivedOfficeId: payload.receivedOfficeId,
+        takenByEmployeeId: payload.takenByEmployeeId,
+        followUpEmployeeId: payload.followUpEmployeeId,
+        followUpUserId: payload.followUpUserId,
+        sampleKind: payload.sampleKind,
+        sampleStatus: payload.sampleStatus,
+        sampleRequestedDate: payload.sampleRequestedDate,
+        sampleReceivedDate: payload.sampleReceivedDate,
+        sampleApprovedDate: payload.sampleApprovedDate,
         warehouse: payload.warehouse,
         shippingMethod: payload.shippingMethod,
         notes: payload.notes,
         items: payload.items,
-        status: payload.status,
+        status: editingOrder.status,
         expectedDate: payload.expectedDate,
         templateId: payload.templateId,
         advancePayment: payload.advancePayment,
         ...(payload.orderNumber ? { orderNumber: payload.orderNumber } : {}),
       });
-      setCustomerOrders((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
-      setDetailOrder((row) => (row?.id === updated.id ? updated : row));
+      if(editingOrder.status==='draft'&&payload.status!=='draft')await updateCustomerOrderStatusApi(updated.id,'pending_supply');
+      const saved=editingOrder.status==='draft'&&payload.status!=='draft'?await getCustomerOrderApi(updated.id):updated;
+      setCustomerOrders((rows) => rows.map((row) => (row.id === saved.id ? saved : row)));
+      setDetailOrder((row) => (row?.id === saved.id ? saved : row));
       return { cartelaDraftsCreated };
     }
     return { cartelaDraftsCreated: 0 };
@@ -191,7 +232,11 @@ export function CustomerOrdersPage() {
     const previous = customerOrders;
     setCustomerOrders((rows) => rows.map((o) => (o.id === id ? { ...o, status, updatedAt: new Date().toISOString() } : o)));
     try {
-      await updateCustomerOrderStatusApi(id, status);
+      const current=customerOrders.find(order=>order.id===id);
+      const needsReason=status==='cancelled'||['completed','cancelled'].includes(current?.status??'');
+      const reason=needsReason?window.prompt('سبب الإلغاء أو إعادة فتح الأوردر'):undefined;
+      if(needsReason&&!reason?.trim())return;
+      await updateCustomerOrderStatusApi(id, status,reason?.trim());
     } catch (e) {
       setCustomerOrders(previous);
       setError(e instanceof Error ? e.message : 'Failed to update order status');
@@ -246,6 +291,7 @@ export function CustomerOrdersPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      <OrderNotificationRouting />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
@@ -319,6 +365,14 @@ export function CustomerOrdersPage() {
         </div>
       )}
 
+      {tab === 'registry' && <div className="flex flex-wrap gap-2" dir="rtl">
+       {Object.entries({receivedOfficeId:'المكتب المستلم',takenByEmployeeId:'آخذ الطلب',followUpEmployeeId:'موظف المتابعة',followUpUserId:'مستخدم المتابعة',status:'الحالة',sampleStatus:'حالة العينة'}).map(([key,label])=><label key={key} className="text-xs">{label}<select className="block border rounded-lg p-2" value={metadataFilters[key] || ''} onChange={e=>setMetadataFilters({...metadataFilters,[key]:e.target.value})}>
+        <option value="">الكل</option>{filterDirectories[key].map(option=><option key={option.id} value={option.id}>{option.name}</option>)}
+       </select></label>)}
+       {Object.entries({expectedFrom:'موعد التسليم من',expectedTo:'موعد التسليم إلى',material:'الخامة',color:'اللون'}).map(([key,label])=><label key={key} className="text-xs">{label}<input className="block border rounded-lg p-2" type={key.startsWith('expected')?'date':'text'} value={metadataFilters[key] || ''} onChange={e=>setMetadataFilters({...metadataFilters,[key]:e.target.value})}/></label>)}
+       <label className="text-xs">الترتيب<select className="block border rounded-lg p-2" value={metadataFilters.sort || ''} onChange={e=>setMetadataFilters({...metadataFilters,sort:e.target.value})}><option value="">الأحدث</option><option value="expectedDate">موعد التسليم الأقرب</option></select></label>
+       <button type="button" className="border rounded-lg px-3 text-xs" onClick={()=>{setMetadataFilters({});setSearch('');}}>مسح الفلاتر</button>
+      </div>}
       {tab === 'registry' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-200 flex flex-wrap gap-4 items-center justify-between bg-slate-50">
@@ -367,6 +421,7 @@ export function CustomerOrdersPage() {
                     >
                       <td className="px-4 py-3 font-mono font-semibold text-indigo-600">
                         {displayCustomerOrderNumber(o.orderNumber)}
+                        <div className="text-xs font-normal text-slate-500">{[o.receivedOfficeName,o.takenByEmployeeName,o.followUpEmployeeName,o.followUpUserName].filter(Boolean).join(" / ")}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{format(new Date(o.date), 'PP', { locale: dateLocale })}</td>
                       <td className="px-4 py-3 font-bold text-slate-800">{customer?.name ?? '—'}</td>
@@ -464,6 +519,11 @@ export function CustomerOrdersPage() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="flex items-center justify-between p-3 text-sm border-t">
+           <button type="button" disabled={loading || orderPage<=1} onClick={()=>setOrderPage(p=>p-1)} className="border rounded px-3 py-1 disabled:opacity-50">السابق</button>
+           <span>{orderTotal} أوردر — الصفحة {orderPage}</span>
+           <button type="button" disabled={loading || orderPage*200>=orderTotal} onClick={()=>setOrderPage(p=>p+1)} className="border rounded px-3 py-1 disabled:opacity-50">التالي</button>
           </div>
         </div>
       )}

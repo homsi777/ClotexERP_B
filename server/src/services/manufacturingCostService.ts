@@ -26,9 +26,10 @@ export async function costRate(db: Db, company: string, currency: string): Promi
 }
 export async function postManufacturingMaterial(db: Db, company: string, user: string, order: string, raw: unknown) {
     const input = z.object({ requestId: uuid, stage: z.enum(['WEAVING', 'SIZING']), stageId: uuid, kind: z.enum(['ISSUE', 'RETURN']),
-        lotId: uuid, sourceEntryId: uuid.optional(), weightKg: quantity, wasteKg: z.number().finite().min(0).default(0), notes }).strict().parse(raw);
+        consumptionBasis: z.enum(['LEGACY_NET_ISSUE', 'RECORDED']).optional(), lotId: uuid, sourceEntryId: uuid.optional(), weightKg: quantity, wasteKg: z.number().finite().min(0).default(0), notes }).strict().parse(raw);
     if (input.wasteKg > input.weightKg || Math.abs(input.wasteKg * 1000 - Math.round(input.wasteKg * 1000)) > 0.00001)
         fail('وزن الهالك غير صالح');
+    if (input.kind === 'ISSUE' && input.consumptionBasis === 'RECORDED' && input.wasteKg) fail('سجّل الهالك في بيان الاستهلاك الفعلي');
     const fingerprint = hash(input);
     const locked = await lockCostOrder(db, company, order);
     const prior = (await db.query('SELECT id,request_hash,work_order_id FROM manufacturing_material_entries WHERE company_id=$1 AND request_id=$2', [company, input.requestId])).rows[0];
@@ -58,7 +59,8 @@ export async function postManufacturingMaterial(db: Db, company: string, user: s
         const source = (await db.query(`SELECT e.*,COALESCE((SELECT SUM(r.weight_kg) FROM manufacturing_material_entries r WHERE r.company_id=e.company_id AND r.source_entry_id=e.id),0) returned FROM manufacturing_material_entries e WHERE company_id=$1 AND id=$2 FOR UPDATE`, [company, input.sourceEntryId])).rows[0];
         if (!source || source.kind !== 'ISSUE' || source.work_order_id !== order || source.yarn_lot_id !== input.lotId || (source.weaving_run_id ?? source.sizing_order_id) !== input.stageId || (input.stage === 'WEAVING') !== (source.weaving_run_id != null))
             fail('مرجع المرتجع لا يطابق الصرف');
-        if (Math.round((Number(source.returned) + input.weightKg + Number(source.waste_kg)) * 1000) > Math.round(Number(source.weight_kg) * 1000))
+        const used = source.consumption_basis === 'RECORDED' ? Number((await db.query('SELECT COALESCE(SUM(consumed_kg+waste_kg),0) used FROM manufacturing_material_consumptions WHERE company_id=$1 AND source_entry_id=$2', [company, source.id])).rows[0].used) : Number(source.waste_kg);
+        if (Math.round((Number(source.returned) + input.weightKg + used) * 1000) > Math.round(Number(source.weight_kg) * 1000))
             fail('المرتجع يتجاوز الكمية المتاحة بعد الهالك');
         unitCost = source.unit_cost;
         currency = source.currency_code;
@@ -67,14 +69,15 @@ export async function postManufacturingMaterial(db: Db, company: string, user: s
             fail('لا يمكن إعادة المادة إلى لوط محجوز أو تالف', 'INVALID_STOCK');
     }
     const delta = input.kind === 'ISSUE' ? -input.weightKg : input.weightKg;
-    const entry = (await db.query(`INSERT INTO manufacturing_material_entries(company_id,work_order_id,weaving_run_id,sizing_order_id,yarn_lot_id,request_id,request_hash,kind,source_entry_id,weight_kg,waste_kg,unit_cost,currency_code,exchange_rate,notes,created_by_user_id)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`, [company, order, input.stage === 'WEAVING' ? input.stageId : null, input.stage === 'SIZING' ? input.stageId : null, input.lotId, input.requestId, fingerprint, input.kind, input.sourceEntryId ?? null, input.weightKg, input.wasteKg, unitCost, currency, rate, input.notes, user])).rows[0];
+    const entry = (await db.query(`INSERT INTO manufacturing_material_entries(company_id,work_order_id,weaving_run_id,sizing_order_id,yarn_lot_id,request_id,request_hash,kind,source_entry_id,weight_kg,waste_kg,unit_cost,currency_code,exchange_rate,notes,created_by_user_id,consumption_basis)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`, [company, order, input.stage === 'WEAVING' ? input.stageId : null, input.stage === 'SIZING' ? input.stageId : null, input.lotId, input.requestId, fingerprint, input.kind, input.sourceEntryId ?? null, input.weightKg, input.wasteKg, unitCost, currency, rate, input.notes, user, input.consumptionBasis ?? 'LEGACY_NET_ISSUE'])).rows[0];
     await db.query(`UPDATE yarn_lots SET weight_kg=weight_kg+$3,status=CASE WHEN weight_kg+$3=0 THEN 'INACTIVE' ELSE 'AVAILABLE' END,updated_at=now() WHERE company_id=$1 AND id=$2`, [company, input.lotId, delta]);
     await db.query(`INSERT INTO yarn_lot_movements(company_id,yarn_lot_id,movement_type,weight_delta_kg,from_warehouse_id,to_warehouse_id,reference_type,reference_id,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,'MANUFACTURING_MATERIAL',$7,$8,$9)`, [company, input.lotId, input.kind === 'ISSUE' ? 'MANUFACTURING_CONSUMPTION' : 'MANUFACTURING_RETURN', delta, input.kind === 'ISSUE' ? lot.warehouse_id : null, input.kind === 'RETURN' ? lot.warehouse_id : null, entry.id, input.notes, user]);
     return { id: entry.id, duplicate: false };
 }
 export async function addManufacturingCharge(db: Db, company: string, user: string, order: string, raw: unknown) {
-    const input = z.object({ requestId: uuid, kind: z.enum(['LABOR', 'ENERGY', 'OVERHEAD', 'ADJUSTMENT']), amount: z.number().finite().min(-999999999).max(999999999).refine(n => n !== 0 && Math.abs(n * 10000 - Math.round(n * 10000)) < 0.00001, 'الدقة القصوى أربع منازل'), currencyCode: z.string().trim().length(3).transform(s => s.toUpperCase()), notes }).strict().parse(raw);
+    const input = z.object({ requestId: uuid, kind: z.enum(['LABOR', 'ENERGY', 'OVERHEAD', 'ADJUSTMENT']), amount: z.number().finite().min(-999999999).max(999999999).refine(n => n !== 0 && Math.abs(n * 10000 - Math.round(n * 10000)) < 0.00001, 'الدقة القصوى أربع منازل'), sourceReference: z.string().trim().min(1).max(200).optional(), currencyCode: z.string().trim().length(3).transform(s => s.toUpperCase()), notes }).strict().parse(raw);
+    if (input.kind === 'LABOR' && !input.sourceReference) fail('حدد مرجع توزيع أجور فريداً لمنع احتساب العمالة مرتين');
     if (input.kind !== 'ADJUSTMENT' && input.amount < 0)
         fail('التكلفة السالبة متاحة للتسويات فقط');
     await lockCostOrder(db, company, order);
@@ -87,7 +90,7 @@ export async function addManufacturingCharge(db: Db, company: string, user: stri
     const rate = await costRate(db, company, input.currencyCode);
     if (!rate)
         fail('سعر الصرف غير معرّف أو غير فعال');
-    const row = (await db.query(`INSERT INTO manufacturing_cost_charges(company_id,work_order_id,request_id,request_hash,kind,amount,currency_code,exchange_rate,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, [company, order, input.requestId, fingerprint, input.kind, money(input.amount), input.currencyCode, rate, input.notes, user])).rows[0];
+    const row = (await db.query(`INSERT INTO manufacturing_cost_charges(company_id,work_order_id,request_id,request_hash,kind,amount,currency_code,exchange_rate,notes,created_by_user_id,source_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`, [company, order, input.requestId, fingerprint, input.kind, money(input.amount), input.currencyCode, rate, input.notes, user, input.sourceReference ?? null])).rows[0];
     return { id: row.id, duplicate: false };
 }
 export const manufacturingGenealogy = `WITH RECURSIVE lineage(id) AS (
@@ -128,12 +131,14 @@ export async function manufacturingCostReport(db: Db, company: string, order: st
         fail('أمر الإنتاج غير موجود', 'NOT_FOUND');
     const warp = (await db.query(`SELECT l.*,i.status issue_status FROM manufacturing_warping_yarn_issue_lines l JOIN manufacturing_warping_yarn_issues i ON i.id=l.issue_id AND i.company_id=l.company_id JOIN manufacturing_warping_orders w ON w.id=i.warping_order_id AND w.company_id=i.company_id WHERE w.company_id=$1 AND w.work_order_id=$2 AND i.status IN ('ISSUED','CLOSED')`, [company, order])).rows;
     const materials = (await db.query('SELECT * FROM manufacturing_material_entries WHERE company_id=$1 AND work_order_id=$2 ORDER BY created_at', [company, order])).rows;
+    const consumptions = (await db.query('SELECT * FROM manufacturing_material_consumptions WHERE company_id=$1 AND work_order_id=$2 ORDER BY created_at,id', [company, order])).rows;
     const charges = (await db.query('SELECT * FROM manufacturing_cost_charges WHERE company_id=$1 AND work_order_id=$2 ORDER BY created_at', [company, order])).rows;
-    const external = (await db.query(`SELECT j.id,j.job_no,j.document_status,j.lifecycle_closed_at,j.fee_amount,j.fee_currency_code,j.fee_exchange_rate_to_usd,
+    const external = (await db.query(`SELECT j.id,j.job_no,j.document_status,j.lifecycle_closed_at,j.fee_amount,j.fee_currency_code,j.fee_exchange_rate_to_usd,a.id AS share_id,a.allocated_usd,
     (SELECT count(*) FROM external_job_services s WHERE s.company_id=j.company_id AND s.job_id=j.id) service_count,
     (SELECT count(*) FROM external_job_services s WHERE s.company_id=j.company_id AND s.job_id=j.id AND s.total_usd IS NULL) unrated,
     (SELECT SUM(s.total_usd) FROM external_job_services s WHERE s.company_id=j.company_id AND s.job_id=j.id) service_total
-    FROM manufacturing_external_links l JOIN external_jobs j ON j.id=l.job_id AND j.company_id=l.company_id WHERE l.company_id=$1 AND l.work_order_id=$2`, [company, order])).rows;
+    FROM external_jobs j LEFT JOIN manufacturing_external_cost_shares a ON a.company_id=j.company_id AND a.job_id=j.id AND a.work_order_id=$2
+    WHERE j.company_id=$1 AND (a.id IS NOT NULL OR EXISTS(SELECT 1 FROM manufacturing_external_links l WHERE l.company_id=j.company_id AND l.job_id=j.id AND l.work_order_id=$2))`, [company, order])).rows;
     let unrated = 0, warpUsd = 0, materialUsd = 0, chargeUsd = 0, externalUsd = 0;
     for (const l of warp) {
         const kg = Number(l.issued_weight_kg) - Number(l.returned_weight_kg);
@@ -150,7 +155,8 @@ export async function manufacturingCostReport(db: Db, company: string, order: st
         if (r.source_entry_id)
             returnedWeights.set(r.source_entry_id, (returnedWeights.get(r.source_entry_id) ?? 0) + Number(r.weight_kg));
     for (const m of materials.filter(e => e.kind === 'ISSUE')) {
-        const net = Number(m.weight_kg) - (returnedWeights.get(m.id) ?? 0);
+        const balance = materialBalance(m, returnedWeights.get(m.id) ?? 0, consumptions.filter(c => c.source_entry_id === m.id));
+        const net = balance.costedKg;
         if (net <= 0)
             continue;
         if (m.unit_cost == null || !Number(m.exchange_rate)) {
@@ -164,6 +170,7 @@ export async function manufacturingCostReport(db: Db, company: string, order: st
     for (const j of external) {
         if (j.document_status === 'VOIDED')
             continue;
+        if(j.share_id){if(j.allocated_usd==null)unrated++;else externalUsd+=Number(j.allocated_usd);continue;}
         if (Number(j.service_count)) {
             unrated += Number(j.unrated);
             externalUsd += Number(j.service_total ?? 0);
@@ -179,7 +186,8 @@ export async function manufacturingCostReport(db: Db, company: string, order: st
     AND NOT EXISTS(SELECT 1 FROM external_job_lines l JOIN external_jobs j ON j.id=l.job_id AND j.company_id=l.company_id WHERE l.roll_id=r.id AND l.company_id=$1 AND j.document_status='CONFIRMED' AND l.line_status<>'CANCELLED')`, [company, order])).rows;
     const acceptedLengthM = rolls.reduce((s, r) => s + Number(r.length_m), 0), totalUsd = money(warpUsd + materialUsd + chargeUsd + externalUsd);
     const closure = (await db.query('SELECT * FROM manufacturing_cost_closures WHERE company_id=$1 AND work_order_id=$2', [company, order])).rows[0] ?? null;
-    return { work, warp, materials, charges, external, rolls, closure, unrated, acceptedLengthM: closure ? Number(closure.accepted_length_m) : acceptedLengthM, totalUsd: closure ? Number(closure.total_usd) : totalUsd, unitCostUsd: closure ? Number(closure.unit_cost_usd) : acceptedLengthM > 0 ? totalUsd / acceptedLengthM : null,
+    const materialBalances = materials.filter(m => m.kind === 'ISSUE').map(m => ({ id: m.id, basis: m.consumption_basis, ...materialBalance(m, returnedWeights.get(m.id) ?? 0, consumptions.filter(c => c.source_entry_id === m.id)) }));
+    return { accountingPosted: false, materialBalances, consumptions, work, warp, materials, charges, external, rolls, closure, unrated, acceptedLengthM: closure ? Number(closure.accepted_length_m) : acceptedLengthM, totalUsd: closure ? Number(closure.total_usd) : totalUsd, unitCostUsd: closure ? Number(closure.unit_cost_usd) : acceptedLengthM > 0 ? totalUsd / acceptedLengthM : null,
         breakdown: { warpUsd: money(warpUsd), materialUsd: money(materialUsd), chargeUsd: money(chargeUsd), externalUsd: money(externalUsd) } };
 }
 export async function finalizeManufacturingCost(db: Db, company: string, user: string, order: string) {
@@ -189,8 +197,9 @@ export async function finalizeManufacturingCost(db: Db, company: string, user: s
     const w = await lockCostOrder(db, company, order);
     if (w.status !== 'COMPLETED')
         fail('أغلق أمر الإنتاج تشغيلياً قبل اعتماد تكلفته');
-    await db.query(`SELECT j.id FROM manufacturing_external_links l JOIN external_jobs j ON j.id=l.job_id AND j.company_id=l.company_id WHERE l.company_id=$1 AND l.work_order_id=$2 ORDER BY j.id FOR UPDATE OF j`, [company, order]);
+    await db.query(`SELECT j.id FROM external_jobs j WHERE j.company_id=$1 AND (EXISTS(SELECT 1 FROM manufacturing_external_links l WHERE l.company_id=j.company_id AND l.job_id=j.id AND l.work_order_id=$2) OR EXISTS(SELECT 1 FROM manufacturing_external_cost_shares a WHERE a.company_id=j.company_id AND a.job_id=j.id AND a.work_order_id=$2)) ORDER BY j.id FOR UPDATE OF j`, [company, order]);
     const report = await manufacturingCostReport(db, company, order);
+    if (report.materialBalances.some(b => b.basis === 'RECORDED' && (b.custodyKg??0) > 0)) fail('توجد مواد بعهدة الإنتاج لم تسجل كمستهلك أو مرتجع أو هالك');
     if (report.unrated || report.external.some(j => j.document_status !== 'VOIDED' && !j.lifecycle_closed_at))
         fail('توجد مواد غير مسعرة أو مصنعية خارجية غير مغلقة');
     if (!report.acceptedLengthM || report.totalUsd < 0)
@@ -208,4 +217,34 @@ export async function finalizeManufacturingCost(db: Db, company: string, user: s
         await db.query("UPDATE fabric_rolls SET unit_cost=$3,currency_code='USD',updated_at=now() WHERE company_id=$1 AND id=$2", [company, roll.id, amount / Number(roll.length_m)]);
     }
     return { totalUsd: report.totalUsd, acceptedLengthM: report.acceptedLengthM, unitCostUsd: report.unitCostUsd };
+}
+
+// All values are expressed in stock kilograms; no new inventory movement on consumption.
+export function materialBalance(entry: { weight_kg: string | number; waste_kg: string | number; consumption_basis?: string }, returnedKg: number, records: Array<{consumed_kg: string | number; waste_kg: string | number}>) {
+    const round = (n: number) => Math.round(n * 1000) / 1000;
+    const issuedKg = Number(entry.weight_kg), net = round(issuedKg - returnedKg);
+    const recorded = entry.consumption_basis === 'RECORDED';
+    const wasteKg = recorded ? round(records.reduce((s,c) => s + Number(c.waste_kg),0)) : Number(entry.waste_kg);
+    const consumedKg = recorded ? round(records.reduce((s,c) => s + Number(c.consumed_kg),0)) : null;
+    return { issuedKg, returnedKg, consumedKg, wasteKg, custodyKg: recorded ? round(net - wasteKg - consumedKg!) : null,
+        costedKg: recorded ? round(consumedKg! + wasteKg) : net };
+}
+export async function recordManufacturingConsumption(db: Db, company: string, user: string, order: string, raw: unknown) {
+    const q = z.number().finite().min(0).max(99999999).refine(n => Math.abs(n * 1000 - Math.round(n * 1000)) < .00001);
+    const input = z.object({requestId: uuid, sourceEntryId: uuid, consumedKg: q, wasteKg: q, notes}).strict().parse(raw);
+    if (input.consumedKg + input.wasteKg <= 0) fail('أدخل كمية استهلاك أو هالك موجبة');
+    await lockCostOrder(db, company, order);
+    const fingerprint = hash(input);
+    const prior = (await db.query('SELECT * FROM manufacturing_material_consumptions WHERE company_id=$1 AND request_id=$2', [company,input.requestId])).rows[0];
+    if (prior) {
+        if (prior.request_hash !== fingerprint || prior.work_order_id !== order) fail('معرف الطلب مستخدم بمحتوى مختلف','DUPLICATE');
+        return {id: prior.id, duplicate: true};
+    }
+    const entry = (await db.query("SELECT * FROM manufacturing_material_entries WHERE company_id=$1 AND work_order_id=$2 AND id=$3 AND kind='ISSUE' FOR UPDATE",[company,order,input.sourceEntryId])).rows[0];
+    if (!entry || entry.consumption_basis !== 'RECORDED') fail('اختر سند صرف يعتمد تسجيل الاستهلاك الفعلي');
+    const records = (await db.query('SELECT * FROM manufacturing_material_consumptions WHERE company_id=$1 AND source_entry_id=$2',[company,entry.id])).rows;
+    const returned = Number((await db.query('SELECT COALESCE(SUM(weight_kg),0) kg FROM manufacturing_material_entries WHERE company_id=$1 AND source_entry_id=$2',[company,entry.id])).rows[0].kg);
+    if (Math.round((input.consumedKg + input.wasteKg)*1000) > Math.round(materialBalance(entry,returned,records).custodyKg! * 1000)) fail('الاستهلاك والهالك يتجاوزان الكمية المتبقية بالعهدة');
+    const row = (await db.query('INSERT INTO manufacturing_material_consumptions(company_id,work_order_id,source_entry_id,request_id,request_hash,consumed_kg,waste_kg,notes,approved_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',[company,order,entry.id,input.requestId,fingerprint,input.consumedKg,input.wasteKg,input.notes,user])).rows[0];
+    return {id:row.id,duplicate:false};
 }

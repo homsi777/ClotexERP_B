@@ -102,7 +102,7 @@ export function AiAssistantSettingsPanel() {
         return;
       }
       const result = await testAiConnection(apiKey.trim() || undefined, model, provider);
-      if (result.success) {
+      if (result.success === true) {
         setStatusKind('ok');
         setStatus(`نجح الاتصال — ${providerMeta.label} — النموذج: ${result.model}`);
       } else {

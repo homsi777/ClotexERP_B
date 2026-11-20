@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import {allocateMixedCost} from '../services/mixedExternalCostService.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { getPool } from '../db/pool.js';
@@ -11,7 +12,7 @@ export const externalManufacturingRoutes: FastifyPluginAsync = async app => {
     try {
       const data = await manufacturingOverview(getPool(), req.user!.companyId, (req.params as { id: string }).id);
       const canPrice = ['admin', 'accountant'].includes(req.user!.role);
-      if (!canPrice) { for (const s of data.services) { delete s.unit_price; delete s.currency_code; delete s.approved_quantity; delete s.total_usd; } }
+      if (!canPrice) { for (const s of data.services) { delete s.unit_price; delete s.currency_code; delete s.approved_quantity; delete s.total_usd; } for(const share of data.costShares)delete share.allocated_usd;data.costAllocationTotalUsd=null; }
       return reply.send({ ok: true, data, canPrice, canManage: canPrice, canReceive: req.user!.role === 'admin' || req.user!.permissions.includes('inventory.manage') });
     } catch (e) { return handle(e, reply, req); }
   });
@@ -21,6 +22,7 @@ export const externalManufacturingRoutes: FastifyPluginAsync = async app => {
     settlements: { privileged: true, run: settleManufacturingShortage },
     'resolve-defect': { privileged: true, run: resolveManufacturingDefect },
     'service-pricing': { privileged: true, run: priceManufacturingServices },
+    'cost-allocation':{privileged:true,run:allocateMixedCost},
     close: { privileged: true, run: async (db, company, _user, job) => closeManufacturingJob(db, company, job) },
   } satisfies Record<string, { privileged: boolean; run: (db: import('pg').PoolClient, company: string, user: string, job: string, body: unknown) => Promise<unknown> }>;
   for (const [action, spec] of Object.entries(actions)) {

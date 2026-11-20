@@ -265,8 +265,8 @@ export const ProfitDetails = () => {
       { label: t('stats.realizedProfit'), value: `${totals.realized_profit ?? '0.00'} USD` },
       { label: t('stats.receivableProfit'), value: `${totals.receivable_profit ?? '0.00'} USD` },
     ];
-    if (report.meta?.missingCostCount) base.push({ label: t('stats.missingCostCount'), value: report.meta.missingCostCount });
-    if (report.meta?.fallbackCostCount) base.push({ label: t('stats.fallbackCostCount'), value: report.meta.fallbackCostCount });
+    if (report.meta?.missingCostCount) base.push({ label: t('stats.missingCostCount'), value: String(report.meta.missingCostCount) });
+    if (report.meta?.fallbackCostCount) base.push({ label: t('stats.fallbackCostCount'), value: String(report.meta.fallbackCostCount) });
     return base;
   }, [report, t]);
 

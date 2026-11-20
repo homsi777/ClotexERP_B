@@ -1,3 +1,5 @@
+import { OrderMetadataFields } from './OrderMetadataFields';
+import type { CustomerOrderMetadata } from '../../types';
 import React, { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
@@ -33,7 +35,7 @@ import { resolveOrderWarehouseLabel } from '../../lib/warehouseSelect';
 import { ApiRequestError } from '../../lib/api/client';
 import { useToast } from '../NonBlockingToast';
 
-export interface OrderFormSubmitPayload {
+export interface OrderFormSubmitPayload extends CustomerOrderMetadata {
   orderNumber?: string;
   date: string;
   customerId: string;
@@ -46,6 +48,8 @@ export interface OrderFormSubmitPayload {
   expectedDate?: string;
   templateId?: string;
   advancePayment?: number;
+  expectedUpdatedAt?: string;
+  changeReason?:string;
 }
 
 /** للملخص والوزن: الكمية تُعتبر بالمتر في السطر */
@@ -294,7 +298,9 @@ export function OrderFormModal({
 }: OrderFormModalProps) {
   const { t } = useTranslation('orderFormModal');
   const { showToast } = useToast();
+  const [metadata, setMetadata] = useState<CustomerOrderMetadata>({});
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [changeReason,setChangeReason]=useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [partyId, setPartyId] = useState('');
   const [warehouse, setWarehouse] = useState('');
@@ -348,6 +354,18 @@ export function OrderFormModal({
 
   useEffect(() => {
     if (!open) return;
+    setChangeReason('');
+    setMetadata(editingOrder ? {
+      receivedOfficeId: editingOrder.receivedOfficeId ?? null,
+      takenByEmployeeId: editingOrder.takenByEmployeeId ?? null,
+      followUpEmployeeId: editingOrder.followUpEmployeeId ?? null,
+      followUpUserId: editingOrder.followUpUserId ?? null,
+      sampleKind: editingOrder.sampleKind ?? null,
+      sampleStatus: editingOrder.sampleStatus ?? null,
+      sampleRequestedDate: editingOrder.sampleRequestedDate ?? null,
+      sampleReceivedDate: editingOrder.sampleReceivedDate ?? null,
+      sampleApprovedDate: editingOrder.sampleApprovedDate ?? null,
+    } : {});
     if (editingOrder) {
       setDate(editingOrder.date);
       setOrderNumber(displayCustomerOrderNumber(editingOrder.orderNumber));
@@ -617,6 +635,7 @@ export function OrderFormModal({
       const metersPerRoll = numberValue(synced.metersPerRoll);
       const designNo = item.fabricCode.trim() || item.rollNo.trim();
       return {
+        id: item.id,
         materialName: item.materialName.trim() || designNo || '—',
         dsamNumber: item.dsamNumber.trim(),
         rollNo: designNo,
@@ -636,10 +655,13 @@ export function OrderFormModal({
       };
     });
     return {
+      expectedUpdatedAt: editingOrder?.updatedAt,
+      changeReason:changeReason.trim()||undefined,
       orderNumber: orderNumber.trim() || undefined,
       date,
       customerId: partyId,
       currency,
+      ...metadata,
       warehouse: warehouse.trim() || undefined,
       shippingMethod: shippingMethod.trim() || undefined,
       notes: notes.trim() || undefined,
@@ -769,7 +791,7 @@ export function OrderFormModal({
             </button>
             <button
               type="button"
-              disabled={hasValidationErrors || !partyId || saving}
+              disabled={hasValidationErrors || !partyId || saving || Boolean(editingOrder && editingOrder.status!=='draft')}
               onClick={() => void handleSave('draft')}
               className="bg-amber-50 text-amber-800 border border-amber-200 px-3 py-2 rounded-lg flex items-center gap-1.5 text-sm font-medium disabled:opacity-50"
             >
@@ -798,6 +820,7 @@ export function OrderFormModal({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            {editingOrder&&<label className="space-y-1.5 xl:col-span-2"><span className="text-xs font-bold text-slate-700">سبب تعديل الكميات بعد بدء الإنتاج</span><input className="w-full rounded-lg border px-3 py-2 text-sm" value={changeReason} onChange={e=>setChangeReason(e.target.value)} placeholder="مطلوب عند تعديل كمية لها إنتاج بدأ فعلياً"/></label>}
             <div className="space-y-1.5 xl:col-span-2">
               <label className="text-xs font-bold text-slate-700">{t('form.orderNumberLabel')}</label>
               <input
@@ -817,6 +840,7 @@ export function OrderFormModal({
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
               />
             </div>
+            <OrderMetadataFields value={metadata} onChange={setMetadata} />
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700">{t('form.expectedDateLabel')}</label>
               <input
@@ -864,10 +888,11 @@ export function OrderFormModal({
               <label className="text-xs font-bold text-slate-700">{t('form.statusLabel')}</label>
               <select
                 value={status}
+                disabled={Boolean(editingOrder)}
                 onChange={(e) => setStatus(e.target.value as CustomerOrder['status'])}
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
               >
-                {ORDER_STATUS_FLOW.map((s) => (
+                {ORDER_STATUS_FLOW.filter(s=>editingOrder?s===editingOrder.status:['draft','pending_supply'].includes(s)).map((s) => (
                   <option key={s} value={s}>
                     {ORDER_STATUS_LABELS[s]}
                   </option>

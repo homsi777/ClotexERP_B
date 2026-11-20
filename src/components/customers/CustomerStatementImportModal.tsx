@@ -185,7 +185,7 @@ function analyzeWorkbook(fileName: string, workbook: XLSX.WorkBook): ImportAnaly
     customerName,
     orderDate,
     currencyCode: 'USD',
-    saleLines: normalizedSaleLines,
+    saleLines: normalizedSaleLines.map((line, index) => ({ ...line, dateParseSource: saleLines[index].dateParseSource })),
     payments: payments.filter((row) => row.kind === 'payment'),
     returnPayments: payments.filter((row) => row.kind === 'return'),
     sheetSalesTotal: round2(sheetSalesTotal || computedSalesTotal),

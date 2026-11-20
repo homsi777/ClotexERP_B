@@ -239,7 +239,23 @@ export interface CustomerOrderLine {
   unitType?: 'meter' | 'yard';
 }
 
-export interface CustomerOrder {
+export interface CustomerOrderMetadata {
+  receivedOfficeId?: string | null;
+  receivedOfficeName?: string | null;
+  takenByEmployeeId?: string | null;
+  takenByEmployeeName?: string | null;
+  followUpEmployeeId?: string | null;
+  followUpEmployeeName?: string | null;
+  followUpUserId?: string | null;
+  followUpUserName?: string | null;
+  sampleKind?: string | null;
+  sampleStatus?: 'requested' | 'received' | 'approved' | 'rejected' | null;
+  sampleRequestedDate?: string | null;
+  sampleReceivedDate?: string | null;
+  sampleApprovedDate?: string | null;
+}
+
+export interface CustomerOrder extends CustomerOrderMetadata {
   id: string;
   orderNumber: string;
   date: string;

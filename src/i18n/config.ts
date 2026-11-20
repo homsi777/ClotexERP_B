@@ -43,6 +43,7 @@ import arExchangeInvoices from '../locales/ar/exchangeInvoices.json';
 import arInvoiceStatement from '../locales/ar/invoiceStatement.json';
 import arCustomerOrdersPage from '../locales/ar/customerOrdersPage.json';
 import arOrderFormModal from '../locales/ar/orderFormModal.json';
+import arOrderWorkflow from '../locales/ar/orderWorkflow.json';
 import arTreasuryMain from '../locales/ar/treasuryMain.json';
 import arTreasurySettings from '../locales/ar/treasurySettings.json';
 import arPaymentBonds from '../locales/ar/paymentBonds.json';
@@ -113,6 +114,7 @@ import trExchangeInvoices from '../locales/tr/exchangeInvoices.json';
 import trInvoiceStatement from '../locales/tr/invoiceStatement.json';
 import trCustomerOrdersPage from '../locales/tr/customerOrdersPage.json';
 import trOrderFormModal from '../locales/tr/orderFormModal.json';
+import trOrderWorkflow from '../locales/tr/orderWorkflow.json';
 import trTreasuryMain from '../locales/tr/treasuryMain.json';
 import trTreasurySettings from '../locales/tr/treasurySettings.json';
 import trPaymentBonds from '../locales/tr/paymentBonds.json';
@@ -191,6 +193,7 @@ void i18n.use(initReactI18next).init({
       invoiceStatement: arInvoiceStatement,
       customerOrdersPage: arCustomerOrdersPage,
       orderFormModal: arOrderFormModal,
+      orderWorkflow: arOrderWorkflow,
       treasuryMain: arTreasuryMain,
       treasurySettings: arTreasurySettings,
       paymentBonds: arPaymentBonds,
@@ -263,6 +266,7 @@ void i18n.use(initReactI18next).init({
       invoiceStatement: trInvoiceStatement,
       customerOrdersPage: trCustomerOrdersPage,
       orderFormModal: trOrderFormModal,
+      orderWorkflow: trOrderWorkflow,
       treasuryMain: trTreasuryMain,
       treasurySettings: trTreasurySettings,
       paymentBonds: trPaymentBonds,

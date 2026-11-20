@@ -1,3 +1,7 @@
+import { customerOrderWorkflowRoutes } from './customerOrderWorkflowRoutes.js';
+import {customerOrderNotificationRoutes} from './customerOrderNotificationRoutes.js';
+import {changeCustomerOrderStatus,deleteUnusedOrderDraft} from '../services/customerOrderLifecycleService.js';
+import { customerOrderMetadataSchema, metadataSelect, saveOrderMetadata } from '../services/customerOrderMetadata.js';
 import type { FastifyPluginAsync } from 'fastify';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
@@ -26,7 +30,7 @@ const optionalString = z.preprocess(
 );
 
 const orderLineSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().uuid().optional(),
   materialName: z.string().optional().default(''),
   dsamNumber: z.string().optional().default(''),
   rollNo: z.string().optional().default(''),
@@ -46,21 +50,24 @@ const orderLineSchema = z.object({
 });
 
 const orderBodySchema = z.object({
+  ...customerOrderMetadataSchema.shape,
   orderNumber: optionalString,
-  date: z.string().min(1),
+  date: z.string().date(),
   customerId: z.string().uuid(),
   currency: z.string().trim().min(1).default('USD'),
   warehouse: optionalString,
   shippingMethod: optionalString,
   notes: optionalString,
-  items: z.array(orderLineSchema).min(1),
+  items: z.array(orderLineSchema).min(1).max(1000),
   status: statusSchema.default('draft'),
   templateId: z.preprocess(
     (v) => (v === null || v === undefined || v === '' ? undefined : v),
     z.string().uuid().optional(),
   ),
-  expectedDate: optionalString,
+  expectedDate:z.preprocess(v=>v===null||v===undefined||v===''?undefined:v,z.string().date().optional()),
   advancePayment: z.coerce.number().nonnegative().optional().default(0),
+  expectedUpdatedAt: z.string().datetime().optional(),
+  changeReason:z.string().trim().max(2000).optional(),
 });
 
 function validationErrorMessage(parsed: { success: false; error: z.ZodError }): string {
@@ -155,6 +162,17 @@ async function insertOrderLines(
   orderId: string,
   lines: z.infer<typeof orderLineSchema>[],
 ) {
+  const ids = lines.flatMap((line) => line.id ? [line.id] : []);
+  if (new Set(ids).size !== ids.length) {
+    throw Object.assign(new Error('معرف سطر الطلبية مكرر'), { code: 'VALIDATION' });
+  }
+  if (ids.length) {
+    const foreign = await client.query(
+      'SELECT id FROM customer_order_lines WHERE id=ANY($1::uuid[]) AND (company_id<>$2 OR order_id<>$3) LIMIT 1',
+      [ids, companyId, orderId],
+    );
+    if (foreign.rows.length) throw Object.assign(new Error('سطر الطلبية لا يتبع هذا الأوردر'), { code: 'VALIDATION' });
+  }
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const qty = normalizeOrderLineQuantities(line);
@@ -162,9 +180,20 @@ async function insertOrderLines(
       `INSERT INTO customer_order_lines (
          company_id, order_id, line_no, material_name, dsam_number, roll_no,
          color_code, color_name, length, meters_per_roll, roll_count, width_cm, gsm, weight, price,
-         note, image_url, reference_barcode, unit_type
+         note, image_url, reference_barcode, unit_type, id
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,COALESCE($20::uuid,gen_random_uuid()))
+       ON CONFLICT (id) DO UPDATE SET
+         line_no=EXCLUDED.line_no, material_name=EXCLUDED.material_name,
+         dsam_number=EXCLUDED.dsam_number, roll_no=EXCLUDED.roll_no,
+         color_code=EXCLUDED.color_code, color_name=EXCLUDED.color_name,
+         length=EXCLUDED.length, meters_per_roll=EXCLUDED.meters_per_roll,
+         roll_count=EXCLUDED.roll_count, width_cm=EXCLUDED.width_cm, gsm=EXCLUDED.gsm,
+         weight=EXCLUDED.weight, price=EXCLUDED.price, note=EXCLUDED.note,
+         image_url=EXCLUDED.image_url, reference_barcode=EXCLUDED.reference_barcode,
+         unit_type=EXCLUDED.unit_type
+       WHERE customer_order_lines.company_id=EXCLUDED.company_id
+         AND customer_order_lines.order_id=EXCLUDED.order_id`,
       [
         companyId,
         orderId,
@@ -185,6 +214,7 @@ async function insertOrderLines(
         line.imageUrl || null,
         line.referenceBarcode || null,
         line.unitType,
+        line.id || null,
       ],
     );
   }
@@ -193,7 +223,7 @@ async function insertOrderLines(
 async function getOrderById(client: PoolClient, companyId: string, id: string) {
   const row = await client.query(
     `SELECT
-       o.id,
+       o.id, ${metadataSelect},
        o.order_no AS "orderNumber",
        o.order_date::text AS date,
        o.customer_id AS "customerId",
@@ -265,6 +295,40 @@ async function enrichOrderWithFulfillment(
   return { ...order, items: enrichedItems };
 }
 
+async function prepareOrderLineUpdate(client: PoolClient, companyId: string, orderId: string, lines: z.infer<typeof orderLineSchema>[]) {
+  const previous = await client.query(`SELECT l.*,
+    EXISTS(SELECT 1 FROM inventory_roll_reservations r WHERE r.company_id=l.company_id AND r.reference_type='CUSTOMER_ORDER_LINE' AND r.reference_id=l.id AND r.released_at IS NULL) AS reserved,
+    EXISTS(SELECT 1 FROM sales_invoice_lines s WHERE s.company_id=l.company_id AND s.customer_order_line_id=l.id) AS invoiced,
+    EXISTS(SELECT 1 FROM manufacturing_work_order_allocations a WHERE a.company_id=l.company_id AND a.customer_order_line_id=l.id) AS allocated,
+    COALESCE((SELECT SUM(fr.length_m) FROM inventory_roll_reservations rr JOIN fabric_rolls fr ON fr.id=rr.roll_id AND fr.company_id=rr.company_id WHERE rr.company_id=l.company_id AND rr.reference_type='CUSTOMER_ORDER_LINE' AND rr.reference_id=l.id AND rr.released_at IS NULL),0) AS reserved_m,
+    COALESCE((SELECT SUM(a.allocated_length_m) FROM manufacturing_work_order_allocations a
+      JOIN manufacturing_work_orders w ON w.id=a.work_order_id AND w.company_id=a.company_id
+      WHERE a.company_id=l.company_id AND a.customer_order_line_id=l.id AND a.is_active AND w.status<>'CANCELLED'),0) AS allocated_m
+    FROM customer_order_lines l WHERE l.company_id=$1 AND l.order_id=$2 FOR UPDATE OF l`, [companyId, orderId]);
+  const next = new Map(lines.filter(l => l.id).map(l => [l.id!, l]));
+  for (const old of previous.rows) {
+    const line = next.get(old.id);
+    if (!line) {
+      if (old.invoiced || old.allocated || old.reserved) throw Object.assign(new Error('لا يمكن حذف سطر مرتبط بفاتورة أو إنتاج؛ احتفظ بالسطر وسجله التاريخي'), { code: 'CONFLICT' });
+      continue;
+    }
+    if (old.invoiced || old.allocated || old.reserved) {
+      const identity = [['material_name','materialName'],['dsam_number','dsamNumber'],['roll_no','rollNo'],['color_code','colorCode'],['color_name','colorName'],['unit_type','unitType']] as const;
+      if (identity.some(([db, field]) => String(old[db] ?? '') !== String(line[field] ?? ''))) {
+        throw Object.assign(new Error('لا يمكن تغيير هوية خامة أو لون سطر مرتبط بفاتورة أو إنتاج'), { code: 'CONFLICT' });
+      }
+    }
+    const quantity = normalizeOrderLineQuantities(line).length * (line.unitType === 'yard' ? 0.9144 : 1);
+    const fulfilled = await getOrderLineFulfilledMeters(client, companyId, old.id);
+    if (quantity + 0.0005 < Math.max(fulfilled + Number(old.reserved_m), Number(old.allocated_m))) {
+      throw Object.assign(new Error('كمية السطر أقل من المسلّم أو المخصص للإنتاج؛ سوّ المرجع المرتبط أولاً'), { code: 'CONFLICT' });
+    }
+  }
+  // Move existing positions outside the positive range before reordering in place.
+  await client.query('UPDATE customer_order_lines SET line_no=-line_no WHERE company_id=$1 AND order_id=$2', [companyId, orderId]);
+  await client.query('DELETE FROM customer_order_lines WHERE company_id=$1 AND order_id=$2 AND NOT(id=ANY($3::uuid[]))', [companyId, orderId, [...next.keys()]]);
+}
+
 async function listTemplates(client: PoolClient, companyId: string) {
   const rows = await client.query(
     `SELECT
@@ -301,6 +365,13 @@ async function listTemplates(client: PoolClient, companyId: string) {
 }
 
 export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook('preHandler',async(req,reply)=>{
+    await authenticateRequest(req,reply);if(reply.sent)return;
+    const permission=req.method==='GET'||req.url.includes('/notifications/')?'customers.view':'customers.manage';
+    if(req.user!.role!=='admin'&&!req.user!.permissions.includes(permission))return sendError(reply,403,'ليست لديك صلاحية إدارة أوردرات العملاء','FORBIDDEN');
+  });
+  await app.register(customerOrderWorkflowRoutes);
+  await app.register(customerOrderNotificationRoutes);
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const q = req.query as Record<string, string>;
@@ -313,7 +384,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
     const params: unknown[] = [companyId];
     let p = 2;
     if (search) {
-      conditions.push(`(o.order_no ILIKE $${p} OR o.notes ILIKE $${p} OR c.name ILIKE $${p})`);
+      conditions.push(`(o.order_no ILIKE $${p} OR o.notes ILIKE $${p} OR c.name ILIKE $${p} OR concat_ws(' ',o.received_office_name,o.taken_by_employee_name,o.follow_up_employee_name,o.follow_up_user_name,o.sample_kind,o.sample_status) ILIKE $${p} OR EXISTS (SELECT 1 FROM customer_order_lines sl WHERE sl.order_id=o.id AND sl.company_id=o.company_id AND concat_ws(' ',sl.material_name,sl.color_code,sl.color_name) ILIKE $${p}))`);
       params.push(`%${search}%`);
       p++;
     }
@@ -323,12 +394,28 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
       p++;
     }
 
+    for (const [key,column] of Object.entries({receivedOfficeId:'received_office_id',takenByEmployeeId:'taken_by_employee_id',followUpEmployeeId:'follow_up_employee_id',followUpUserId:'follow_up_user_id',sampleStatus:'sample_status'})) {
+      if (q[key]) { conditions.push(`o.${column}::text=$${p++}`); params.push(q[key]); }
+    }
+    for (const [key,operator] of [['expectedFrom','>='],['expectedTo','<=']] as const) {
+      if (q[key]) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(q[key])) return sendError(reply,400,'Invalid date','VALIDATION');
+        conditions.push(`o.expected_date${operator}$${p++}::date`); params.push(q[key]);
+      }
+    }
+    for (const [key,column] of Object.entries({material:'material_name',color:'color_name'})) {
+      if (q[key]?.trim()) {
+        conditions.push(`EXISTS (SELECT 1 FROM customer_order_lines fl WHERE fl.order_id=o.id AND fl.company_id=o.company_id AND ${key==='color'?`concat_ws(' ',fl.color_name,fl.color_code)`:`fl.${column}`} ILIKE $${p++})`);
+        params.push(`%${q[key].trim()}%`);
+      }
+    }
+    const sort = q.sort === 'expectedDate' ? 'o.expected_date ASC NULLS LAST, o.created_at DESC' : 'o.order_date DESC, o.created_at DESC';
     const where = conditions.join(' AND ');
     const pool = getPool();
     const [rows, count] = await Promise.all([
       pool.query(
         `SELECT
-           o.id,
+           o.id, ${metadataSelect},
            o.order_no AS "orderNumber",
            o.order_date::text AS date,
            o.customer_id AS "customerId",
@@ -372,7 +459,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
          LEFT JOIN customer_order_lines l ON l.order_id=o.id
          WHERE ${where}
          GROUP BY o.id
-         ORDER BY o.order_date DESC, o.created_at DESC
+         ORDER BY ${sort}
          LIMIT $${p} OFFSET $${p + 1}`,
         [...params, pageSize, offset],
       ),
@@ -380,6 +467,31 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
     ]);
 
     return reply.send({ ok: true, data: rows.rows, total: count.rows[0].total, page, pageSize });
+  });
+
+  app.post('/offices', { preHandler: authenticateRequest }, async (req, reply) => {
+    const user = req.user!;
+    if (user.role !== 'admin' && !user.permissions.includes('customers.manage')) return sendError(reply,403,'ليس لديك صلاحية إدارة المكاتب','FORBIDDEN');
+    const parsed = z.object({code:z.string().trim().min(1).max(40),name:z.string().trim().min(1).max(120)}).safeParse(req.body);
+    if (!parsed.success) return sendError(reply,400,validationErrorMessage(parsed),'VALIDATION');
+    try {
+      const row = await getPool().query('INSERT INTO customer_order_offices(company_id,code,name) VALUES($1,$2,$3) RETURNING id,name,is_active AS "isActive"',[user.companyId,parsed.data.code,parsed.data.name]);
+      return reply.status(201).send({ok:true,data:row.rows[0]});
+    } catch (error) {
+      if ((error as {code?:string}).code==='23505') return sendError(reply,409,'رمز المكتب مستخدم بالفعل','DUPLICATE');
+      throw error;
+    }
+  });
+
+  app.get('/metadata-options', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const pool = getPool();
+    const [offices,employees,users] = await Promise.all([
+      pool.query('SELECT id,name,is_active AS "isActive" FROM customer_order_offices WHERE company_id=$1 ORDER BY name',[companyId]),
+      pool.query('SELECT id,full_name AS name,is_active AS "isActive" FROM payroll_employees WHERE company_id=$1 ORDER BY full_name',[companyId]),
+      pool.query('SELECT id,COALESCE(full_name,username) AS name,is_active AS "isActive" FROM users WHERE company_id=$1 ORDER BY username',[companyId]),
+    ]);
+    return reply.send({ok:true,data:{offices:offices.rows,employees:employees.rows,users:users.rows}});
   });
 
   app.get('/templates', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -539,7 +651,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
         d.orderNumber?.trim() ||
         (await generateCustomerOrderNo(client, companyId));
       if (d.orderNumber?.trim() && !/^\d+$/.test(d.orderNumber.trim())) {
-        return sendError(reply, 400, 'رقم الطلبية يجب أن يكون أرقاماً فقط', 'VALIDATION');
+        throw Object.assign(new Error('رقم الطلبية يجب أن يكون أرقاماً فقط'),{code:'VALIDATION'});
       }
       const created = await client.query(
         `INSERT INTO customer_orders (
@@ -558,7 +670,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
           d.warehouse || null,
           d.shippingMethod || null,
           d.notes || null,
-          d.status,
+          'draft',
           d.templateId || null,
           toDateOrNull(d.expectedDate),
           d.advancePayment,
@@ -566,6 +678,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
         ],
       );
       const id = created.rows[0].id as string;
+      await saveOrderMetadata(client, companyId, id, d);
       const cartelaDraftsCreated = await ensureCartelaDraftsFromOrderLines(client, companyId, userId, d.items);
       await insertOrderLines(client, companyId, id, d.items);
       await client.query('COMMIT');
@@ -577,6 +690,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
     } catch (e) {
       await client.query('ROLLBACK');
       const err = e as { code?: string; message?: string };
+      if (err.code === 'VALIDATION') return sendError(reply, 400, err.message!, 'VALIDATION');
       if (err.code === '23505') return sendError(reply, 409, 'Duplicate order number', 'DUPLICATE');
       if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'Not found', 'NOT_FOUND');
       throw e;
@@ -594,10 +708,33 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
     const client = await getPool().connect();
     try {
       await client.query('BEGIN');
+      const locked = await client.query('SELECT * FROM customer_orders WHERE id=$1 AND company_id=$2 FOR UPDATE', [id,companyId]);
+      if (!locked.rows.length) throw Object.assign(new Error('Order not found'), { code: 'NOT_FOUND' });
+      if (d.expectedUpdatedAt && new Date(d.expectedUpdatedAt).getTime() !== new Date(locked.rows[0].updated_at).getTime()) {
+        throw Object.assign(new Error('تم تعديل الطلبية من جلسة أخرى؛ أعد تحميلها قبل الحفظ'), { code: 'CONFLICT' });
+      }
+      const before = await getOrderById(client,companyId,id);
+      const oldItems=(before?.items??[]) as Array<Record<string,unknown>>;
+      const changedQuantities=d.items.length!==oldItems.length||d.items.some(line=>{
+        const old=oldItems.find(item=>item.id===line.id);
+        return !old||Math.abs(Number(old.length)-normalizeOrderLineQuantities(line).length)>0.0005||old.unitType!==line.unitType;
+      });
+      if(changedQuantities){
+        const started=await client.query(`SELECT 1 FROM manufacturing_work_order_allocations a JOIN manufacturing_work_orders w ON w.id=a.work_order_id AND w.company_id=a.company_id WHERE a.company_id=$1 AND a.customer_order_id=$2 AND a.is_active AND w.status NOT IN ('DRAFT','CANCELLED') LIMIT 1`,[companyId,id]);
+        if(started.rows.length&&(!(req.user!.role==='admin'||req.user!.permissions.includes('manufacturing.work_orders.release'))||!d.changeReason))throw Object.assign(new Error('تعديل الكمية بعد بدء الإنتاج يتطلب صلاحية اعتماد وسبباً مسجلاً'),{code:'CONFLICT'});
+      }
+      if (d.status !== locked.rows[0].status) throw Object.assign(new Error('مرجع غير صالح أو إجراء غير مسموح؛ راجع الطلبية والشركة'), {code:'CONFLICT'});
+      if (['completed','cancelled'].includes(locked.rows[0].status) && locked.rows[0].customer_id !== d.customerId) {
+        throw Object.assign(new Error('مرجع غير صالح أو إجراء غير مسموح؛ راجع الطلبية والشركة'), {code:'CONFLICT'});
+      }
+      if (locked.rows[0].customer_id !== d.customerId) {
+        const references = await client.query('SELECT id FROM sales_invoices WHERE company_id=$1 AND customer_order_id=$2 LIMIT 1',[companyId,id]);
+        if (references.rows.length) throw Object.assign(new Error('لا يمكن تغيير عميل طلبية مرتبطة بفاتورة'), {code:'CONFLICT'});
+      }
       await assertCustomerExists(client, companyId, d.customerId);
       await assertTemplateExists(client, companyId, d.templateId);
       if (d.orderNumber?.trim() && !/^\d+$/.test(d.orderNumber.trim())) {
-        return sendError(reply, 400, 'رقم الطلبية يجب أن يكون أرقاماً فقط', 'VALIDATION');
+        throw Object.assign(new Error('رقم الطلبية يجب أن يكون أرقاماً فقط'), {code:'VALIDATION'});
       }
       const updated = await client.query(
         `UPDATE customer_orders
@@ -635,8 +772,11 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
       );
       if (!updated.rows.length) throw Object.assign(new Error('Order not found'), { code: 'NOT_FOUND' });
       const cartelaDraftsCreated = await ensureCartelaDraftsFromOrderLines(client, companyId, userId, d.items);
-      await client.query('DELETE FROM customer_order_lines WHERE order_id=$1 AND company_id=$2', [id, companyId]);
+      await saveOrderMetadata(client, companyId, id, d);
+      await prepareOrderLineUpdate(client, companyId, id, d.items);
       await insertOrderLines(client, companyId, id, d.items);
+      await client.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,entity_id,details)
+        VALUES($1,$2,'UPDATE','customer_order',$3,$4::jsonb)`,[companyId,userId,id,JSON.stringify({before,after:await getOrderById(client,companyId,id),reason:d.changeReason??null})]);
       await client.query('COMMIT');
       return reply.send({
         ok: true,
@@ -646,6 +786,8 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
     } catch (e) {
       await client.query('ROLLBACK');
       const err = e as { code?: string; message?: string };
+      if (err.code === 'CONFLICT') return sendError(reply, 409, err.message!, 'CONFLICT');
+      if (err.code === 'VALIDATION') return sendError(reply, 400, err.message!, 'VALIDATION');
       if (err.code === '23505') return sendError(reply, 409, 'Duplicate order number', 'DUPLICATE');
       if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'Not found', 'NOT_FOUND');
       throw e;
@@ -657,27 +799,18 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/:id/status', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
-    const parsed = z.object({ status: statusSchema }).safeParse(req.body);
+    const parsed = z.object({ status: statusSchema,reason:z.string().trim().max(2000).optional() }).safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, validationErrorMessage(parsed), 'VALIDATION');
-    const row = await getPool().query(
-      `UPDATE customer_orders
-       SET status=$3, updated_by_user_id=$4, updated_at=now()
-       WHERE id=$1 AND company_id=$2
-       RETURNING id`,
-      [id, companyId, parsed.data.status, userId],
-    );
-    if (!row.rows.length) return sendError(reply, 404, 'Order not found', 'NOT_FOUND');
-    return reply.send({ ok: true });
+    const db=await getPool().connect();
+    try{await db.query('BEGIN');await changeCustomerOrderStatus(db,req.user!,id,parsed.data.status,parsed.data.reason);await db.query('COMMIT');return reply.send({ok:true});}
+    catch(e){await db.query('ROLLBACK');const error=e as {code?:string;message:string};if(['CONFLICT','NOT_FOUND'].includes(error.code??''))return sendError(reply,error.code==='NOT_FOUND'?404:409,error.message,error.code!);throw e;}finally{db.release();}
   });
 
   app.delete('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
-    const row = await getPool().query(
-      `DELETE FROM customer_orders WHERE id=$1 AND company_id=$2 RETURNING id`,
-      [id, companyId],
-    );
-    if (!row.rows.length) return sendError(reply, 404, 'Order not found', 'NOT_FOUND');
-    return reply.send({ ok: true });
+    const db=await getPool().connect();
+    try{await db.query('BEGIN');await deleteUnusedOrderDraft(db,companyId,id);await db.query('COMMIT');return reply.send({ok:true});}
+    catch(e){await db.query('ROLLBACK');const error=e as {code?:string;message:string};if(['CONFLICT','NOT_FOUND'].includes(error.code??''))return sendError(reply,error.code==='NOT_FOUND'?404:409,error.message,error.code!);throw e;}finally{db.release();}
   });
 };

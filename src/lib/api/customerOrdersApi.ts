@@ -1,7 +1,8 @@
+import type { CustomerOrderMetadata } from '../../types';
 import type { CustomerOrder, CustomerOrderStatus, OrderTemplate } from '../../types';
 import { apiFetch } from './client';
 
-export type CustomerOrderPayload = {
+export type CustomerOrderPayload = CustomerOrderMetadata & {
   orderNumber?: string;
   date: string;
   customerId: string;
@@ -14,6 +15,8 @@ export type CustomerOrderPayload = {
   expectedDate?: string;
   templateId?: string;
   advancePayment?: number;
+  expectedUpdatedAt?: string;
+  changeReason?:string;
 };
 
 function sanitizeOrderPayload(payload: CustomerOrderPayload): CustomerOrderPayload {
@@ -53,10 +56,11 @@ export type CustomerOrdersListResult = {
   pageSize: number;
 };
 
-export async function listCustomerOrders(params: { search?: string; status?: CustomerOrderStatus } = {}) {
+export async function listCustomerOrders(params: { search?: string; status?: CustomerOrderStatus; receivedOfficeId?: string; takenByEmployeeId?: string; followUpEmployeeId?: string; followUpUserId?: string; sampleStatus?: string; expectedFrom?: string; expectedTo?: string; material?: string; color?: string; sort?: string; page?: number } = {}) {
   const q = new URLSearchParams();
   if (params.search) q.set('search', params.search);
   if (params.status) q.set('status', params.status);
+  for (const [key,value] of Object.entries(params)) if (value) q.set(key,String(value));
   q.set('pageSize', '200');
   const res = await apiFetch<CustomerOrdersListResult & { ok: boolean }>(`/api/customer-orders?${q}`);
   return res;
@@ -92,12 +96,14 @@ export async function updateCustomerOrderApi(
   return { order: res.data, cartelaDraftsCreated: res.cartelaDraftsCreated ?? 0 };
 }
 
-export async function updateCustomerOrderStatusApi(id: string, status: CustomerOrderStatus): Promise<void> {
+export async function updateCustomerOrderStatusApi(id: string, status: CustomerOrderStatus,reason?:string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/api/customer-orders/${id}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status,reason }),
   });
 }
+
+export const getCustomerOrderApi=(id:string)=>apiFetch<{data:CustomerOrder}>(`/api/customer-orders/${encodeURIComponent(id)}`).then(result=>result.data);
 
 export async function deleteCustomerOrderApi(id: string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/api/customer-orders/${id}`, { method: 'DELETE' });
@@ -156,4 +162,16 @@ export async function fetchCustomerOrderImportPreview(orderNo: string): Promise<
     `/api/customer-orders/import-preview/${encoded}`,
   );
   return res.data;
+}
+
+export type OrderMetadataOption = { id: string; name: string; isActive: boolean };
+export type OrderMetadataOptions = { offices: OrderMetadataOption[]; employees: OrderMetadataOption[]; users: OrderMetadataOption[] };
+export async function listOrderMetadataOptions(): Promise<OrderMetadataOptions> {
+ const res = await apiFetch<{ok:boolean;data:OrderMetadataOptions}>('/api/customer-orders/metadata-options');
+ return res.data;
+}
+
+export async function createOrderOffice(code: string, name: string): Promise<OrderMetadataOption> {
+ const res = await apiFetch<{ok:boolean;data:OrderMetadataOption}>('/api/customer-orders/offices',{method:'POST',body:JSON.stringify({code,name})});
+ return res.data;
 }

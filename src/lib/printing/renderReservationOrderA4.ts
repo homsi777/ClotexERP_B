@@ -1,3 +1,4 @@
+import { orderMetadataRows } from '../customerOrderMetadata';
 import type { Customer, CustomerOrder } from '../../types';
 import { BRAND } from '../../branding';
 import { displayCustomerOrderNumber, orderLineDesignNo } from '../orderDisplay';
@@ -731,6 +732,7 @@ export function renderReservationOrderBodyHtml(
                 ${metaRow(iconSvg('phone'), t('reservationOrder.customerNumberLabel'), `<span class="ltr">${customerPhone}</span>`)}
                 ${metaRow(iconSvg('pin'), t('reservationOrder.addressLabel'), customerAddress)}
                 ${metaRow(iconSvg('truck'), t('reservationOrder.shippingMethodLabel'), shippingMethod)}
+                ${orderMetadataRows(order).filter(([,value])=>value).map(([label,value])=>metaRow(iconSvg('user'),esc(label),displayField(value))).join('')}
               </table>
             </div>
           </td>

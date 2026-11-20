@@ -9,6 +9,8 @@ import {
   type ManufacturingWorkOrderStatus,
 } from '../services/manufacturingReferenceRules.js';
 import { generateManufacturingWorkOrderNo } from '../services/manufacturingWorkOrderService.js';
+import {getOrderLineFulfilledMeters} from '../services/customerOrderFulfillmentService.js';
+import type {PoolClient} from 'pg';
 
 const allocationSchema = z.object({
   customerOrderId: z.string().uuid(),
@@ -49,17 +51,18 @@ function handleDbError(reply: FastifyReply, error: unknown) {
 }
 
 async function validateAllocationReferences(
-  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<{ id: string; order_id: string; status: string }> }> },
+  client: PoolClient,
   companyId: string,
   allocations: z.infer<typeof allocationSchema>[],
+  currentWorkOrderId?: string,
 ): Promise<string | null> {
   if (!allocations.length) return null;
   const ids = allocations.map((item) => item.customerOrderLineId);
   const rows = await client.query(
-    `SELECT l.id,l.order_id,o.status
+    `SELECT l.id,l.order_id,o.status,l.length,l.unit_type
      FROM customer_order_lines l
      JOIN customer_orders o ON o.id=l.order_id AND o.company_id=l.company_id
-     WHERE l.company_id=$1 AND l.id=ANY($2::uuid[])`,
+     WHERE l.company_id=$1 AND l.id=ANY($2::uuid[]) ORDER BY o.id,l.id FOR UPDATE OF o,l`,
     [companyId, ids],
   );
   if (rows.rows.length !== ids.length) return 'أحد أسطر أوردرات العملاء غير موجود أو لا يتبع الشركة';
@@ -67,7 +70,14 @@ async function validateAllocationReferences(
   for (const allocation of allocations) {
     const row = byId.get(allocation.customerOrderLineId);
     if (!row || row.order_id !== allocation.customerOrderId) return 'سطر أوردر العميل لا يتبع الأوردر المحدد';
-    if (row.status === 'cancelled' || row.status === 'completed') return 'لا يمكن تخصيص أمر إنتاج لأوردر عميل ملغى أو مكتمل';
+    if (['cancelled','completed','draft'].includes(row.status)) return 'يجب تأكيد أوردر العميل وأن يكون مفتوحاً قبل تخصيص الإنتاج';
+    const committed=await client.query(`SELECT COALESCE(SUM(a.allocated_length_m),0) AS quantity FROM manufacturing_work_order_allocations a
+      JOIN manufacturing_work_orders w ON w.company_id=a.company_id AND w.id=a.work_order_id
+      WHERE a.company_id=$1 AND a.customer_order_line_id=$2 AND a.is_active AND w.status<>'CANCELLED'
+      AND ($3::uuid IS NULL OR w.id<>$3)`,[companyId,row.id,currentWorkOrderId??null]);
+    const fulfilled=await getOrderLineFulfilledMeters(client,companyId,row.id);
+    const ordered=Number(row.length)*(row.unit_type==='yard'?0.9144:1);
+    if(allocation.allocatedLengthM+Number(committed.rows[0].quantity)+fulfilled>ordered+0.0005)return 'كمية الإنتاج تتجاوز المتبقي بعد المسلّم وتخصيصات الإنتاج القائمة';
   }
   return null;
 }
@@ -216,7 +226,7 @@ export const manufacturingWorkOrderRoutes: FastifyPluginAsync = async (app) => {
          WHERE v.id=$1 AND v.company_id=$2 AND s.is_active`, [parsed.data.specificationVersionId,req.user!.companyId],
       );
       if (!specification.rows.length) { await client.query('ROLLBACK'); return sendError(reply,404,'إصدار المواصفة غير موجود','NOT_FOUND'); }
-      const referenceError = await validateAllocationReferences(client, req.user!.companyId, parsed.data.allocations);
+      const referenceError = await validateAllocationReferences(client, req.user!.companyId, parsed.data.allocations,id);
       if (referenceError) { await client.query('ROLLBACK'); return sendError(reply,400,referenceError,'VALIDATION'); }
       await client.query(
         `UPDATE manufacturing_work_orders SET specification_id=$3,specification_version_id=$4,priority=$5,target_length_m=$6,

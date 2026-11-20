@@ -1,3 +1,5 @@
+import { externalLineReferenceSchema, validateExternalReferences, saveExternalReferences } from './externalJobTraceability.js';
+import {mixedExternalOrigins,registerMixedCost,assertExternalCostUnfrozen} from './mixedExternalCostService.js';
 import type { PoolClient } from 'pg';
 import { manufacturingDispatchOrder, linkManufacturingExternal } from './manufacturingCostService.js';
 import { z } from 'zod';
@@ -18,9 +20,7 @@ function cleanText(v: unknown): string {
   return String(v ?? '').trim();
 }
 
-const lineCreateSchema = z.object({
-  rollId: z.string().uuid(),
-});
+const lineCreateSchema = externalLineReferenceSchema;
 
 const externalJobCreateSchema = z.object({
   supplierId: z.string().uuid(),
@@ -95,6 +95,7 @@ export async function createExternalJob(
   raw: unknown,
 ): Promise<{ id: string; jobNo: string }> {
   const input = externalJobCreateSchema.parse(raw);
+  const refs = await validateExternalReferences(client, companyId, input.lines.map(l => l.rollId), input.lines);
   await assertSupplier(client, companyId, input.supplierId);
 
   // Validate each roll belongs to this company and is currently available —
@@ -151,6 +152,7 @@ export async function createExternalJob(
     );
   }
 
+  await saveExternalReferences(client, companyId, jobId, refs);
   return { id: jobId, jobNo };
 }
 
@@ -241,7 +243,7 @@ export async function listExternalJobs(
 }
 
 const LINE_SELECT = `
-  l.id, l.job_id, l.roll_id, l.line_status,
+  l.id, l.job_id, l.roll_id, l.line_status, l.customer_order_id, l.customer_order_line_id,
   l.sent_color_id, l.sent_length_m, l.sent_barcode,
   l.received_at, l.received_by_user_id,
   l.new_color_id, l.new_barcode, l.new_length_m, l.receipt_notes,
@@ -305,13 +307,15 @@ export async function confirmExternalJob(
   }
 
   const lines = await client.query(
-    `SELECT l.id, l.roll_id, fr.barcode, fr.status, fr.color_id, fr.length_m
+    `SELECT l.id, l.roll_id, l.customer_order_id, l.customer_order_line_id, fr.barcode, fr.status, fr.color_id, fr.length_m
      FROM external_job_lines l
      INNER JOIN fabric_rolls fr ON fr.id = l.roll_id AND fr.company_id = l.company_id
      WHERE l.job_id=$1 AND l.company_id=$2
      FOR UPDATE OF fr`,
     [jobId, companyId],
   );
+
+  await validateExternalReferences(client, companyId, lines.rows.map(l => l.roll_id), lines.rows.map(l => ({rollId:l.roll_id,customerOrderId:l.customer_order_id,customerOrderLineId:l.customer_order_line_id})));
 
   for (const ln of lines.rows) {
     if (ln.status !== 'AVAILABLE') {
@@ -455,6 +459,7 @@ export async function setExternalJobFee(
     throw Object.assign(new Error('تم ترحيل الأجرة محاسبياً — لا يمكن تعديلها الآن'), { code: 'INVALID_STATE' });
   }
 
+  await assertExternalCostUnfrozen(client,companyId,jobId);
   const currencyCode = input.feeCurrencyCode.trim().toUpperCase();
   const exchangeRateToUsd = currencyCode === 'USD' ? 1 : await getExchangeRateToUsdTx(client, companyId, currencyCode);
   if (!exchangeRateToUsd || exchangeRateToUsd <= 0) {
@@ -502,6 +507,7 @@ export async function setExternalJobProcessingPricing(
     throw Object.assign(new Error('تم ترحيل الأجرة محاسبياً — لا يمكن تعديلها الآن'), { code: 'INVALID_STATE' });
   }
 
+  await assertExternalCostUnfrozen(client,companyId,jobId);
   const currencyCode = input.feeCurrencyCode.trim().toUpperCase();
   const exchangeRateToUsd = currencyCode === 'USD' ? 1 : await getExchangeRateToUsdTx(client, companyId, currencyCode);
   if (!exchangeRateToUsd || exchangeRateToUsd <= 0) {
@@ -576,6 +582,7 @@ export async function voidExternalJob(
     throw Object.assign(new Error('المهمة ملغاة مسبقاً'), { code: 'INVALID_STATE' });
   }
 
+  await assertExternalCostUnfrozen(client,companyId,jobId);
   await assertNoLifecycleReturns(client, companyId, jobId);
 
   if (job.document_status === 'DRAFT') {
@@ -723,6 +730,8 @@ const processingCreateSchema = z.object({
   processDescription: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   rollIds: z.array(z.string().uuid()).min(1),
+  lineReferences: z.array(externalLineReferenceSchema).optional(),
+  traceabilityOnly: z.boolean().default(false),
 });
 
 export async function createProcessingExternalJob(
@@ -741,7 +750,9 @@ export async function createProcessingExternalJob(
   const input = processingCreateSchema.parse(raw);
   const lifecycleInput = z.object({ previousJobId: z.string().uuid().nullable().optional() }).parse(raw);
   const rollIds = [...new Set(input.rollIds)];
-  const manufacturingOrder = await manufacturingDispatchOrder(client, companyId, rollIds);
+  const refs = await validateExternalReferences(client, companyId, rollIds, input.lineReferences ?? []);
+  const mixedOrigins=input.traceabilityOnly?await mixedExternalOrigins(client,companyId,rollIds):[];
+  const manufacturingOrder = input.traceabilityOnly ? null : await manufacturingDispatchOrder(client, companyId, rollIds);
 
   const supplierRow = await client.query<{ is_processing_party: boolean; is_active: boolean }>(
     `SELECT is_processing_party, is_active FROM suppliers WHERE id=$1 AND company_id=$2`,
@@ -876,6 +887,10 @@ export async function createProcessingExternalJob(
     await sendRollToExternalJob(client, companyId, userId, rollId, jobId, jobNo);
   }
 
+  await saveExternalReferences(client, companyId, jobId, refs);
+  if (refs.length || input.traceabilityOnly) await insertAuditLog(client, companyId, userId, 'EXTERNAL_JOB_TRACEABILITY', jobId, { refs, traceabilityOnly: input.traceabilityOnly });
+  if (input.traceabilityOnly) await client.query('UPDATE external_jobs SET traceability_only=true WHERE company_id=$1 AND id=$2', [companyId, jobId]);
+  if(input.traceabilityOnly)await registerMixedCost(client,companyId,jobId,mixedOrigins);
   await initializeManufacturing(client, companyId, jobId, raw);
   if (manufacturingOrder) await linkManufacturingExternal(client,companyId,userId!,manufacturingOrder,jobId);
   return {

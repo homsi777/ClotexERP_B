@@ -1,3 +1,5 @@
+import { OrderWorkflowPanel } from './OrderWorkflowPanel';
+import { OrderMetadataSummary } from './OrderMetadataFields';
 import React, { useCallback, useMemo, useState } from 'react';
 import { FileSpreadsheet, FileText, MessageCircle, Printer, X } from 'lucide-react';
 import type { Customer, CustomerOrder } from '../../types';
@@ -36,6 +38,7 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
   const [printBusy, setPrintBusy] = useState(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [showPicking,setShowPicking]=useState(false);
+  const [showWorkflow,setShowWorkflow]=useState(false);
   const party = customer ?? FALLBACK_CUSTOMER;
   const statusLabel = order ? ORDER_STATUS_LABELS[order.status] : '';
 
@@ -119,7 +122,10 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
             <p className="text-lg font-black text-slate-900 font-mono truncate">{order.orderNumber}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={()=>setShowPicking(v=>!v)} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-800">
+            <button type="button" onClick={()=>{setShowWorkflow(v=>!v);setShowPicking(false);}} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-800">
+              {showWorkflow ? 'عرض الطلبية' : 'المخزون ومتابعة التنفيذ'}
+            </button>
+            <button type="button" onClick={()=>{setShowPicking(v=>!v);setShowWorkflow(false);}} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-800">
               {showPicking?'عرض الطلبية':'تجهيز حسب العنبر'}
             </button>
             <button
@@ -174,12 +180,14 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
           </div>
         </div>
 
+        <OrderMetadataSummary order={order} />
         <div className="flex-1 overflow-hidden min-h-0 bg-slate-100">
+          {showWorkflow && <div className="h-full overflow-auto"><OrderWorkflowPanel key={order.id} order={order}/></div>}
           <div className={showPicking?'h-full':'hidden'}><OrderPickingByZonePanel key={order.id} order={order} customerName={party.name}/></div>
           <iframe
             title={i18n.t('orderDetail.previewIframeTitle', { ns: 'terminology' })}
             srcDoc={previewSrcDoc}
-            className={showPicking?'hidden':"w-full h-full border-0 bg-slate-100"}
+            className={showPicking || showWorkflow?'hidden':"w-full h-full border-0 bg-slate-100"}
           />
         </div>
       </div>

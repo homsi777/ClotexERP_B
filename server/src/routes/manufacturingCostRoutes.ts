@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest, type JwtPayload } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
-import { addManufacturingCharge, costRate, finalizeManufacturingCost, linkManufacturingExternal, lockCostOrder, manufacturingCostReport, postManufacturingMaterial } from '../services/manufacturingCostService.js';
+import { addManufacturingCharge, costRate, finalizeManufacturingCost, linkManufacturingExternal, lockCostOrder, manufacturingCostReport, postManufacturingMaterial,recordManufacturingConsumption } from '../services/manufacturingCostService.js';
 const has = (u: JwtPayload, p: string) => u.role === 'admin' || u.permissions.includes(p);
 const price = (u: JwtPayload) => ['admin', 'accountant'].includes(u.role) || has(u, 'manufacturing.cost.manage');
 export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
@@ -32,14 +32,14 @@ export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
         try {
             const report = await manufacturingCostReport(getPool(), u.companyId, id);
             if (!price(u) && !has(u, 'manufacturing.cost.view'))
-                return { ok: true, data: { work: report.work, materials: report.materials.map(m => ({ id: m.id, kind: m.kind, yarn_lot_id: m.yarn_lot_id, weaving_run_id: m.weaving_run_id, sizing_order_id: m.sizing_order_id, weight_kg: m.weight_kg, waste_kg: m.waste_kg, notes: m.notes })), external: report.external.map(j => ({ id: j.id, job_no: j.job_no, lifecycle_closed_at: j.lifecycle_closed_at })), rolls: report.rolls } };
+                return { ok: true, data: { work: report.work, materialBalances:report.materialBalances, materials: report.materials.map(m => ({ id: m.id, kind: m.kind, yarn_lot_id: m.yarn_lot_id, weaving_run_id: m.weaving_run_id, sizing_order_id: m.sizing_order_id, weight_kg: m.weight_kg, waste_kg: m.waste_kg, notes: m.notes })), external: report.external.map(j => ({ id: j.id, job_no: j.job_no, lifecycle_closed_at: j.lifecycle_closed_at })), rolls: report.rolls } };
             return { ok: true, data: report };
         }
         catch (e) {
             return handle(e, reply);
         }
     });
-    for (const action of ['materials', 'charges', 'external-link', 'price-material', 'finalize'] as const) {
+    for (const action of ['materials', 'consumption', 'charges', 'external-link', 'price-material', 'finalize'] as const) {
         app.post(`/:id/${action}`, async (req, reply) => {
             const u = req.user!;
             if (action === 'materials' ? !has(u, 'inventory.manage') : !price(u))
@@ -56,6 +56,8 @@ export const manufacturingCostRoutes: FastifyPluginAsync = async (app) => {
                 let before: unknown = null;
                 if (action === 'materials')
                     data = await postManufacturingMaterial(db, u.companyId, u.sub, id, req.body);
+                else if(action==='consumption')
+                    data=await recordManufacturingConsumption(db,u.companyId,u.sub,id,req.body);
                 else if (action === 'charges')
                     data = await addManufacturingCharge(db, u.companyId, u.sub, id, req.body);
                 else if (action === 'external-link')

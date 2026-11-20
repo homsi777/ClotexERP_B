@@ -800,7 +800,7 @@ const CreateItemForm = () => {
           },
           listed,
         );
-        if (!resolved.ok) {
+        if (resolved.ok === false) {
           setSaveError(createItemEditFailureMessage(resolved));
           setSaving(false);
           return;

@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
+import {manufacturingYarnSettlementRoutes} from './manufacturingYarnSettlementRoutes.js';
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getPool } from "../db/pool.js";
@@ -38,6 +39,7 @@ function dbError(reply: FastifyReply, error: unknown) {
 
 export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authenticateRequest);
+  await app.register(manufacturingYarnSettlementRoutes);
   app.get("/options", async (req, reply) => {
     if (!canView(req.user) && !has(req.user, "manufacturing.warping.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية عرض خيارات التسدية", "FORBIDDEN");
@@ -181,7 +183,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
     if (!has(req.user, "manufacturing.warping.manage"))
       return sendError(reply, 403, "ليست لديك صلاحية إصدار أمر التسدية", "FORBIDDEN");
     const { id } = req.params as { id: string },
-      p = z.object({ version: z.number().int().positive() }).safeParse(req.body);
+      p = z.object({ version: z.number().int().positive(), nextStage: z.enum(["SIZING", "WEAVING"]).optional() }).safeParse(req.body);
     if (!p.success) return sendError(reply, 400, "رقم النسخة مطلوب", "VALIDATION");
     const client = await getPool().connect();
     try {
@@ -205,7 +207,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
       }
       const cardNo = await generateWarpCardNo(client, req.user!.companyId),
         barcode = `WARP-${randomUUID()}`,
-        card = buildWarpCardData({
+        card = { nextStage: p.data.nextStage ?? null, ...buildWarpCardData({
           specificationSnapshot: x.specification_snapshot,
           plannedLengthM: Number(x.planned_length_m),
           loomLabel: x.loom_code,
@@ -213,7 +215,7 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
           shiftName: x.shift_name,
           tieCount: x.tie_count,
           issuedAt: new Date(),
-        });
+        }) };
       await client.query(
         `UPDATE manufacturing_warping_orders SET status='RELEASED',beam_barcode=$3,execution_snapshot=$4::jsonb,released_by_user_id=$5,released_at=now(),version=version+1,updated_by_user_id=$5,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [id, req.user!.companyId, barcode, JSON.stringify(card), req.user!.sub],
@@ -312,7 +314,8 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
           version: z.number().int().positive(),
           actualLengthM: z.number().min(0),
         qualityStatus: z.enum(["ACCEPTED", "CONDITIONAL", "REJECTED"]),
-        nextStage: z.enum(["SIZING","WEAVING"]).default("WEAVING"),
+        nextStage: z.enum(["SIZING","WEAVING"]).optional(),
+          closeOrder: z.boolean().default(true),
           qualityNotes: z.string().trim().max(2000).nullable().optional(),
         })
         .safeParse(req.body);
@@ -320,16 +323,27 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
     const client = await getPool().connect();
     try {
       await client.query("BEGIN");
-      const q = await client.query<{ status: WarpingStatus; version: number }>(
-        `SELECT status,version FROM manufacturing_warping_orders WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+      const q = await client.query<{ status: WarpingStatus; version: number; execution_snapshot: {nextStage?: string}; actual_length_m: string | null }>(
+        `SELECT status,version,execution_snapshot,actual_length_m FROM manufacturing_warping_orders WHERE id=$1 AND company_id=$2 FOR UPDATE`,
         [id, req.user!.companyId],
       );
       if (!q.rows.length) {
         await client.query("ROLLBACK");
         return sendError(reply, 404, "أمر التسدية غير موجود", "NOT_FOUND");
       }
-      const target = p.data.qualityStatus === "REJECTED" ? "REJECTED" : "COMPLETED";
-      if (q.rows[0].version !== p.data.version || !canTransitionWarpingOrder(q.rows[0].status, target)) {
+      const route = q.rows[0].execution_snapshot?.nextStage;
+      const nextStage = route ?? p.data.nextStage;
+      if (!nextStage || (route && p.data.nextStage && route !== p.data.nextStage)) {
+        await client.query("ROLLBACK");
+        return sendError(reply, 409, "الوجهة يجب أن تطابق بطاقة التسدية المعتمدة", "CARD_ROUTE_MISMATCH");
+      }
+      if (p.data.qualityStatus !== "REJECTED" && p.data.actualLengthM <= 0) {
+        await client.query("ROLLBACK");
+        return sendError(reply,400,"طول المطواة يجب أن يكون موجباً","VALIDATION");
+      }
+      const target = p.data.closeOrder && p.data.qualityStatus !== "CONDITIONAL" ? (p.data.qualityStatus === "REJECTED" ? "REJECTED" : "COMPLETED") : "IN_PROGRESS";
+      if(target==='COMPLETED'&&(await client.query("SELECT 1 FROM manufacturing_warp_beams WHERE company_id=$1 AND warping_order_id=$2 AND status='NEEDS_REPAIR' LIMIT 1",[req.user!.companyId,id])).rows.length){await client.query('ROLLBACK');return sendError(reply,409,'توجد مطاوي تنتظر المعالجة وإعادة الفحص','BEAM_REPAIR_PENDING');}
+      if (q.rows[0].version !== p.data.version || !(target === "IN_PROGRESS" ? q.rows[0].status === "IN_PROGRESS" : canTransitionWarpingOrder(q.rows[0].status, target))) {
         await client.query("ROLLBACK");
         return sendError(reply, 409, "لا يمكن إكمال الفحص في الحالة الحالية", "INVALID_STATE");
       }
@@ -338,22 +352,32 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         await client.query("ROLLBACK");
         return sendError(reply,400,"يجب تسجيل صرف الخيط الفعلي قبل إكمال التسدية","YARN_ISSUE_REQUIRED");
       }
+      if(p.data.closeOrder&&p.data.qualityStatus!=="CONDITIONAL"&&(await client.query("SELECT 1 FROM manufacturing_warping_yarn_issues WHERE company_id=$1 AND warping_order_id=$2 AND status IN ('REQUESTED','ISSUED') LIMIT 1",[req.user!.companyId,id])).rows.length){await client.query('ROLLBACK');return sendError(reply,409,'سوّ عهد الخيط وأكد استلام المرتجع قبل إغلاق التسدية','UNSETTLED_YARN');}
       await client.query(
-        `UPDATE manufacturing_warping_orders SET status=$3,actual_length_m=$4,quality_status=$5,quality_notes=$6,completed_by_user_id=$7,completed_at=now(),version=version+1,updated_by_user_id=$7,updated_at=now() WHERE id=$1 AND company_id=$2`,
+        `UPDATE manufacturing_warping_orders SET status=$3,actual_length_m=$4,quality_status=$5,quality_notes=$6,completed_by_user_id=CASE WHEN $3='IN_PROGRESS' THEN NULL ELSE $7::uuid END,completed_at=CASE WHEN $3='IN_PROGRESS' THEN NULL ELSE now() END,version=version+1,updated_by_user_id=$7,updated_at=now() WHERE id=$1 AND company_id=$2`,
         [
           id,
           req.user!.companyId,
           target,
-          p.data.actualLengthM,
+          Number(q.rows[0].actual_length_m ?? 0) + p.data.actualLengthM,
           p.data.qualityStatus,
           p.data.qualityNotes ?? null,
           req.user!.sub,
         ],
       );
-      if(target==="COMPLETED"){
-        const beam=await client.query<{beam_no:string;beam_barcode:string}>(`SELECT COALESCE(NULLIF(trim(beam_no),''),warping_order_no||'-B1') AS beam_no,beam_barcode FROM manufacturing_warping_orders WHERE id=$1 AND company_id=$2`,[id,req.user!.companyId]);
-        await client.query(`INSERT INTO manufacturing_warp_beams(company_id,warping_order_id,beam_no,barcode,length_m,status,quality_status,notes,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[req.user!.companyId,id,beam.rows[0].beam_no,beam.rows[0].beam_barcode,p.data.actualLengthM,p.data.nextStage==="SIZING"?"READY_FOR_SIZING":"READY_FOR_WEAVING",p.data.qualityStatus,p.data.qualityNotes??null,req.user!.sub]);
-      }
+      const count = await client.query<{n:string}>(`SELECT count(*)::text AS n FROM manufacturing_warp_beams WHERE warping_order_id=$1 AND company_id=$2`,[id,req.user!.companyId]);
+      const sequence = Number(count.rows[0].n)+1;
+      const beam = await client.query<{beam_no:string;beam_barcode:string;custom_beam_no:string|null}>(`SELECT COALESCE(NULLIF(trim(beam_no),''),warping_order_no) AS beam_no,NULLIF(trim(beam_no),'') AS custom_beam_no,beam_barcode FROM manufacturing_warping_orders WHERE id=$1 AND company_id=$2`,[id,req.user!.companyId]);
+      const beamNo = sequence === 1 && beam.rows[0].custom_beam_no
+        ? beam.rows[0].custom_beam_no : `${beam.rows[0].beam_no}-B${sequence}`;
+      const barcode = sequence === 1 ? beam.rows[0].beam_barcode : `WARP-${randomUUID()}`;
+      const output = await client.query<{id:string}>(
+        `INSERT INTO manufacturing_warp_beams(company_id,warping_order_id,beam_no,barcode,length_m,status,quality_status,notes,created_by_user_id,next_stage)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [req.user!.companyId,id,beamNo,barcode,p.data.actualLengthM,
+          p.data.qualityStatus === "REJECTED" ? "REJECTED" : p.data.qualityStatus === "CONDITIONAL" ? "NEEDS_REPAIR" : nextStage === "SIZING" ? "READY_FOR_SIZING" : "READY_FOR_WEAVING",
+          p.data.qualityStatus,p.data.qualityNotes ?? null,req.user!.sub,nextStage],
+      );
       await event(
         client,
         req.user!.companyId,
@@ -361,11 +385,11 @@ export const manufacturingWarpingRoutes: FastifyPluginAsync = async (app) => {
         "QUALITY_COMPLETED",
         q.rows[0].status,
         target,
-        { actualLengthM: p.data.actualLengthM, qualityStatus: p.data.qualityStatus },
+        { beamId: output.rows[0].id, beamNo, barcode, actualLengthM: p.data.actualLengthM, qualityStatus: p.data.qualityStatus, nextStage, closeOrder: p.data.closeOrder, legacyRoute: !route },
         req.user!.sub,
       );
       await client.query("COMMIT");
-      return reply.send({ ok: true, data: { id, status: target, version: p.data.version + 1 } });
+      return reply.send({ ok: true, data: { id, status: target, version: p.data.version + 1, beamId: output.rows[0].id, beamNo, barcode } });
     } catch (e) {
       await client.query("ROLLBACK").catch(() => undefined);
       return dbError(reply, e);

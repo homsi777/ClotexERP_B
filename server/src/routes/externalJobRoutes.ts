@@ -46,6 +46,17 @@ function isPricingAllowed(user: { role: string } | undefined): boolean {
 
 export const externalJobRoutes: FastifyPluginAsync = async (app) => {
   await app.register(externalManufacturingRoutes);
+  app.get('/customer-order-lines', { preHandler: authenticateRequest }, async (req, reply) => {
+    const search = String((req.query as Record<string,string>).search || '').trim().slice(0, 100);
+    const data = await getPool().query(`SELECT o.id AS order_id,o.order_no,c.name AS customer_name,
+      l.id AS line_id,l.line_no,l.material_name,l.color_name,l.color_code
+      FROM customer_orders o JOIN customer_order_lines l ON l.order_id=o.id AND l.company_id=o.company_id
+      JOIN customers c ON c.id=o.customer_id AND c.company_id=o.company_id
+      WHERE o.company_id=$1 AND o.status NOT IN ('draft','cancelled','completed')
+      AND ($2='' OR o.order_no ILIKE '%'||$2||'%' OR c.name ILIKE '%'||$2||'%' OR l.color_name ILIKE '%'||$2||'%')
+      ORDER BY o.order_date DESC,o.id,l.line_no LIMIT 100`, [req.user!.companyId,search]);
+    return reply.send({ok:true,data:data.rows});
+  });
   // ===== Preparation types ("مصنعية") — مُسجَّلة قبل '/:id' كمسارات حرفية =====
   app.get('/preparation-types', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;

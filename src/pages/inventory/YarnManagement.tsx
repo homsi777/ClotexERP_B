@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef,useState } from 'react';
+import {apiFetch} from '../../lib/api/client';
+import type {YarnLotCreatePayload} from '../../lib/api/yarnLotsApi';
+import {YarnOperationsPanel} from '../../components/inventory/YarnOperationsPanel';
+import {YarnProfileLibrary} from '../../components/inventory/YarnProfileLibrary';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Package, Plus, Scale, ShoppingCart } from 'lucide-react';
 import { createFabricItem, listFabricItems, type ApiFabricItem } from '../../lib/api/fabricItemsApi';
-import { createYarnLot, listYarnLots, type YarnLotDto } from '../../lib/api/yarnLotsApi';
+import { createYarnLot, listYarnLots, postYarnStockOperation, listYarnMovements, type YarnLotDto } from '../../lib/api/yarnLotsApi';
 import { listSuppliers, type ApiSupplier } from '../../lib/api/suppliersApi';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { listCustomers, type ApiCustomer } from '../../lib/api/customersApi';
@@ -23,6 +27,28 @@ export function YarnManagement() {
   const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
   const [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]);
   const [customers, setCustomers] = useState<ApiCustomer[]>([]);
+  const [filters, setFilters] = useState({ search: '', ownerType: '', onlyAvailable: false, page: 1 });
+  const [total, setTotal] = useState(0);
+  const [receipt, setReceipt] = useState({ ownerType: 'COMPANY', ownerCustomerId: '', fiber: '', count: '', packages: '', perPackage: '' });
+  const [weightMode,setWeightMode]=useState<'NET'|'GROSS'|'PACKAGES'>('NET'),[gross,setGross]=useState(''),[tare,setTare]=useState('');
+  const [pendingReceipts,setPendingReceipts]=useState<YarnLotCreatePayload[]>([]),[batchSaving,setBatchSaving]=useState(false);
+  const batchRequest=useRef({key:crypto.randomUUID(),signature:''});
+  const [operation, setOperation] = useState({ lotId: '', type: 'ADJUST', weight: '', warehouseId: '', reason: '', approved: false });
+  const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof listYarnMovements>>['data']>([]);
+  const runOperation = async () => {
+    const lot = lots.find(l => l.id === operation.lotId);
+    if (!lot || !operation.weight.trim()) return;
+    setBusy(true);
+    try {
+      if (operation.type === 'ADJUST') {
+        if (!operation.approved) throw new Error(t('approvalRequired'));
+        await postYarnStockOperation(lot.id, { type: 'ADJUST', targetWeightKg: Number(operation.weight), expectedWeightKg: Number(lot.weight_kg), reason: operation.reason, approved: true });
+      } else await postYarnStockOperation(lot.id, { type: 'TRANSFER', weightKg: Number(operation.weight), warehouseId: operation.warehouseId, reason: operation.reason });
+      setHistory([]); setOperation({ ...operation, lotId: '', weight: '', reason: '', approved: false }); await load();
+    } catch (e) { showToast({ type: 'error', message: e instanceof Error ? e.message : t('toast.loadFailed') }); }
+    finally { setBusy(false); }
+  };
   const [loading, setLoading] = useState(true);
 
   const [sellForm, setSellForm] = useState({ lotId: '', customerId: '', weightKg: '', unitPrice: '' });
@@ -41,13 +67,13 @@ export function YarnManagement() {
     try {
       const [itemsRes, lotsRes, suppliersRes, warehousesRes, customersRes] = await Promise.all([
         listFabricItems({ unit: 'kg', pageSize: 200 }),
-        listYarnLots({ pageSize: 100 }),
+        listYarnLots({ pageSize: 100, search: filters.search, ownerType: filters.ownerType as 'COMPANY' | 'CUSTOMER' || undefined, onlyAvailable: filters.onlyAvailable, page: filters.page }),
         listSuppliers({ pageSize: 200 }),
         listWarehouses(),
         listCustomers({ pageSize: 200 }),
       ]);
       setItems(itemsRes.data);
-      setLots(lotsRes.data);
+      setLots(lotsRes.data); setTotal(lotsRes.total);
       setSuppliers(suppliersRes.data);
       setWarehouses(warehousesRes);
       setCustomers(customersRes.data);
@@ -61,7 +87,7 @@ export function YarnManagement() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filters]);
 
   const handleCreateItem = async () => {
     if (!itemForm.internalCode.trim() || !itemForm.name.trim()) {
@@ -88,15 +114,21 @@ export function YarnManagement() {
     }
   };
 
-  const handleCreateLot = async () => {
-    const weight = Number(lotForm.weightKg);
-    if (!lotForm.itemId || !lotForm.warehouseId || !weight || weight <= 0) {
+  const handleCreateLot = async (stageOnly=false) => {
+    if(weightMode==='GROSS'&&(!gross.trim()||!tare.trim())){showToast({type:'error',message:'أدخل القائم والفوارغ، بما فيها صفر فوارغ عند عدم وجودها'});return;}
+    const weight = weightMode==='GROSS'?Number(gross)-Number(tare):weightMode==='PACKAGES'?Number(receipt.packages)*Number(receipt.perPackage):Number(lotForm.weightKg);
+    if (!lotForm.itemId || !lotForm.warehouseId || !Number.isFinite(weight) || weight <= 0) {
       showToast({ type: 'error', message: t('toast.lotFieldsRequired') });
       return;
     }
     setLotSaving(true);
     try {
-      await createYarnLot({
+      const payload:YarnLotCreatePayload={
+        ownerType: receipt.ownerType as 'COMPANY' | 'CUSTOMER',
+        ownerCustomerId: receipt.ownerCustomerId || null,
+        yarnProperties: receipt.fiber||receipt.count?{ fiber: receipt.fiber || undefined, count: receipt.count || undefined }:undefined,
+        receiptPackages: weightMode==='PACKAGES' ? { count: Number(receipt.packages), weightPerPackageKg: Number(receipt.perPackage) } : null,
+        ...(weightMode==='GROSS'?{grossWeightKg:Number(gross),tareWeightKg:Number(tare)}:{}),
         itemId: lotForm.itemId,
         supplierId: lotForm.supplierId || null,
         warehouseId: lotForm.warehouseId,
@@ -104,16 +136,18 @@ export function YarnManagement() {
         unitCost: lotForm.unitCost ? Number(lotForm.unitCost) : null,
         batchNo: lotForm.batchNo.trim() || null,
         notes: lotForm.notes.trim() || null,
-      });
+      };
+      if(stageOnly)setPendingReceipts(rows=>[...rows,payload]);else await createYarnLot(payload);
       setLotForm({ itemId: '', supplierId: '', warehouseId: '', weightKg: '', unitCost: '', batchNo: '', notes: '' });
-      showToast({ type: 'success', message: t('toast.lotReceived') });
-      await load();
+      showToast({ type: 'success', message: stageOnly?'أضيف السطر إلى القائمة؛ اضغط حفظ جميع السطور لترحيله':t('toast.lotReceived') });
+      if(!stageOnly)await load();
     } catch (error) {
       showToast({ type: 'error', message: error instanceof Error ? error.message : t('toast.lotReceiveFailed') });
     } finally {
       setLotSaving(false);
     }
   };
+  const saveReceiptBatch=async()=>{setBatchSaving(true);try{const signature=JSON.stringify(pendingReceipts);if(batchRequest.current.signature!==signature)batchRequest.current={signature,key:crypto.randomUUID()};await apiFetch('/api/inventory/yarn-lots/receipts/batch',{method:'POST',body:JSON.stringify({batchKey:batchRequest.current.key,rows:pendingReceipts})});setPendingReceipts([]);batchRequest.current={key:crypto.randomUUID(),signature:''};await load();}catch(e){showToast({type:'error',message:e instanceof Error?e.message:'تعذر حفظ دفعة الخيط'});}finally{setBatchSaving(false);}};
 
   const handleSellLot = async () => {
     const weight = Number(sellForm.weightKg);
@@ -123,7 +157,7 @@ export function YarnManagement() {
       return;
     }
     const lot = lots.find((l) => l.id === sellForm.lotId);
-    if (!lot) return;
+    if (!lot || lot.owner_type !== 'COMPANY') return;
     if (weight > Number(lot.weight_kg) + 1e-6) {
       showToast({ type: 'error', message: t('toast.weightExceedsAvailable', { weight: lot.weight_kg }) });
       return;
@@ -170,6 +204,8 @@ export function YarnManagement() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <YarnOperationsPanel lots={lots} suppliers={suppliers} warehouses={warehouses} onChanged={load}/>
+      <YarnProfileLibrary items={items}/>
       <div>
         <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <Scale className="w-6 h-6 text-indigo-600" /> {t('pageTitle')}
@@ -213,8 +249,18 @@ export function YarnManagement() {
             <option value="">{t('chooseWarehouseOption')}</option>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
+          <select aria-label={t('owner')} className={inputCls} value={receipt.ownerType} onChange={e => setReceipt({ ...receipt, ownerType: e.target.value, ownerCustomerId: '' })}>
+            <option value="COMPANY">{t('companyOwner')}</option><option value="CUSTOMER">{t('customerOwner')}</option>
+          </select>
+          {receipt.ownerType === 'CUSTOMER' && <select className={inputCls} aria-label={t('owner')} value={receipt.ownerCustomerId} onChange={e => setReceipt({ ...receipt, ownerCustomerId: e.target.value })}><option value="">{t('chooseCustomerOption')}</option>{customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+          <input className={inputCls} placeholder={t('fiber')} value={receipt.fiber} onChange={e => setReceipt({ ...receipt, fiber: e.target.value })} />
+          <input className={inputCls} placeholder={t('yarnCount')} value={receipt.count} onChange={e => setReceipt({ ...receipt, count: e.target.value })} />
+          <input type="number" className={inputCls} placeholder={t('packages')} value={receipt.packages} onChange={e => setReceipt({ ...receipt, packages: e.target.value })} />
+          <input type="number" step="0.001" className={inputCls} placeholder={t('packageWeight')} value={receipt.perPackage} onChange={e => { setReceipt({ ...receipt, perPackage: e.target.value }); if (receipt.packages) setLotForm({ ...lotForm, weightKg: String(Number(receipt.packages) * Number(e.target.value)) }); }} />
           <div className="grid grid-cols-2 gap-2">
-            <input type="number" step="0.001" className={inputCls} placeholder={t('weightKgPlaceholder')} value={lotForm.weightKg}
+            <select aria-label="طريقة وزن الخيط" className={`${inputCls} col-span-2`} value={weightMode} onChange={e=>setWeightMode(e.target.value as typeof weightMode)}><option value="NET">صافي مباشر</option><option value="GROSS">قائم ناقص الفوارغ</option><option value="PACKAGES">عدد الطرود × وزن الطرد</option></select>
+            {weightMode==='GROSS'&&<><input aria-label="الوزن القائم للخيط" type="number" min="0" step="0.001" className={inputCls} value={gross} onChange={e=>setGross(e.target.value)} placeholder="القائم كغ"/><input aria-label="وزن فوارغ الخيط" type="number" min="0" step="0.001" className={inputCls} value={tare} onChange={e=>setTare(e.target.value)} placeholder="الفوارغ كغ"/><p className="col-span-2 text-sm">الصافي: {(Number(gross)-Number(tare)).toFixed(3)} كغ</p></>}
+            <input type="number" readOnly={weightMode!=='NET'} step="0.001" className={inputCls} placeholder={t('weightKgPlaceholder')} value={weightMode==='GROSS'?String(Number(gross)-Number(tare)):weightMode==='PACKAGES'?String(Number(receipt.packages)*Number(receipt.perPackage)):lotForm.weightKg}
               onChange={(e) => setLotForm({ ...lotForm, weightKg: e.target.value })} />
             <input type="number" step="0.0001" className={inputCls} placeholder={t('costPerKgPlaceholder')} value={lotForm.unitCost}
               onChange={(e) => setLotForm({ ...lotForm, unitCost: e.target.value })} />
@@ -226,6 +272,8 @@ export function YarnManagement() {
             {lotSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             {t('receiveLot')}
           </button>
+          <button type="button" disabled={lotSaving||batchSaving||pendingReceipts.length>=100} onClick={()=>void handleCreateLot(true)} className="w-full rounded-lg border p-2 text-sm">إضافة إلى قائمة الاستلام المتعدد</button>
+          {!!pendingReceipts.length&&<div className="space-y-2 rounded-lg border p-2"><strong>قائمة الاستلام ({pendingReceipts.length})</strong>{pendingReceipts.map((row,index)=><div key={index} className="flex items-center justify-between gap-2 text-xs"><span>{items.find(item=>item.id===row.itemId)?.name} — {row.weightKg} كغ — {warehouses.find(w=>w.id===row.warehouseId)?.name}</span><button disabled={batchSaving} onClick={()=>setPendingReceipts(rows=>rows.filter((_,i)=>i!==index))}>إزالة</button></div>)}<button disabled={batchSaving} className="rounded bg-indigo-600 p-2 text-white" onClick={()=>void saveReceiptBatch()}>حفظ جميع سطور الاستلام معاً</button></div>}
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
@@ -234,7 +282,7 @@ export function YarnManagement() {
           </div>
           <select className={inputCls} value={sellForm.lotId} onChange={(e) => setSellForm({ ...sellForm, lotId: e.target.value })}>
             <option value="">{t('chooseLotOption')}</option>
-            {lots.filter((l) => l.status === 'AVAILABLE' && Number(l.weight_kg) > 0).map((l) => (
+            {lots.filter((l) => l.status === 'AVAILABLE' && l.owner_type === 'COMPANY' && Number(l.weight_kg) > 0).map((l) => (
               <option key={l.id} value={l.id}>{t('lotOptionAvailable', { itemName: l.item_name, barcode: l.barcode, weight: Number(l.weight_kg).toFixed(3) })}</option>
             ))}
           </select>
@@ -256,6 +304,24 @@ export function YarnManagement() {
         </div>
       </div>
 
+      <div className="bg-white rounded-xl border p-4 space-y-3">
+        <div className="flex gap-3 flex-wrap">
+          <input className={inputCls} placeholder={t('search')} value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value, page: 1 })} />
+          <select aria-label={t('owner')} value={filters.ownerType} onChange={e => setFilters({ ...filters, ownerType: e.target.value, page: 1 })}><option value="">{t('allOwners')}</option><option value="COMPANY">{t('companyOwner')}</option><option value="CUSTOMER">{t('customerOwner')}</option></select>
+          <label><input type="checkbox" checked={filters.onlyAvailable} onChange={e => setFilters({ ...filters, onlyAvailable: e.target.checked, page: 1 })} />{t('availableOnly')}</label>
+          <button disabled={filters.page === 1} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>?</button><span>{filters.page} / {Math.max(1, Math.ceil(total / 100))}</span><button disabled={filters.page * 100 >= total} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>?</button>
+        </div>
+        <h3 className="font-bold">{t('stockOperation')}</h3>
+        <select className={inputCls} value={operation.lotId} onChange={e => { setOperation({ ...operation, lotId: e.target.value }); setHistory([]); }}><option value="">{t('chooseLotOption')}</option>{lots.map(l => <option key={l.id} value={l.id}>{l.barcode} ? {l.owner_type} ? {l.weight_kg}</option>)}</select>
+        <select className={inputCls} value={operation.type} onChange={e => setOperation({ ...operation, type: e.target.value })}><option value="ADJUST">{t('adjust')}</option><option value="TRANSFER">{t('transfer')}</option></select>
+        <input type="number" step="0.001" className={inputCls} placeholder={t(operation.type === 'ADJUST' ? 'targetWeight' : 'soldWeightPlaceholder')} value={operation.weight} onChange={e => setOperation({ ...operation, weight: e.target.value })} />
+        {operation.type === 'TRANSFER' && <select className={inputCls} value={operation.warehouseId} onChange={e => setOperation({ ...operation, warehouseId: e.target.value })}><option value="">{t('chooseWarehouseOption')}</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}
+        <input className={inputCls} placeholder={t('reason')} value={operation.reason} onChange={e => setOperation({ ...operation, reason: e.target.value })} />
+        {operation.type === 'ADJUST' && <label><input type="checkbox" checked={operation.approved} onChange={e => setOperation({ ...operation, approved: e.target.checked })} />{t('approve')}</label>}
+        <button disabled={busy || !operation.lotId} className="bg-indigo-600 text-white rounded p-2" onClick={() => void runOperation()}>{t('execute')}</button>
+        <button disabled={!operation.lotId || busy} className="border rounded p-2 mx-2" onClick={async () => { try { setHistory((await listYarnMovements(operation.lotId)).data); } catch (e) { showToast({ type: 'error', message: String(e) }); } }}>{t('history')}</button>
+        {history.map(m => <div key={m.id} className="border-b p-2">{m.created_at} ? {m.movement_type} ? {m.weight_delta_kg} kg ? {m.notes} ? {m.created_by_user_id}</div>)}
+      </div>
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200 font-bold text-slate-800">{t('currentLotsTitle')}</div>
         <div className="overflow-x-auto">

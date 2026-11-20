@@ -1,3 +1,4 @@
+import {reserveRoll,releaseRollReservation,getRollReservation,assertReservationForInvoice,consumeRollReservation} from './rollReservationService.js';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { assertNoQualityHold } from './externalJobQualityHold.js';
@@ -10,6 +11,7 @@ import { getExchangeRateToUsdTx } from './exchangeRateService.js';
 import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import {
   assertSalesInvoiceCustomerMatchesOrder,
+  assertInvoiceOrderRemaining,
   syncCustomerOrderFulfillmentForInvoice,
 } from './customerOrderFulfillmentService.js';
 import {
@@ -522,88 +524,25 @@ async function rollLinkedToOtherDraftSale(
 }
 
 async function releaseDraftSalesRollReservation(
-  client: PoolClient,
-  companyId: string,
-  userId: string | null,
-  rollId: string,
-  invoiceId: string,
-  invoiceNo: string,
+  client: PoolClient, companyId: string, userId: string | null,
+  rollId: string, invoiceId: string, invoiceNo: string,
 ): Promise<void> {
-  if (await rollLinkedToOtherDraftSale(client, companyId, rollId, invoiceId)) return;
-
-  const rollRow = await client.query<{ status: string }>(
-    `SELECT status FROM fabric_rolls WHERE id=$1 AND company_id=$2 FOR UPDATE`,
-    [rollId, companyId],
-  );
-  if (!rollRow.rows.length || rollRow.rows[0].status !== 'RESERVED') return;
-
-  await client.query(
-    `UPDATE fabric_rolls SET status='AVAILABLE', updated_at=now() WHERE id=$1 AND company_id=$2`,
-    [rollId, companyId],
-  );
-  await client.query(
-    `INSERT INTO inventory_movements (
-       company_id, roll_id, movement_type, old_status, new_status,
-       reference_type, reference_id, reference_no, notes, created_by_user_id
-     ) VALUES ($1,$2,'RELEASE_RESERVATION',$3,$4,$5,$6,$7,$8,$9)`,
-    [
-      companyId,
-      rollId,
-      'RESERVED',
-      'AVAILABLE',
-      DRAFT_SALE_RESERVE_REF,
-      invoiceId,
-      invoiceNo,
-      `إلغاء حجز — مسودة ${invoiceNo}`,
-      userId,
-    ],
-  );
+  await releaseRollReservation(client,companyId,userId,rollId,{type:'DRAFT_SALE',id:invoiceId,number:invoiceNo});
 }
 
 async function reserveDraftSalesRoll(
-  client: PoolClient,
-  companyId: string,
-  userId: string | null,
-  rollId: string,
-  invoiceId: string,
-  invoiceNo: string,
+  client: PoolClient, companyId: string, userId: string | null,
+  rollId: string, invoiceId: string, invoiceNo: string,
 ): Promise<void> {
-  const rollRow = await client.query<{ status: string }>(
-    `SELECT status FROM fabric_rolls WHERE id=$1 AND company_id=$2 FOR UPDATE`,
-    [rollId, companyId],
-  );
-  if (!rollRow.rows.length) return;
-  const status = rollRow.rows[0].status;
-  await assertNoQualityHold(client, companyId, rollId);
-  if (status === 'RESERVED') return;
-  if (status !== 'AVAILABLE') {
-    throw Object.assign(
-      new Error(`الثوب ${rollId} غير متاح للحجز (الحالة: ${status})`),
-      { code: 'INVALID_STOCK' },
-    );
+  await assertNoQualityHold(client,companyId,rollId);
+  const line = (await client.query('SELECT customer_order_line_id FROM sales_invoice_lines WHERE company_id=$1 AND invoice_id=$2 AND fabric_roll_id=$3 LIMIT 1',[companyId,invoiceId,rollId])).rows[0];
+  const current=await getRollReservation(client,companyId,rollId);
+  if(current?.reference_type==='CUSTOMER_ORDER_LINE'){
+    await assertReservationForInvoice(client,companyId,rollId,invoiceId,line?.customer_order_line_id??null);
+    if(await rollLinkedToOtherDraftSale(client,companyId,rollId,invoiceId)) throw Object.assign(new Error('Roll linked to another draft sale'),{code:'INVALID_STOCK'});
+    return;
   }
-
-  await client.query(
-    `UPDATE fabric_rolls SET status='RESERVED', updated_at=now() WHERE id=$1 AND company_id=$2`,
-    [rollId, companyId],
-  );
-  await client.query(
-    `INSERT INTO inventory_movements (
-       company_id, roll_id, movement_type, old_status, new_status,
-       reference_type, reference_id, reference_no, notes, created_by_user_id
-     ) VALUES ($1,$2,'RESERVE',$3,$4,$5,$6,$7,$8,$9)`,
-    [
-      companyId,
-      rollId,
-      'AVAILABLE',
-      'RESERVED',
-      DRAFT_SALE_RESERVE_REF,
-      invoiceId,
-      invoiceNo,
-      `حجز — مسودة بيع ${invoiceNo}`,
-      userId,
-    ],
-  );
+  await reserveRoll(client,companyId,userId,rollId,{type:'DRAFT_SALE',id:invoiceId,number:invoiceNo});
 }
 
 /** يحجز أتواب أسطر المسودة ويحرّر الأتواب التي أُزيلت من الفاتورة. */
@@ -1537,6 +1476,8 @@ export async function confirmSalesInvoice(
     throw Object.assign(new Error('الفاتورة مؤكدة مسبقاً'), { code: 'INVALID_STATE' });
   }
 
+  await assertInvoiceOrderRemaining(client,companyId,invoiceId);
+
   const ccy = String(inv.currency_code || 'USD');
   const rate = Number(inv.exchange_rate_to_usd) > 0 ? Number(inv.exchange_rate_to_usd) : (ccy.trim().toUpperCase() === 'USD' ? 1 : NaN);
   const exchangeRateToUsd = ccy.trim().toUpperCase() === 'USD' ? 1 : rate;
@@ -1677,17 +1618,10 @@ export async function confirmSalesInvoice(
     if (roll.status !== 'AVAILABLE' && roll.status !== 'RESERVED') {
       throw Object.assign(new Error(`الثوب ${rollId} غير متاح للبيع`), { code: 'INVALID_STOCK' });
     }
-    if (roll.status === 'RESERVED') {
-      const reservedForThis = await client.query<{ id: string }>(
-        `SELECT id FROM sales_invoice_lines
-         WHERE invoice_id=$1 AND company_id=$2 AND fabric_roll_id=$3::uuid
-         LIMIT 1`,
-        [invoiceId, companyId, rollId],
-      );
-      if (!reservedForThis.rows.length) {
-        throw Object.assign(new Error('الثوب محجوز لفاتورة مسودة أخرى'), { code: 'INVALID_STOCK' });
-      }
+    if (roll.status === 'RESERVED' || await getRollReservation(client,companyId,rollId)) {
+      await assertReservationForInvoice(client,companyId,rollId,invoiceId,ln.customer_order_line_id);
     }
+    await consumeRollReservation(client,companyId,userId,rollId);
 
     const len = Number(roll.length_m);
     if (isFabricKg) {

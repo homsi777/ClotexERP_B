@@ -26,7 +26,7 @@ assert.equal(scanned.sheetMetersTotal, 3678);
 assert.equal(scanned.sheetRollsTotal, 36);
 assert.equal(scanned.sheetBalance, 1654);
 
-const { subtotal } = normalizeStatementImportSaleLines([{ quantity: 425.5, total: 1170.12 }]);
+const { subtotal } = normalizeStatementImportSaleLines([{ date: '2026-11-19', originalDateValue: '2026-11-19', dateParseSource: 'text_ymd', materialName: 'Fabric', quantity: 425.5, rolls: 1, city: '', unitPrice: 0, total: 1170.12, note: '' }]);
 assert.equal(subtotal, 1170.12);
 
 console.log('statementImportSaleLines.client.test.ts OK');

@@ -33,7 +33,7 @@ function formatDate(value?: string | null) {
 
 export function ActivationSettingsPanel() {
   const { t } = useTranslation('settings');
-  const [status, setStatus] = useState<ActivationStatusDto>({ active: false });
+  const [status, setStatus] = useState<ActivationStatusDto>({ active: false, requireActive: false });
   const [keys, setKeys] = useState<ActivationKeyAdminDto[]>([]);
   const [events, setEvents] = useState<ActivationEventDto[]>([]);
   const [generatedKeys, setGeneratedKeys] = useState<string[]>([]);

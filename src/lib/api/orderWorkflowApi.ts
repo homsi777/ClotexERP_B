@@ -1,0 +1,9 @@
+import {apiFetch} from './client';
+export type OrderWorkflowRoll={id:string;barcode:string;length_m:number;warehouse_name:string;fabric_stage:'RAW'|'FINISHED'|null;status:string;eligible:boolean;owned:boolean;quality_hold:boolean;external_pending:boolean};
+export type OrderExternalJob={id:string;job_no:string;stage:string;fabricStage:string|null;previousJobId:string|null;sent:number;received:number;accepted:number;pending:number;shortage:number;excess:number;qualityPending:number;rejected:number;rework:number;traceabilityOnly:boolean};
+export type OrderWorkflowLine={id:string;phase:string;materialName:string;designCode:string;colorCode:string;colorName:string;orderedMeters:number;fulfilledMeters:number;remainingMeters:number;availableMeters:number;reservedMeters:number;shortageMeters:number;rawMeters:number;externalMeters:number;externalJobs:OrderExternalJob[];qualityPendingMeters:number;unclassifiedMeters:number;availability:string;rolls:OrderWorkflowRoll[];production:Array<{id:string;work_order_no:string;status:string;allocated_length_m:number;phase:string;shared:boolean;last_update:string}>};
+export type OrderWorkflow={order:{id:string;order_no:string;status:string;currentStage:string;follow_up_user_name?:string;follow_up_employee_name?:string};lines:OrderWorkflowLine[]};
+export const getOrderWorkflow=(id:string)=>apiFetch<{ok:true;data:OrderWorkflow}>(`/api/customer-orders/${id}/workflow`).then(r=>r.data);
+export const changeOrderReservation=(id:string,line:string,action:'reserve'|'release',rollIds?:string[])=>apiFetch<{ok:true;data:OrderWorkflow}>(`/api/customer-orders/${id}/lines/${line}/${action}`,{method:'POST',body:JSON.stringify(rollIds?{rollIds}:{})}).then(r=>r.data);
+export type OrderHistoryEntry={id:string;action:string;username:string|null;created_at:string;details:unknown};
+export const getOrderHistory=(id:string)=>apiFetch<{ok:true;data:OrderHistoryEntry[]}>(`/api/customer-orders/${id}/history`).then(r=>r.data);

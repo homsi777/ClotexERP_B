@@ -1,3 +1,4 @@
+import { orderMetadataRows } from './customerOrderMetadata';
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerOrder } from '../types';
 import { exportPrintHtmlToPdf } from './printing/documentPrint';
@@ -429,6 +430,7 @@ export function exportCustomerOrderExcel(order: CustomerOrder, customer: Custome
     [t('orderExport.excelWarehouse'), orderWarehouseDisplayLabel(order.warehouse)],
     [t('orderExport.excelExpectedSupply'), order.expectedDate || ''],
     [t('orderExport.excelNotes'), order.notes || ''],
+    ...orderMetadataRows(order),
     [],
     [t('orderExport.excelTotalMaterials'), order.items.length],
     [t('orderExport.excelTotalLength'), tl],

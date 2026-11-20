@@ -1,3 +1,5 @@
+import { ExternalOrderLinePicker } from '../../components/purchases/ExternalOrderLinePicker';
+import type { ExternalLineReference } from '../../lib/api/externalJobsApi';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -48,6 +50,8 @@ export const ExternalJobProcessingNew = () => {
   const [searching, setSearching] = useState(false);
   const [selectedRolls, setSelectedRolls] = useState<SelectedRoll[]>([]);
   const [saving, setSaving] = useState(false);
+  const [references, setReferences] = useState<Record<string, ExternalLineReference>>({});
+  const [traceabilityOnly, setTraceabilityOnly] = useState(false);
 
   const loadPrepTypes = async () => {
     try {
@@ -165,6 +169,8 @@ export const ExternalJobProcessingNew = () => {
         processDescription: processDescription.trim() || null,
         notes: notes.trim() || null,
         rollIds: selectedRolls.map((r) => r.id),
+        lineReferences: selectedRolls.flatMap(r => references[r.id] ? [references[r.id]] : []),
+        traceabilityOnly,
       });
       showToast({ type: 'success', message: t('processingNew.createdSuccess', { jobNo: res.data.jobNo }) });
       navigate(`/purchases/external-jobs/${res.data.id}${manufacturing?'?from=manufacturing':''}`);
@@ -321,6 +327,8 @@ export const ExternalJobProcessingNew = () => {
           {/* Roll selection */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
             <h3 className="font-bold text-slate-800">{t('processingNew.rollsLabel')}</h3>
+            <label className="block rounded border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={traceabilityOnly} onChange={e => setTraceabilityOnly(e.target.checked)} /> {t('traceability.mixedCostMode')}</label>
+            <p className="text-sm text-amber-800">{t('traceability.costNotice')}</p>
             <div className="relative">
               <Search className="absolute right-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
@@ -370,7 +378,9 @@ export const ExternalJobProcessingNew = () => {
                     {selectedRolls.map((r) => (
                       <tr key={r.id}>
                         <td className="px-3 py-2 font-mono text-xs text-slate-600" dir="ltr">{r.barcode}</td>
-                        <td className="px-3 py-2 font-medium text-slate-800">{r.item_name}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">{r.item_name}
+                          <ExternalOrderLinePicker rollId={r.id} value={references[r.id]} onChange={value => setReferences(prev => ({...prev,[r.id]:value}))} />
+                        </td>
                         <td className="px-3 py-2 text-slate-600">{r.color_name_ar} {r.color_code ? `(${r.color_code})` : ''}</td>
                         <td className="px-3 py-2 font-mono text-slate-600">{r.length_m}</td>
                         <td className="px-3 py-2 font-mono text-slate-600">{r.actual_weight_kg ?? r.calculated_weight_kg ?? '—'}</td>

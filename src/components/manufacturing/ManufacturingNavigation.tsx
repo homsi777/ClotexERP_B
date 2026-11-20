@@ -1,12 +1,12 @@
 import { ArrowRight, ChevronLeft, Factory, FileSpreadsheet, Gauge, ShieldCheck, Calculator, Truck, Settings } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-export type ManufacturingSection='machines'|'departments'|'downtime'|'defects'|'specifications'|'workOrders'|'warping'|'sizing'|'weaving'|'rawInspection'|'costing'|'external';
+export type ManufacturingSection='machines'|'departments'|'downtime'|'defects'|'specifications'|'workOrders'|'warping'|'sizing'|'weaving'|'rawInspection'|'costing'|'reports'|'external';
 export const manufacturingGroups=[
  {id:'planning',icon:FileSpreadsheet,sections:['specifications','workOrders']},
  {id:'operations',icon:Gauge,sections:['warping','sizing','weaving']},
  {id:'quality',icon:ShieldCheck,sections:['rawInspection']},
- {id:'costs',icon:Calculator,sections:['costing']},
+ {id:'costs',icon:Calculator,sections:['costing','reports']},
  {id:'external',icon:Truck,sections:['external']},
  {id:'settings',icon:Settings,sections:['machines','departments','downtime','defects']},
 ] as const;

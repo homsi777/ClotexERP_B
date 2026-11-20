@@ -48,6 +48,7 @@
   "typeField.kgFabricOption": "قماش بالكيلو",
   "typeField.kgYarnOption": "خيوط بالكيلو",
 
+  "orderImport.referencePrice": "سعر الأوردر المرجعي",
   "orderImport.sectionLabel": "استيراد طلبية",
   "orderImport.linkedWithNumber": "· مرتبطة #{{number}}",
   "orderImport.linkedNoNumber": "· مرتبطة",

@@ -58,7 +58,7 @@ export const DesktopSettingsBody: React.FC = () => {
   const [silentA4, setSilentA4] = useState(false);
   const [widthMm, setWidthMm] = useState(100);
   const [heightMm, setHeightMm] = useState(80);
-  const [printMode, setPrintMode] = useState<'A4' | 'ROLL_LABEL'>('ROLL_LABEL');
+  const [printMode, setPrintMode] = useState<'A4' | 'A5' | 'ROLL_LABEL'>('ROLL_LABEL');
 
   // Save state
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -440,7 +440,7 @@ p { margin: 2mm 0; font-size: 10pt; }
 
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{t('desktop.a4.defaultPrintMode')}</label>
-          <select value={printMode} onChange={(e) => setPrintMode(e.target.value as 'A4' | 'ROLL_LABEL')} className={inputCls}>
+          <select value={printMode} onChange={(e) => setPrintMode(e.target.value as 'A4' | 'A5' | 'ROLL_LABEL')} className={inputCls}>
             <option value="ROLL_LABEL">{t('desktop.a4.modeRollLabel')}</option>
             <option value="A4">{t('desktop.a4.modeA4')}</option>
           </select>

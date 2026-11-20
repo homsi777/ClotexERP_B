@@ -47,7 +47,7 @@ export const Purchases = () => {
   const [documentStatus, setDocumentStatus] = useState<DocFilter>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scanInputRef = useRef<HTMLInputElement | null>(null);
-  const scanDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanDebounceRef = useRef<number | null>(null);
   const importPreviewRef = useRef<PurchaseInvoiceImportPreview | null>(null);
   const [importPreview, setImportPreview] = useState<PurchaseInvoiceImportPreview | null>(null);
   const [scanValue, setScanValue] = useState('');

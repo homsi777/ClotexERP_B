@@ -54,6 +54,7 @@
   "orderImport.placeholder": "Sipariş numarası",
   "orderImport.button": "İçe Aktar",
   "orderImport.helper": "Yalnızca kalan miktar — içe aktarıldıktan sonra düzenlenebilir",
+  "orderImport.referencePrice": "Sipariş referans fiyatı",
   "orderImport.emptyInput": "İçe aktarmak için sipariş numarasını girin",
   "orderImport.customerMismatch": "Faturadaki müşteri, siparişin müşterisiyle eşleşmiyor — müşteriyi değiştirin ya da yeni bir fatura oluşturun",
   "orderImport.success": "{{orderNo}} numaralı siparişten {{count}} satır içe aktarıldı (kalan miktar — düzenlenebilir)",

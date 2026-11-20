@@ -36,6 +36,7 @@ import { ToastProvider } from '../components/NonBlockingToast';
 import { SessionPresenceTracker } from '../components/SessionPresenceTracker';
 import { CompanySwitcher } from '../components/companies/CompanySwitcher';
 import { ActiveCompanyBanner } from '../components/companies/ActiveCompanyBanner';
+import {OrderNotificationInbox} from '../components/orders/OrderNotificationInbox';
 import { BRAND } from '../branding';
 import { useAnchoredPopoverStyle } from '../lib/useAnchoredPopoverStyle';
 import { fetchMe } from '../lib/api/authApi';
@@ -290,6 +291,7 @@ const Topbar = () => {
               {t('notifications.pickupSubtitle')}
             </p>
           </div>
+          <OrderNotificationInbox/>
           <div className="max-h-[min(22rem,55vh)] overflow-y-auto custom-scrollbar">
             {!hasAlerts ? (
               <p className="px-4 py-8 text-sm text-center text-[var(--text-muted)]">{t('noAlertsCurrently', { ns: 'common' })}</p>

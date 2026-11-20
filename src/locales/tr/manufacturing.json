@@ -17,6 +17,7 @@
       "weaving":{"title":"Dokuma ve vardiyalar","description":"Levent ve tezgâhı seçin; sayaçları ve atkı tüketimini kaydedip çalışmayı kapatın."},
       "rawInspection":{"title":"Ham kontrol ve top girişi","description":"Kaliteyi kaydedip onaylayın, ardından topları girin. Rapor ve yazdırma parti satırındadır."},
       "costing":{"title":"Malzeme tüketimi ve maliyet onayı","description":"Üretim emrini seçerek tüketim, iade ve giderleri kaydedin; maliyet dökümünü dışa aktarın."},
+        "reports": {"title": "Üretim ve kalite raporları", "description": "Vardiya üretimi, kalite ve ham depo girişleri; tarih filtreleri, yazdırma ve dışa aktarma."},
       "external":{"title":"Dış işçilik işleri","description":"Sevk, kabul, kalite, fiyat ve farkları işin detayından yönetin; sevk belgesini yazdırın."},
       "machines":{"title":"Makineler ve bakım","description":"Makineler, teknik durum, arıza ve bakım geçmişi."},
       "departments":{"title":"Fabrika bölümleri","description":"Makinelerin bağlı olduğu fabrika bölümlerini tanımlayın."},

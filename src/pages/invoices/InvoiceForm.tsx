@@ -5,7 +5,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { ArrowRight, Save, X, FileText, Plus, Trash2, QrCode, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
-import { calculateFabricInvoiceSummary, calculateFabricWeightKg } from '../../lib/fabricInvoiceSummary';
+import { calculateFabricInvoiceSummary, calculateFabricWeightKg, UNKNOWN_FABRIC_VALUE } from '../../lib/fabricInvoiceSummary';
 import { sendTelegramInvoiceFromSavedInvoice } from '../../lib/telegramInvoice';
 import { listCustomers, findOrCreateCustomerFromSupplier, type ApiCustomer } from '../../lib/api/customersApi';
 import { listSuppliers, type ApiSupplier } from '../../lib/api/suppliersApi';
@@ -149,6 +149,7 @@ interface InvoiceFormItem {
   rawQrPayload: string;
   rawBarcodePayload: string;
   customerOrderLineId?: string;
+  orderReferencePrice?: number;
 }
 
 interface StagedRollItemPayload {
@@ -711,7 +712,7 @@ export const InvoiceForm = () => {
         setWarehouse(
           resolveWarehouseIdFromStored(
             h.warehouse_id != null ? String(h.warehouse_id) : null,
-            h.warehouse_label,
+            h.warehouse_label == null ? null : String(h.warehouse_label),
             whs,
           ),
         );
@@ -959,10 +960,10 @@ export const InvoiceForm = () => {
      const rollRowsForSuggest = isYarnMode
        ? (apiYarnLots as unknown as Record<string, unknown>[])
        : isSales
-       ? (inventorySource as Record<string, unknown>[]).filter(
+       ? (inventorySource.map((stock): Record<string, unknown> => ({ ...stock }))).filter(
            (s) => !isFabricRollStockRow(s) || isRollApplicableToSalesInvoice(s),
          )
-       : (inventorySource as Record<string, unknown>[]);
+       : (inventorySource.map((stock): Record<string, unknown> => ({ ...stock })));
 
      const itemsForSuggest = isYarnMode
        ? allFabricItems.filter((it) => it.unit === 'kg')
@@ -1295,7 +1296,7 @@ export const InvoiceForm = () => {
     if (!query) return null;
     const found =
       inventorySource.find((raw) => {
-        const item = raw as Record<string, unknown>;
+        const item: Record<string, unknown> = { ...raw };
         const candidates = options.barcodeColumnOnly
           ? collectRollBarcodeColumnCandidates(item)
           : [
@@ -1315,7 +1316,7 @@ export const InvoiceForm = () => {
         return candidates.includes(query);
       }) ?? null;
     if (!found) return null;
-    if (isSales && isFabricRollStockRow(found as Record<string, unknown>) && !isRollApplicableToSalesInvoice(found as FabricRollDto)) {
+    if (isSales && isFabricRollStockRow({ ...found }) && !isRollApplicableToSalesInvoice(found as FabricRollDto)) {
       return null;
     }
     return found;
@@ -1345,7 +1346,7 @@ export const InvoiceForm = () => {
 
     const local = findStockMatchStrictIdentity(query, options);
     if (local) {
-      if (options.barcodeColumnOnly && !rollMatchesBarcodeColumn(local, query)) {
+      if (options.barcodeColumnOnly && !rollMatchesBarcodeColumn({ ...local }, query)) {
         return null;
       }
       return local as FabricRollDto;
@@ -1393,7 +1394,7 @@ export const InvoiceForm = () => {
           const probe = await listFabricRolls({ search: query, pageSize: 25 });
           const dead = exactMatchOf(probe.data);
           if (dead) {
-            const status = String((dead as Record<string, unknown>).status ?? '');
+            const status = String(dead.status ?? '');
             if (status === 'SOLD') {
               showToast({ type: 'warning', message: t('toast.rollSoldOut') });
             } else if (!isRollApplicableToSalesInvoice(dead)) {
@@ -1407,7 +1408,7 @@ export const InvoiceForm = () => {
         }
 
         if (match && isSales && !isRollApplicableToSalesInvoice(match)) {
-          const status = String((match as Record<string, unknown>).status ?? '');
+          const status = String(match.status ?? '');
           showToast({
             type: 'warning',
             message: status === 'SOLD'
@@ -1635,7 +1636,7 @@ export const InvoiceForm = () => {
 
   const nextInternalRollId = () => {
     const ids = [...inventory, ...items]
-      .map((item) => item.internalRollId || item.rollNumber || '')
+      .map((item) => item.internalRollId || ('rollNumber' in item ? item.rollNumber : '') || '')
       .map((value) => {
         const match = value.match(/TXR-\d{4}-(\d{6})/);
         return match ? Number(match[1]) : 0;
@@ -2102,7 +2103,8 @@ export const InvoiceForm = () => {
         widthCm: line.widthCm != null ? String(line.widthCm) : '',
         gsm: line.gsm != null ? String(line.gsm) : '',
         weight: line.weight != null ? String(line.weight) : '',
-        price: line.price > 0 ? String(line.price) : '',
+        price: '',
+        orderReferencePrice: line.price,
         note: line.note || '',
         supplierBarcode: line.referenceBarcode || '',
         customerOrderLineId: line.orderLineId,
@@ -2615,6 +2617,7 @@ export const InvoiceForm = () => {
           internalRollId: item.internalRollId || undefined,
           fabricRollId: fabricRollId || undefined,
           customerOrderLineId: item.customerOrderLineId || undefined,
+          orderReferencePrice:item.orderReferencePrice,
           barcode: meaningfulBarcode(item.supplierBarcode, [item.materialName, item.dsamNumber, item.colorName, item.colorCode]) || '',
           supplierBarcode: meaningfulBarcode(item.supplierBarcode, [item.materialName, item.dsamNumber, item.colorName, item.colorCode]) || '',
           printBarcode: item.printBarcode || printableShortBarcode(item.supplierBarcode) || printableShortBarcode(item.rawBarcodePayload) || '',
@@ -3752,10 +3755,20 @@ export const InvoiceForm = () => {
                         <td className="p-3 font-mono">{(invoiceUnitMode === 'kg' ? group.totalKg : group.totalMeters).toFixed(2)}</td>
                         <td className="p-3">
                           {(() => {
+                            // Match the summary engine's normalized material/design/price key.
+                            // rollNo identifies a roll and is not a fallback design code.
+                            const referencePrices = [...new Set(items
+                              .filter((row) =>
+                                (row.materialName.trim() || UNKNOWN_FABRIC_VALUE) === group.materialName &&
+                                (row.dsamNumber.trim() || UNKNOWN_FABRIC_VALUE) === group.designCode &&
+                                Math.max(0, numberValue(row.price)) === group.pricePerMeter &&
+                                row.orderReferencePrice != null,
+                              )
+                              .map((row) => row.orderReferencePrice))];
                             const summaryPriceError =
                               isSales && group.pricePerMeter <= 0 ? t('summary.priceRequired') : '';
                             return (
-                              <input
+                              <div><input
                                 type="number"
                                 min={isSales ? '0.01' : '0'}
                                 data-invoice-summary-price
@@ -3778,6 +3791,8 @@ export const InvoiceForm = () => {
                                 }`}
                                 dir="ltr"
                               />
+                              {referencePrices.length > 0 && <p className="mt-1 text-xs text-slate-500">{t('orderImport.referencePrice')}: {referencePrices.join(' / ')} {currency}</p>}
+                              </div>
                             );
                           })()}
                         </td>

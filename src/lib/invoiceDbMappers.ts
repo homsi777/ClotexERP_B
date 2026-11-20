@@ -152,6 +152,7 @@ export type InvoiceFormLineDraft = {
   rawQrPayload: string;
   rawBarcodePayload: string;
   customerOrderLineId?: string;
+  orderReferencePrice?:number;
 };
 
 export function buildInvoiceFormLineDraftsFromDbLines(lines: Record<string, unknown>[]): InvoiceFormLineDraft[] {
@@ -174,6 +175,7 @@ export function buildInvoiceFormLineDraftsFromDbLines(lines: Record<string, unkn
     const priceNum = numFromDb(l.unit_cost ?? l.unit_price);
     return {
       unit: isYarnLine ? 'kg' : 'meter',
+      orderReferencePrice:optionalNumFromDb(meta.orderReferencePrice)??undefined,
       materialName,
       dsamNumber: stringFromMeta(meta, ['designCode', 'dsamNumber']),
       rollNo,

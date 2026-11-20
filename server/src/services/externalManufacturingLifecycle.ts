@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import {getMixedCostShares} from './mixedExternalCostService.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { generateBarcode, calcWeight } from '../utils/rollHelpers.js';
@@ -111,7 +112,7 @@ export async function assertLegacyPricing(db: Db, companyId: string, jobId: stri
 export async function manufacturingOverview(db: Db, companyId: string, jobId: string) {
   uuid.parse(jobId);
   const job = (await db.query(`SELECT j.*,s.name AS supplier_name,p.name AS preparation_type_name,
-    EXISTS(SELECT 1 FROM manufacturing_external_links l JOIN manufacturing_cost_closures c ON c.company_id=l.company_id AND c.work_order_id=l.work_order_id WHERE l.company_id=j.company_id AND l.job_id=j.id) AS production_cost_closed FROM external_jobs j
+    EXISTS(SELECT 1 FROM manufacturing_cost_closures c WHERE c.company_id=j.company_id AND c.work_order_id IN (SELECT l.work_order_id FROM manufacturing_external_links l WHERE l.company_id=j.company_id AND l.job_id=j.id UNION SELECT a.work_order_id FROM manufacturing_external_cost_shares a WHERE a.company_id=j.company_id AND a.job_id=j.id)) AS production_cost_closed FROM external_jobs j
     JOIN suppliers s ON s.id=j.supplier_id AND s.company_id=j.company_id
     LEFT JOIN external_job_preparation_types p ON p.id=j.preparation_type_id AND p.company_id=j.company_id
     WHERE j.id=$1 AND j.company_id=$2 AND j.job_kind='PROCESSING'`, [jobId, companyId])).rows[0];
@@ -120,6 +121,8 @@ export async function manufacturingOverview(db: Db, companyId: string, jobId: st
     COALESCE(l.sent_width_cm,r.width_cm) AS width_cm,COALESCE(l.sent_gsm,r.gsm) AS gsm,
     COALESCE(l.sent_weight_kg,r.actual_weight_kg,r.calculated_weight_kg) AS sent_weight_display,
     i.name AS item_name,i.internal_code,c.name_ar AS color_name,
+    (SELECT o.order_no FROM customer_orders o WHERE o.company_id=l.company_id AND o.id=l.customer_order_id) AS customer_order_no,
+    (SELECT ol.line_no FROM customer_order_lines ol WHERE ol.company_id=l.company_id AND ol.id=l.customer_order_line_id) AS customer_order_line_no,
     COALESCE((SELECT SUM(x.length_m) FROM external_job_return_lines x WHERE x.source_line_id=l.id AND x.company_id=l.company_id),0) AS returned_m,
     COALESCE((SELECT SUM(x.amount_m) FROM external_job_settlements x WHERE x.source_line_id=l.id AND x.company_id=l.company_id AND x.kind='SHORTAGE'),0) AS shortage_m,
     COALESCE((SELECT SUM(x.amount_m) FROM external_job_settlements x WHERE x.source_line_id=l.id AND x.company_id=l.company_id AND x.kind='EXCESS'),0) AS excess_m
@@ -129,7 +132,7 @@ export async function manufacturingOverview(db: Db, companyId: string, jobId: st
     WHERE l.job_id=$1 AND l.company_id=$2 AND l.line_status<>'CANCELLED' ORDER BY l.id`, [jobId, companyId])).rows;
   const services = (await db.query('SELECT * FROM external_job_services WHERE job_id=$1 AND company_id=$2 ORDER BY id', [jobId, companyId])).rows;
   const batches = (await db.query(`SELECT b.*,COALESCE((SELECT jsonb_agg(jsonb_build_object('id',q.id,'source_line_id',q.source_line_id,
-    'original_barcode',q.original_barcode,'barcode',r.barcode,'length_m',q.length_m,'weight_kg',q.weight_kg,'defective',q.defective,
+    'customer_order_id',q.customer_order_id,'customer_order_line_id',q.customer_order_line_id,'original_barcode',q.original_barcode,'barcode',r.barcode,'length_m',q.length_m,'weight_kg',q.weight_kg,'defective',q.defective,
     'defect_reason',q.defect_reason,'responsible_party',q.responsible_party,'notes',q.notes,'resolution',q.resolution,
     'resolution_notes',q.resolution_notes,'resolved_at',q.resolved_at,'status',r.status))
     FROM external_job_return_lines q JOIN fabric_rolls r ON r.id=q.result_roll_id AND r.company_id=q.company_id
@@ -146,7 +149,7 @@ export async function manufacturingOverview(db: Db, companyId: string, jobId: st
   const displayLines = legacyMode && !legacy.length ? lines.map(l => ({ ...l,
     returned_m: l.line_status === 'RECEIVED' ? l.new_length_m ?? l.sent_length_m ?? '0' : '0',
   })) : lines;
-  return { job, lines: displayLines, services, batches, settlements, legacy, legacyMode };
+  return { job, lines: displayLines, services, batches, settlements, legacy, legacyMode,costShares:await getMixedCostShares(db,companyId,jobId),costAllocationTotalUsd:job.fee_amount==null||!Number(job.fee_exchange_rate_to_usd)?null:Number(job.fee_amount)/Number(job.fee_exchange_rate_to_usd) };
 }
 
 const returnSchema = z.object({
@@ -255,8 +258,7 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
     currencyCode: z.string().trim().min(1).max(8), basis: z.enum(['METER', 'KG', 'FIXED']), approvedQuantity: amount })).min(1).max(30) }).strict().parse(raw);
   const job = await lockManufacturingJob(db, companyId, jobId);
   if (job.fee_posted_at) fail('تم ترحيل الفاتورة؛ لا يمكن تعديل الأسعار');
-  const frozen = await db.query(`SELECT 1 FROM manufacturing_external_links l JOIN manufacturing_cost_closures c
-    ON c.company_id=l.company_id AND c.work_order_id=l.work_order_id WHERE l.company_id=$1 AND l.job_id=$2 LIMIT 1`,[companyId,jobId]);
+  const frozen = await db.query(`SELECT 1 FROM manufacturing_cost_closures c WHERE c.company_id=$1 AND c.work_order_id IN (SELECT l.work_order_id FROM manufacturing_external_links l WHERE l.company_id=$1 AND l.job_id=$2 UNION SELECT a.work_order_id FROM manufacturing_external_cost_shares a WHERE a.company_id=$1 AND a.job_id=$2) LIMIT 1`,[companyId,jobId]);
   if (frozen.rows.length) fail('تكلفة أمر الإنتاج معتمدة؛ لا يمكن تعديل أجرة المصنعية');
   const services = (await db.query('SELECT id FROM external_job_services WHERE job_id=$1 AND company_id=$2 ORDER BY id FOR UPDATE', [jobId, companyId])).rows;
   if (input.lines.length !== services.length || new Set(input.lines.map(l => l.serviceId)).size !== services.length || input.lines.some(l => !services.some(s => s.id === l.serviceId))) fail('يجب تسعير جميع الخدمات مرة واحدة');
@@ -276,6 +278,7 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
   }
   if (totalUsd > 9999999999.99) fail('إجمالي أجرة المهمة يتجاوز الحد المحاسبي المسموح');
   // One pricing source: the existing fee header and existing GL posting consume this aggregate.
+  await db.query('UPDATE manufacturing_external_cost_shares SET allocated_usd=NULL,approved_at=NULL,approved_by_user_id=NULL WHERE company_id=$1 AND job_id=$2',[companyId,jobId]);
   await db.query(`UPDATE external_jobs SET fee_amount=$3,fee_currency_code='USD',fee_exchange_rate_to_usd=1,
     pricing_method=NULL,approved_quantity=NULL,unit_price=NULL,updated_at=now() WHERE id=$1 AND company_id=$2`, [jobId, companyId, Math.round(totalUsd * 100) / 100]);
 }

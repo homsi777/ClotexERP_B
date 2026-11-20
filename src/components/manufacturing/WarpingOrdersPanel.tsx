@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
+import {WarpingYarnSettlementPanel} from './WarpingYarnSettlementPanel';
+import {BeamQualityReviewPanel} from './BeamQualityReviewPanel';
+import {apiFetch} from '../../lib/api/client';
 import {
   completeWarpingOrder,
   createWarpingYarnIssue,
   approveWarpingYarnIssue,
-  closeWarpingYarnIssue,
   createWarpingOrder,
   getWarpingOptions,
   listWarpingOrders,
@@ -48,6 +50,8 @@ export function WarpingOrdersPanel({
   });
   const [completion,setCompletion]=useState<WarpingOrder|null>(null);
   const [completionLength,setCompletionLength]=useState('');
+  const [closeOrder,setCloseOrder]=useState(true);
+  const [releaseNextStage,setReleaseNextStage]=useState<''|'SIZING'|'WEAVING'>('');
   const [completionQuality,setCompletionQuality]=useState<'ACCEPTED'|'CONDITIONAL'|'REJECTED'>('ACCEPTED');
   const [completionNextStage,setCompletionNextStage]=useState<'SIZING'|'WEAVING'>('WEAVING');
   const load = useCallback(async () => {
@@ -126,16 +130,19 @@ export function WarpingOrdersPanel({
       setIssueFor(null);
       setIssueForm({ yarnLotId: "", weightKg: "" });
     });
-  const settleYarn=(issue:(typeof yarnIssues)[number])=>{const lines:Array<{lineId:string;returnedWeightKg:number;wasteWeightKg:number}>=[];for(const line of issue.lines){const returned=Number(prompt(`الوزن المرتجع من المصروف ${line.issuedWeightKg} كغ`,`0`));if(!Number.isFinite(returned)||returned<0)return;const waste=Number(prompt("وزن الهالك كغ","0"));if(!Number.isFinite(waste)||waste<0)return;lines.push({lineId:line.id,returnedWeightKg:returned,wasteWeightKg:waste});}void run(()=>closeWarpingYarnIssue(issue.id,lines));};
   return (
     <div className="p-4">
+      <WarpingYarnSettlementPanel issues={yarnIssues} canManage={canManage} canApprove={canApproveYarn} onChanged={load}/>
+      <BeamQualityReviewPanel kind="WARP" enabled={canQuality} onChanged={load}/>
+      {canQuality&&rows.filter(r=>r.status==='IN_PROGRESS'&&r.output_beams?.length&&!r.output_beams.some(b=>b.status==='NEEDS_REPAIR')).map(row=><button key={row.id} className={`${cls} mb-3 mr-2`} disabled={busy} onClick={()=>void run(()=>apiFetch(`/api/manufacturing/reference/beam-quality/warp-orders/${row.id}/close`,{method:'POST',body:'{}'}))}>إغلاق {row.warping_order_no} بعد حسم المطاوي والخيط</button>)}
       {error && <div className="mb-3 rounded bg-rose-50 p-3 text-rose-700">{error}</div>}
-      {completion&&<form className="mb-4 grid gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 md:grid-cols-4" onSubmit={e=>{e.preventDefault();if(!completionLength.trim()||!Number.isFinite(Number(completionLength))||Number(completionLength)<0||(completionQuality!=='REJECTED'&&Number(completionLength)<=0))return;void run(async()=>{await completeWarpingOrder(completion.id,{version:completion.version,actualLengthM:Number(completionLength),qualityStatus:completionQuality,nextStage:completionNextStage});setCompletion(null);});}}>
+      <label className="block mb-3">مسار البطاقة عند الإصدار <select className={cls} value={releaseNextStage} onChange={e=>setReleaseNextStage(e.target.value as typeof releaseNextStage)}><option value="">اختر المسار لاعتماده في البطاقة</option><option value="WEAVING">النسج مباشرة</option><option value="SIZING">التصميغ أولاً</option></select></label>
+      {completion&&<form className="mb-4 grid gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 md:grid-cols-4" onSubmit={e=>{e.preventDefault();if(!completionLength.trim()||!Number.isFinite(Number(completionLength))||Number(completionLength)<0||(completionQuality!=='REJECTED'&&Number(completionLength)<=0))return;void run(async()=>{await completeWarpingOrder(completion.id,{version:completion.version,actualLengthM:Number(completionLength),qualityStatus:completionQuality,nextStage:completionNextStage,closeOrder});setCompletion(null);});}}>
         <strong className="md:col-span-4">فحص التسدية — {completion.warping_order_no}</strong>
         <label className="text-sm">الطول الفعلي بالمتر<input aria-label="الطول الفعلي للتسدية" required type="number" min={completionQuality==='REJECTED'?0:0.001} step="0.001" className={`${cls} w-full`} value={completionLength} onChange={e=>setCompletionLength(e.target.value)}/></label>
         <label className="text-sm">نتيجة الفحص<select aria-label="نتيجة فحص التسدية" className={`${cls} w-full`} value={completionQuality} onChange={e=>setCompletionQuality(e.target.value as typeof completionQuality)}><option value="ACCEPTED">مقبول</option><option value="CONDITIONAL">قبول مشروط</option><option value="REJECTED">مرفوض</option></select></label>
-        <label className="text-sm">المرحلة التالية<select aria-label="المرحلة التالية للمطواة" disabled={completionQuality==='REJECTED'} className={`${cls} w-full`} value={completionNextStage} onChange={e=>setCompletionNextStage(e.target.value as typeof completionNextStage)}><option value="WEAVING">النسج مباشرة</option><option value="SIZING">التصميغ أولاً</option></select></label>
-        <div className="flex items-end gap-2"><button disabled={busy} type="submit" className="rounded-lg bg-indigo-600 px-3 py-2 text-white disabled:opacity-50">حفظ نتيجة الفحص</button><button disabled={busy} type="button" className={cls} onClick={()=>setCompletion(null)}>إلغاء</button></div>
+        <label className="text-sm">المرحلة التالية<select aria-label="المرحلة التالية للمطواة" disabled={completionQuality==='REJECTED'||!!completion.card_data?.nextStage} className={`${cls} w-full`} value={completionNextStage} onChange={e=>setCompletionNextStage(e.target.value as typeof completionNextStage)}><option value="WEAVING">النسج مباشرة</option><option value="SIZING">التصميغ أولاً</option></select></label>
+        <label><input type="checkbox" checked={closeOrder} onChange={e=>setCloseOrder(e.target.checked)}/> إغلاق الأمر بعد هذه المطواة</label><div className="flex items-end gap-2"><button disabled={busy} type="submit" className="rounded-lg bg-indigo-600 px-3 py-2 text-white disabled:opacity-50">حفظ نتيجة الفحص</button><button disabled={busy} type="button" className={cls} onClick={()=>setCompletion(null)}>إلغاء</button></div>
       </form>}
       {issueFor && (
         <div className="mb-4 grid gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 md:grid-cols-4">
@@ -195,7 +202,6 @@ export function WarpingOrdersPanel({
           </div>
         </div>
       )}
-      {yarnIssues.some((i)=>i.status==="ISSUED")&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h3 className="mb-2 font-bold">عهد خيط مصروفة تنتظر المرتجع والهالك</h3><div className="flex flex-wrap gap-2">{yarnIssues.filter(i=>i.status==="ISSUED").map(i=><div key={i.id} className="rounded border bg-white p-2 text-sm">{i.issue_no} — {i.warpingOrderNo}<button className="mr-3 rounded bg-emerald-700 px-3 py-1 font-bold text-white" disabled={busy} onClick={()=>settleYarn(i)}>تسوية وإغلاق</button></div>)}</div></div>}
       <div className="mb-4 flex justify-between">
         <div>
           <h2 className="font-bold">أوامر التسدية وكروت السداء</h2>
@@ -358,9 +364,9 @@ export function WarpingOrdersPanel({
                 <td className="space-x-1 space-x-reverse whitespace-nowrap">
                   {canManage && r.status === "DRAFT" && (
                     <button
-                      disabled={busy}
+                      disabled={busy||!releaseNextStage}
                       className={cls}
-                      onClick={() => void run(() => releaseWarpingOrder(r.id, r.version))}
+                      onClick={() => void run(() => releaseWarpingOrder(r.id, r.version, releaseNextStage||undefined))}
                     >
                       إصدار
                     </button>
@@ -384,7 +390,7 @@ export function WarpingOrdersPanel({
                       disabled={busy}
                       className={cls}
                       onClick={() => {
-                        setCompletion(r);
+                        setCompletion(r);setCloseOrder(true);if(r.card_data?.nextStage==='SIZING'||r.card_data?.nextStage==='WEAVING')setCompletionNextStage(r.card_data.nextStage);
                         setCompletionLength(String(r.planned_length_m));
                         setCompletionQuality('ACCEPTED');
                         setCompletionNextStage('WEAVING');

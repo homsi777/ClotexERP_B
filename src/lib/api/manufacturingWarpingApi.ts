@@ -47,10 +47,10 @@ export const getWarpingOptions = () =>
   apiFetch<{ ok: true; data: WarpingOptions }>(`${base}/options`).then((r) => r.data);
 export const createWarpingOrder = (body: Record<string, unknown>) =>
   apiFetch<{ ok: true; data: unknown }>(base, { method: "POST", body: JSON.stringify(body) }).then((r) => r.data);
-export const releaseWarpingOrder = (id: string, version: number) =>
+export const releaseWarpingOrder = (id: string, version: number, nextStage?: "SIZING" | "WEAVING") =>
   apiFetch<{ ok: true; data: unknown }>(`${base}/${id}/release`, {
     method: "POST",
-    body: JSON.stringify({ version }),
+    body: JSON.stringify({ version, nextStage }),
   }).then((r) => r.data);
 export const transitionWarpingOrder = (
   id: string,
@@ -67,6 +67,7 @@ export const completeWarpingOrder = (
   body: {
     version: number;
     actualLengthM: number;
+    closeOrder?: boolean;
     qualityStatus: "ACCEPTED" | "CONDITIONAL" | "REJECTED";
     nextStage?: "SIZING"|"WEAVING";
     qualityNotes?: string;

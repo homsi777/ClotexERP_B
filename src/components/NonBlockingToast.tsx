@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-export type NonBlockingToastType = 'success' | 'warning' | 'error';
+export type NonBlockingToastType = 'success' | 'warning' | 'error' | 'info';
 
 type ToastRecord = { id: number; message: string; type: NonBlockingToastType };
 
@@ -44,7 +44,7 @@ export function restoreAccidentalInteractionLocks() {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const idRef = useRef(0);
-  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const timersRef = useRef<Map<number, number>>(new Map());
 
   const dismissToast = useCallback((id: number) => {
     const timer = timersRef.current.get(id);
@@ -82,6 +82,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [toasts.length]);
 
   const toneClass: Record<NonBlockingToastType, string> = {
+    info: 'bg-blue-700 text-white border-blue-800/40',
     success: 'bg-emerald-700 text-white border-emerald-800/40',
     warning: 'bg-amber-600 text-white border-amber-800/40',
     error: 'bg-rose-600 text-white border-rose-900/30',

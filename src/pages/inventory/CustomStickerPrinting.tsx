@@ -169,8 +169,8 @@ export const CustomStickerPrinting: React.FC = () => {
   });
 
   const [useBrandLogo, setUseBrandLogo] = useState(true);
-  const [brandName, setBrandName] = useState(BRAND.name);
-  const [subtitle, setSubtitle] = useState(BRAND.tagline);
+  const [brandName, setBrandName] = useState<string>(BRAND.name);
+  const [subtitle, setSubtitle] = useState<string>(BRAND.tagline);
   const [title, setTitle] = useState('CUSTOM FABRIC LABEL');
   const [note, setNote] = useState('Special customer label - owner custom data');
   const [footer, setFooter] = useState('THE CLAIMS WILL NOT BE ACCEPTABLE AFTER GOODS WERE CUT');
