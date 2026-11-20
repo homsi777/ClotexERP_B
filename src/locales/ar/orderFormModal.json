@@ -39,6 +39,8 @@
   "form.warehouseLoading": "جاري تحميل المستودعات...",
   "form.warehouseNoneActive": "لا مستودعات نشطة",
   "form.currencyLabel": "العملة",
+  "form.currencyEgp": "الجنيه المصري (EGP)",
+  "form.currencySyp": "الليرة السورية (SYP)",
   "form.currencyUsd": "دولار (USD)",
   "form.currencySar": "ريال (SAR)",
   "form.currencyTry": "ليرة (TRY)",

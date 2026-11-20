@@ -165,7 +165,7 @@ export async function fetchCustomerOrderImportPreview(orderNo: string): Promise<
 }
 
 export type OrderMetadataOption = { id: string; name: string; isActive: boolean };
-export type OrderMetadataOptions = { offices: OrderMetadataOption[]; employees: OrderMetadataOption[]; users: OrderMetadataOption[] };
+export type OrderMetadataOptions = { offices: OrderMetadataOption[]; employees: OrderMetadataOption[]; users: OrderMetadataOption[]; takers?: string[] };
 export async function listOrderMetadataOptions(): Promise<OrderMetadataOptions> {
  const res = await apiFetch<{ok:boolean;data:OrderMetadataOptions}>('/api/customer-orders/metadata-options');
  return res.data;

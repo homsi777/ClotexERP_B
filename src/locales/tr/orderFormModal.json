@@ -39,6 +39,8 @@
   "form.warehouseLoading": "Depolar yükleniyor...",
   "form.warehouseNoneActive": "Aktif depo yok",
   "form.currencyLabel": "Para Birimi",
+  "form.currencyEgp": "Mısır Lirası (EGP)",
+  "form.currencySyp": "Suriye Lirası (SYP)",
   "form.currencyUsd": "Dolar (USD)",
   "form.currencySar": "Riyal (SAR)",
   "form.currencyTry": "Lira (TRY)",

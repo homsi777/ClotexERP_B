@@ -45,5 +45,10 @@
   "notesLabel": "Notlar (İsteğe Bağlı)",
   "saveNotice": "Kaydedildiğinde: tutar kasadan hemen düşülür ve muhasebe kaydı oluşturulur (borç gider hesabı / alacak nakit).",
   "cancel": "İptal",
-  "saveAndDeduct": "Kaydet ve Kasadan Düş"
+  "saveAndDeduct": "Kaydet ve Kasadan Düş",
+  "filterFrom": "Başlangıç",
+  "filterTo": "Bitiş",
+  "clearFilter": "Filtreyi temizle",
+  "customLabelLabel": "Gider için özel ad (isteğe bağlı)",
+  "customLabelPlaceholder": "Örnek: Teslimat aracı yakıtı"
 }

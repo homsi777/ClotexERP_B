@@ -27,6 +27,7 @@ const createBody = z.object({
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().positive().default(1),
   description: z.string().min(1, 'البيان مطلوب'),
+  customLabel: z.string().trim().max(120).optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -50,6 +51,7 @@ export type OperatingExpenseRow = {
   category_id: string;
   cashbox_id: string;
   beneficiary_name: string | null;
+  custom_label?: string | null;
   amount: string;
   currency_code: string;
   exchange_rate_to_usd: string;
@@ -144,6 +146,7 @@ export async function listOperatingExpenses(
       oe.expense_no ILIKE $${p}
       OR oe.description ILIKE $${p}
       OR COALESCE(oe.beneficiary_name, '') ILIKE $${p}
+      OR COALESCE(oe.custom_label, '') ILIKE $${p}
       OR ec.name ILIKE $${p}
     )`);
     params.push(`%${filters.search.trim()}%`);
@@ -180,7 +183,7 @@ export async function listOperatingExpenses(
 
   const [rows, countRow] = await Promise.all([
     pool.query<OperatingExpenseRow>(
-      `SELECT oe.id, oe.expense_no, oe.expense_date, oe.category_id, oe.cashbox_id,
+      `SELECT oe.id, oe.expense_no, oe.custom_label, oe.expense_date, oe.category_id, oe.cashbox_id,
               oe.beneficiary_name, oe.amount, oe.currency_code, oe.exchange_rate_to_usd, oe.amount_usd,
               oe.description, oe.notes, oe.status, oe.journal_entry_id, oe.cashbox_movement_id, oe.created_at,
               ec.name AS category_name, ec.code AS category_code,
@@ -246,9 +249,9 @@ export async function createOperatingExpense(
       `INSERT INTO operating_expenses (
          company_id, expense_no, expense_date, category_id, cashbox_id,
          beneficiary_name, amount, currency_code, exchange_rate_to_usd, amount_usd,
-         description, notes, status, created_by_user_id
-       ) VALUES ($1,$2,$3::date,$4,$5,$6,$7,$8,$9,$10,$11,$12,'CONFIRMED',$13)
-       RETURNING id, expense_no, expense_date, category_id, cashbox_id, beneficiary_name,
+         description, notes, status, created_by_user_id, custom_label
+       ) VALUES ($1,$2,$3::date,$4,$5,$6,$7,$8,$9,$10,$11,$12,'CONFIRMED',$13,$14)
+       RETURNING id, expense_no, custom_label, expense_date, category_id, cashbox_id, beneficiary_name,
                  amount, currency_code, exchange_rate_to_usd, amount_usd,
                  description, notes, status, journal_entry_id, cashbox_movement_id, created_at`,
       [
@@ -265,6 +268,7 @@ export async function createOperatingExpense(
         description,
         d.notes?.trim() || null,
         userId,
+        d.customLabel?.trim() || null,
       ],
     );
     const expense = ins.rows[0];
@@ -304,7 +308,7 @@ export async function createOperatingExpense(
     await client.query('COMMIT');
 
     const full = await pool.query<OperatingExpenseRow>(
-      `SELECT oe.id, oe.expense_no, oe.expense_date, oe.category_id, oe.cashbox_id,
+      `SELECT oe.id, oe.expense_no, oe.custom_label, oe.expense_date, oe.category_id, oe.cashbox_id,
               oe.beneficiary_name, oe.amount, oe.currency_code, oe.exchange_rate_to_usd, oe.amount_usd,
               oe.description, oe.notes, oe.status, oe.journal_entry_id, oe.cashbox_movement_id, oe.created_at,
               ec.name AS category_name, ec.code AS category_code,
@@ -340,7 +344,7 @@ export async function cancelOperatingExpense(
   try {
     await client.query('BEGIN');
     const row = await client.query<OperatingExpenseRow>(
-      `SELECT oe.id, oe.expense_no, oe.expense_date, oe.category_id, oe.cashbox_id,
+      `SELECT oe.id, oe.expense_no, oe.custom_label, oe.expense_date, oe.category_id, oe.cashbox_id,
               oe.beneficiary_name, oe.amount, oe.currency_code, oe.exchange_rate_to_usd, oe.amount_usd,
               oe.description, oe.notes, oe.status, oe.journal_entry_id, oe.cashbox_movement_id, oe.created_at
        FROM operating_expenses oe
@@ -385,7 +389,7 @@ export async function cancelOperatingExpense(
     await client.query('COMMIT');
 
     const full = await pool.query<OperatingExpenseRow>(
-      `SELECT oe.id, oe.expense_no, oe.expense_date, oe.category_id, oe.cashbox_id,
+      `SELECT oe.id, oe.expense_no, oe.custom_label, oe.expense_date, oe.category_id, oe.cashbox_id,
               oe.beneficiary_name, oe.amount, oe.currency_code, oe.exchange_rate_to_usd, oe.amount_usd,
               oe.description, oe.notes, oe.status, oe.journal_entry_id, oe.cashbox_movement_id, oe.created_at,
               ec.name AS category_name, ec.code AS category_code,

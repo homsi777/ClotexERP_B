@@ -2,7 +2,7 @@ import { customerOrderWorkflowRoutes } from './customerOrderWorkflowRoutes.js';
 import {customerOrderNotificationRoutes} from './customerOrderNotificationRoutes.js';
 import {changeCustomerOrderStatus,deleteUnusedOrderDraft} from '../services/customerOrderLifecycleService.js';
 import { customerOrderMetadataSchema, metadataSelect, saveOrderMetadata } from '../services/customerOrderMetadata.js';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
@@ -156,11 +156,18 @@ async function assertTemplateExists(client: PoolClient, companyId: string, templ
   if (!row.rows.length) throw Object.assign(new Error('Template not found'), { code: 'NOT_FOUND' });
 }
 
+/** التسعير في الأوردر صلاحية orders.price (المدير يتجاوز). بدونها: الأسعار الجديدة صفر والقائمة تبقى كما هي. */
+function canPriceOrders(req: FastifyRequest): boolean {
+  const u = req.user;
+  return !!u && (u.role === 'admin' || u.permissions.includes('orders.price'));
+}
+
 async function insertOrderLines(
   client: PoolClient,
   companyId: string,
   orderId: string,
   lines: z.infer<typeof orderLineSchema>[],
+  canPrice = true,
 ) {
   const ids = lines.flatMap((line) => line.id ? [line.id] : []);
   if (new Set(ids).size !== ids.length) {
@@ -189,7 +196,7 @@ async function insertOrderLines(
          color_code=EXCLUDED.color_code, color_name=EXCLUDED.color_name,
          length=EXCLUDED.length, meters_per_roll=EXCLUDED.meters_per_roll,
          roll_count=EXCLUDED.roll_count, width_cm=EXCLUDED.width_cm, gsm=EXCLUDED.gsm,
-         weight=EXCLUDED.weight, price=EXCLUDED.price, note=EXCLUDED.note,
+         weight=EXCLUDED.weight, price=CASE WHEN $21::boolean THEN EXCLUDED.price ELSE customer_order_lines.price END, note=EXCLUDED.note,
          image_url=EXCLUDED.image_url, reference_barcode=EXCLUDED.reference_barcode,
          unit_type=EXCLUDED.unit_type
        WHERE customer_order_lines.company_id=EXCLUDED.company_id
@@ -209,12 +216,13 @@ async function insertOrderLines(
         line.widthCm,
         line.gsm,
         line.weight,
-        line.price,
+        canPrice ? line.price : 0,
         line.note || null,
         line.imageUrl || null,
         line.referenceBarcode || null,
         line.unitType,
         line.id || null,
+        canPrice,
       ],
     );
   }
@@ -486,12 +494,13 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
   app.get('/metadata-options', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
-    const [offices,employees,users] = await Promise.all([
+    const [offices,employees,users,takers] = await Promise.all([
       pool.query('SELECT id,name,is_active AS "isActive" FROM customer_order_offices WHERE company_id=$1 ORDER BY name',[companyId]),
       pool.query('SELECT id,full_name AS name,is_active AS "isActive" FROM payroll_employees WHERE company_id=$1 ORDER BY full_name',[companyId]),
       pool.query('SELECT id,COALESCE(full_name,username) AS name,is_active AS "isActive" FROM users WHERE company_id=$1 ORDER BY username',[companyId]),
+      pool.query("SELECT DISTINCT taken_by_employee_name AS name FROM customer_orders WHERE company_id=$1 AND taken_by_employee_name IS NOT NULL AND btrim(taken_by_employee_name)<>'' ORDER BY 1 LIMIT 300",[companyId]),
     ]);
-    return reply.send({ok:true,data:{offices:offices.rows,employees:employees.rows,users:users.rows}});
+    return reply.send({ok:true,data:{offices:offices.rows,employees:employees.rows,users:users.rows,takers:takers.rows.map((r:{name:string})=>r.name)}});
   });
 
   app.get('/templates', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -680,7 +689,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
       const id = created.rows[0].id as string;
       await saveOrderMetadata(client, companyId, id, d);
       const cartelaDraftsCreated = await ensureCartelaDraftsFromOrderLines(client, companyId, userId, d.items);
-      await insertOrderLines(client, companyId, id, d.items);
+      await insertOrderLines(client, companyId, id, d.items, canPriceOrders(req));
       await client.query('COMMIT');
       return reply.status(201).send({
         ok: true,
@@ -774,7 +783,7 @@ export const customerOrderRoutes: FastifyPluginAsync = async (app) => {
       const cartelaDraftsCreated = await ensureCartelaDraftsFromOrderLines(client, companyId, userId, d.items);
       await saveOrderMetadata(client, companyId, id, d);
       await prepareOrderLineUpdate(client, companyId, id, d.items);
-      await insertOrderLines(client, companyId, id, d.items);
+      await insertOrderLines(client, companyId, id, d.items, canPriceOrders(req));
       await client.query(`INSERT INTO audit_logs(company_id,user_id,action,entity_type,entity_id,details)
         VALUES($1,$2,'UPDATE','customer_order',$3,$4::jsonb)`,[companyId,userId,id,JSON.stringify({before,after:await getOrderById(client,companyId,id),reason:d.changeReason??null})]);
       await client.query('COMMIT');

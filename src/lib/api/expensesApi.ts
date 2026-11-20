@@ -16,6 +16,7 @@ export interface OperatingExpenseDto {
   category_id: string;
   cashbox_id: string;
   beneficiary_name: string | null;
+  custom_label?: string | null;
   amount: string;
   currency_code: string;
   exchange_rate_to_usd: string;
@@ -74,6 +75,7 @@ export async function createOperatingExpense(payload: {
   currencyCode?: string;
   exchangeRateToUsd?: number;
   description: string;
+  customLabel?: string | null;
   notes?: string | null;
 }) {
   return apiFetch<{ ok: boolean; data: OperatingExpenseDto; message?: string }>('/api/expenses', {

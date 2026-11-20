@@ -45,5 +45,10 @@
   "notesLabel": "ملاحظات (اختياري)",
   "saveNotice": "عند الحفظ: يُخصم المبلغ من الصندوق فوراً ويُسجّل قيد محاسبي (مدين حساب المصروف / دائن النقدية).",
   "cancel": "إلغاء",
-  "saveAndDeduct": "حفظ وخصم من الصندوق"
+  "saveAndDeduct": "حفظ وخصم من الصندوق",
+  "filterFrom": "من",
+  "filterTo": "إلى",
+  "clearFilter": "مسح الفلتر",
+  "customLabelLabel": "تسمية خاصة للمصروف (اختياري)",
+  "customLabelPlaceholder": "مثال: بنزين سيارة التوصيل"
 }

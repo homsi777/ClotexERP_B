@@ -39,11 +39,19 @@ export const Expenses = () => {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
+  const [customLabel, setCustomLabel] = useState('');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
   const [currencyCode, setCurrencyCode] = useCurrencyWithBranchDefault<'USD' | 'SYP' | 'TRY' | 'EGP'>(['USD', 'SYP', 'TRY', 'EGP'] as const);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
 
-  const loadExpenses = useCallback(async (search?: string) => {
-    const res = await listOperatingExpenses({ search: search?.trim() || undefined, pageSize: 100 });
+  const loadExpenses = useCallback(async (search?: string, from?: string, to?: string) => {
+    const res = await listOperatingExpenses({
+      search: search?.trim() || undefined,
+      dateFrom: from || undefined,
+      dateTo: to || undefined,
+      pageSize: 100,
+    });
     setExpenses(res.data);
   }, []);
 
@@ -82,7 +90,7 @@ export const Expenses = () => {
   }, [cashboxId, cashboxes, exchangeRates]);
 
   const handleSearch = () => {
-    void loadExpenses(searchTerm).catch(() => {
+    void loadExpenses(searchTerm, filterFrom, filterTo).catch(() => {
       showToast({ type: 'error', message: t('searchError') });
     });
   };
@@ -90,6 +98,7 @@ export const Expenses = () => {
   const resetForm = () => {
     setExpenseDate(new Date().toISOString().slice(0, 10));
     setBeneficiaryName('');
+    setCustomLabel('');
     setAmount('');
     setDescription('');
     setNotes('');
@@ -121,6 +130,7 @@ export const Expenses = () => {
         categoryId,
         cashboxId,
         beneficiaryName: beneficiaryName.trim() || null,
+        customLabel: customLabel.trim() || null,
         amount: amountOriginal,
         currencyCode,
         exchangeRateToUsd: rate,
@@ -133,7 +143,7 @@ export const Expenses = () => {
       });
       setIsModalOpen(false);
       resetForm();
-      await loadExpenses(searchTerm);
+      await loadExpenses(searchTerm, filterFrom, filterTo);
     } catch (error) {
       setErr(error instanceof ApiRequestError ? error.message : t('saveError'));
     } finally {
@@ -147,7 +157,7 @@ export const Expenses = () => {
     try {
       const res = await cancelOperatingExpense(row.id, reason.trim());
       showToast({ type: 'success', message: res.message ?? t('cancelSuccess') });
-      await loadExpenses(searchTerm);
+      await loadExpenses(searchTerm, filterFrom, filterTo);
     } catch (error) {
       showToast({
         type: 'error',
@@ -195,6 +205,27 @@ export const Expenses = () => {
           >
             {t('search')}
           </button>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            {t('filterFrom')}
+            <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg" />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            {t('filterTo')}
+            <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg" />
+          </label>
+          {(filterFrom || filterTo) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterFrom('');
+                setFilterTo('');
+                void loadExpenses(searchTerm, '', '').catch(() => showToast({ type: 'error', message: t('searchError') }));
+              }}
+              className="px-3 py-2 text-sm text-slate-500 hover:text-slate-800"
+            >
+              {t('clearFilter')}
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -228,6 +259,9 @@ export const Expenses = () => {
                       <span className="px-2 py-1 bg-slate-100 rounded text-slate-700 text-xs">
                         {expense.category_name ?? '—'}
                       </span>
+                      {expense.custom_label && (
+                        <div className="mt-1 text-xs font-bold text-indigo-700">{expense.custom_label}</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-slate-700">{expense.cashbox_name ?? '—'}</td>
                     <td className="px-6 py-4 text-slate-700">
@@ -285,6 +319,18 @@ export const Expenses = () => {
             </div>
             <form onSubmit={(e) => void handleAdd(e)} className="p-6 space-y-4">
               {err && <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{err}</p>}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('customLabelLabel')}</label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder={t('customLabelPlaceholder')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  value={customLabel}
+                  onChange={(e) => setCustomLabel(e.target.value)}
+                />
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

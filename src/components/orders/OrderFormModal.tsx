@@ -34,6 +34,8 @@ import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { resolveOrderWarehouseLabel } from '../../lib/warehouseSelect';
 import { ApiRequestError } from '../../lib/api/client';
 import { useToast } from '../NonBlockingToast';
+import { useDefaultCurrency } from '../../hooks/useDefaultCurrency';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export interface OrderFormSubmitPayload extends CustomerOrderMetadata {
   orderNumber?: string;
@@ -125,29 +127,6 @@ function recalcCartelaWeight(line: FormLine): string {
   const gsm = numberValue(line.gsm);
   if (widthCm <= 0 || gsm <= 0) return '0';
   return String(calculateFabricWeightKg(numberValue(line.length), widthCm, gsm));
-}
-
-/** السطر التالي: يرث الباركود والكميات والسعر وكل بيانات الخامة — فقط اللون يُترك فارغاً */
-function inheritNextLineFrom(source: FormLine): FormLine {
-  const inherited = syncLineQuantities({
-    ...emptyLine(),
-    scanBarcode: source.scanBarcode,
-    fabricCode: source.fabricCode,
-    dsamNumber: source.dsamNumber,
-    materialName: source.materialName,
-    rollNo: source.rollNo,
-    price: source.price,
-    metersPerRoll: source.metersPerRoll,
-    rollCount: source.rollCount,
-    widthCm: source.widthCm,
-    gsm: source.gsm,
-    imageUrl: source.imageUrl,
-    needsCartelaDraft: source.needsCartelaDraft,
-    colorCode: '',
-    colorName: '',
-  });
-  inherited.weight = recalcCartelaWeight(inherited);
-  return inherited;
 }
 
 function syncLineQuantities(line: FormLine): FormLine {
@@ -307,6 +286,9 @@ export function OrderFormModal({
   const [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
   const [shippingMethod, setShippingMethod] = useState('');
+  const { defaultCurrency } = useDefaultCurrency();
+  // التسعير صلاحية orders.price: بدونها لا تظهر الأسعار والإجماليات (والخادم يفرض ذلك أيضاً)
+  const canPrice = usePermissions().has('orders.price');
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
@@ -383,7 +365,7 @@ export function OrderFormModal({
       setOrderNumber('');
       setPartyId('');
       setShippingMethod('');
-      setCurrency('USD');
+      setCurrency(defaultCurrency);
       setNotes('');
       setExpectedDate('');
       setAdvancePayment('');
@@ -391,7 +373,7 @@ export function OrderFormModal({
       setTemplateId(undefined);
       setItems([emptyLine()]);
     }
-  }, [open, editingOrder]);
+  }, [open, editingOrder, defaultCurrency]);
 
   useEffect(() => {
     if (!open || !warehouses.length) return;
@@ -455,12 +437,13 @@ export function OrderFormModal({
           return next;
         }
 
-        const inherited = inheritNextLineFrom(filled);
-        focusRowId = inherited.id;
-        return [...next, inherited];
+        // سطر فارغ تماماً تحت السطر الممتلئ (كفاتورة البيع) — بدون نسخ بيانات السطر السابق
+        const blank = emptyLine();
+        focusRowId = blank.id;
+        return [...next, blank];
       });
       if (focusRowId) {
-        setTimeout(() => colorCodeInputRefs.current[focusRowId]?.focus(), 50);
+        setTimeout(() => (barcodeInputRefs.current[focusRowId!] ?? colorCodeInputRefs.current[focusRowId!])?.focus(), 50);
       }
     };
 
@@ -529,9 +512,9 @@ export function OrderFormModal({
       setItems([emptyLine()]);
       return;
     }
-    const inherited = inheritNextLineFrom(last);
-    setItems([...items, inherited]);
-    setTimeout(() => colorCodeInputRefs.current[inherited.id]?.focus(), 50);
+    const blank = emptyLine();
+    setItems([...items, blank]);
+    setTimeout(() => (barcodeInputRefs.current[blank.id] ?? colorCodeInputRefs.current[blank.id])?.focus(), 50);
   };
   const handleRemoveItem = (id: string) => setItems(items.filter((item) => item.id !== id));
 
@@ -945,9 +928,11 @@ export function OrderFormModal({
                 onChange={(e) => setCurrency(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
               >
+                <option value="EGP">{t('form.currencyEgp')}</option>
                 <option value="USD">{t('form.currencyUsd')}</option>
-                <option value="SAR">{t('form.currencySar')}</option>
+                <option value="SYP">{t('form.currencySyp')}</option>
                 <option value="TRY">{t('form.currencyTry')}</option>
+                <option value="SAR">{t('form.currencySar')}</option>
               </select>
             </div>
             <div className="space-y-1.5 xl:col-span-2">
@@ -1186,16 +1171,16 @@ export function OrderFormModal({
                         <th className="p-2">{t('summary.colColors')}</th>
                         <th className="p-2">{t('summary.colRolls')}</th>
                         <th className="p-2">{t('summary.colMeters')}</th>
-                        <th className="p-2">{t('summary.colPricePerMeter')}</th>
-                        <th className="p-2">{t('summary.colTotal')}</th>
+                        {canPrice && <th className="p-2">{t('summary.colPricePerMeter')}</th>}
+                        {canPrice && <th className="p-2">{t('summary.colTotal')}</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {summary.groups.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-4 text-center text-slate-400 text-sm">
+                          <td colSpan={canPrice ? 7 : 5} className="p-4 text-center text-slate-400 text-sm">
                             {items.some(isSummaryLine)
-                              ? t('summary.emptyEnterPrice')
+                              ? (canPrice ? t('summary.emptyEnterPrice') : t('summary.emptyScanBarcode'))
                               : t('summary.emptyScanBarcode')}
                           </td>
                         </tr>
@@ -1210,7 +1195,7 @@ export function OrderFormModal({
                           <td className="p-2">{group.colorCount}</td>
                           <td className="p-2">{group.rollCount}</td>
                           <td className="p-2 font-mono">{group.totalMeters.toFixed(2)}</td>
-                          <td className="p-2">
+                          {canPrice && <td className="p-2">
                             <input
                               type="text"
                               inputMode="decimal"
@@ -1223,8 +1208,8 @@ export function OrderFormModal({
                               dir="ltr"
                               aria-label={t('summary.pricePerMeterAriaLabel', { materialName: group.materialName })}
                             />
-                          </td>
-                          <td className="p-2 font-mono font-bold text-indigo-700">{money(group.totalAmount, currency)}</td>
+                          </td>}
+                          {canPrice && <td className="p-2 font-mono font-bold text-indigo-700">{money(group.totalAmount, currency)}</td>}
                         </tr>
                         ))
                       )}
@@ -1234,7 +1219,7 @@ export function OrderFormModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <SummaryStat label={t('summary.statRolls')} value={String(summary.totals.rollCount)} />
                   <SummaryStat label={t('summary.statMeters')} value={summary.totals.totalMeters.toFixed(2)} />
-                  <SummaryStat label={t('summary.statTotal', { currency })} value={money(summary.totals.totalAmount, currency)} />
+                  {canPrice && <SummaryStat label={t('summary.statTotal', { currency })} value={money(summary.totals.totalAmount, currency)} />}
                   <SummaryStat label={t('summary.statGroups')} value={String(summary.totals.groupCount)} />
                 </div>
               </div>

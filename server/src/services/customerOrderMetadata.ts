@@ -4,6 +4,8 @@ const optionalId = z.string().uuid().nullish();
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => { const date = new Date(value + 'T00:00:00Z'); return !Number.isNaN(date.getTime()) && date.toISOString().slice(0,10) === value; }, 'Invalid calendar date').nullish();
 export const customerOrderMetadataSchema = z.object({
  receivedOfficeId: optionalId, takenByEmployeeId: optionalId,
+ // الآخذ للطلب: اسم يُكتب يدوياً (غير مربوط بالموارد البشرية) ويُحفظ للاقتراح لاحقاً
+ takenByName: z.string().trim().max(120).nullish(),
  followUpEmployeeId: optionalId, followUpUserId: optionalId,
  sampleKind: z.string().trim().max(120).nullish(),
  sampleStatus: z.enum(['requested','received','approved','rejected']).nullish(),
@@ -20,8 +22,13 @@ export async function saveOrderMetadata(client: PoolClient, companyId: string, o
  ['followUpEmployeeId','follow_up_employee','payroll_employees','full_name'],
  ['followUpUserId','follow_up_user','users',"COALESCE(full_name,username)"],
  ] as const;
+ if (data.takenByName !== undefined) {
+   values.push(null,data.takenByName || null);
+   sets.push(`taken_by_employee_id=$${values.length-1}`,`taken_by_employee_name=$${values.length}`);
+ }
  for (const [key,column,table,name] of references) {
    if (data[key] === undefined) continue;
+   if (key === 'takenByEmployeeId' && data.takenByName !== undefined) continue;
    const id = data[key] || null;
    let snapshot: string | null = null;
    if (id) {

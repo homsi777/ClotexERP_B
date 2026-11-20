@@ -10,7 +10,7 @@ export const orderMetadataLabels = {
 } as const;
 export const sampleStatusLabels: Record<string,string> = {requested:'مطلوبة',received:'مستلمة',approved:'معتمدة',rejected:'مرفوضة'};
 export function OrderMetadataFields({value,onChange}:{value:CustomerOrderMetadata;onChange:(value:CustomerOrderMetadata)=>void}) {
- const [options,setOptions] = useState<OrderMetadataOptions>({offices:[],employees:[],users:[]});
+ const [options,setOptions] = useState<OrderMetadataOptions>({offices:[],employees:[],users:[],takers:[]});
  const [error,setError] = useState('');
  const [officeDraft,setOfficeDraft] = useState({code:'',name:''});
  const [addingOffice,setAddingOffice] = useState(false);
@@ -32,6 +32,12 @@ export function OrderMetadataFields({value,onChange}:{value:CustomerOrderMetadat
   {Object.entries(orderMetadataLabels).map(([key,label])=>{
    const field=key as keyof typeof orderMetadataLabels;
    const directory=directories[field as keyof typeof directories];
+   if (field==='takenByEmployeeId') return <label key={key} className="text-xs font-bold text-slate-700">{label}
+    <input className="block w-full border rounded-lg p-2" list="order-takers" maxLength={120} placeholder="اكتب الاسم — يُحفظ ويظهر في الاقتراحات"
+     value={value.takenByName ?? value.takenByEmployeeName ?? ''}
+     onChange={e=>onChange({...value,takenByName:e.target.value,takenByEmployeeId:undefined})}/>
+    <datalist id="order-takers">{(options.takers??[]).map(n=><option key={n} value={n}/>)}</datalist>
+   </label>;
    return <label key={key} className="text-xs font-bold text-slate-700">{label}
     {directory ? <select className="block w-full border rounded-lg p-2" value={value[field] || ''} onChange={e=>onChange({...value,[field]:e.target.value || null})}>
      <option value="">—</option>

@@ -244,6 +244,8 @@ export interface CustomerOrderMetadata {
   receivedOfficeName?: string | null;
   takenByEmployeeId?: string | null;
   takenByEmployeeName?: string | null;
+  /** الآخذ للطلب كنص يدوي عند الإرسال (يحل محل takenByEmployeeId) */
+  takenByName?: string | null;
   followUpEmployeeId?: string | null;
   followUpEmployeeName?: string | null;
   followUpUserId?: string | null;

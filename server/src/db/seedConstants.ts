@@ -6,6 +6,7 @@ export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'inventory.manage', name: 'إدارة المخزون', category: 'inventory' },
   {code:'inventory.yarn.cost.view',name:'عرض تكلفة الخيط',category:'inventory'},
   { code: 'invoices.price', name: 'تسعير الفواتير والقطع المقصوصة', category: 'invoices' },
+  { code: 'orders.price', name: 'تسعير أوردرات العملاء', category: 'orders' },
   { code: 'suppliers.view', name: 'عرض الموردين', category: 'suppliers' },
   { code: 'suppliers.manage', name: 'إدارة الموردين', category: 'suppliers' },
   { code: 'customers.view', name: 'عرض العملاء', category: 'customers' },
