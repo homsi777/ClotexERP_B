@@ -98,5 +98,7 @@
   "stock.goDelivery": "Teslim fişi",
   "delivery.previewPrint": "Fişi önizle ve yazdır",
   "delivery.close": "Kapat",
-  "delivery.totalQty": "Toplam adet"
+  "delivery.totalQty": "Toplam adet",
+  "stock.pendingChanges": "Kaydedilmemiş değişiklik: {{count}}",
+  "stock.saveAll": "Tümünü kaydet"
 }

@@ -98,5 +98,7 @@
   "stock.goDelivery": "سند تسليم",
   "delivery.previewPrint": "معاينة وطباعة السند",
   "delivery.close": "إغلاق",
-  "delivery.totalQty": "إجمالي العدد"
+  "delivery.totalQty": "إجمالي العدد",
+  "stock.pendingChanges": "تغييرات غير محفوظة: {{count}}",
+  "stock.saveAll": "حفظ الكل"
 }

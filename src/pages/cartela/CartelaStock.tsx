@@ -10,33 +10,16 @@ import {
 } from '../../lib/api/cartelaCustodyApi';
 import { useToast } from '../../components/NonBlockingToast';
 
-/** حقل عدد قابل للحفظ: فارغ = بلا تتبع عددي. */
-function QtyEditor({ row, onSaved }: { row: StockRow; onSaved: () => void }) {
+const rowKey = (r: StockRow) => `${r.cartelaId}|${r.colorId ?? ''}`;
+const baseValue = (r: StockRow) => (r.quantity === null ? '' : String(r.quantity));
+const parseQty = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.floor(Number(v))));
+
+/** حقل عدد: المسودة محفوظة في الصفحة الأم فلا تضيع عند حفظ صف آخر أو إعادة التحميل. فارغ = بلا تتبع عددي. */
+function QtyEditor({ row, value, onChange, onSave, busy }: {
+  row: StockRow; value: string; onChange: (v: string) => void; onSave: () => void; busy: boolean;
+}) {
   const { t } = useTranslation('cartelaCustody');
-  const { showToast } = useToast();
-  const [value, setValue] = useState(row.quantity === null ? '' : String(row.quantity));
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setValue(row.quantity === null ? '' : String(row.quantity));
-  }, [row.quantity]);
-
-  const dirty = value !== (row.quantity === null ? '' : String(row.quantity));
-  const save = async () => {
-    setBusy(true);
-    try {
-      const n = value.trim() === '' ? null : Math.max(0, Math.floor(Number(value)));
-      if (n !== null && !Number.isFinite(n)) throw new Error(t('stock.saveFailed'));
-      await setCartelaStock({ cartelaId: row.cartelaId, colorId: row.colorId, quantity: n });
-      showToast({ type: 'success', message: t('stock.saved') });
-      onSaved();
-    } catch (e) {
-      showToast({ type: 'error', message: e instanceof Error ? e.message : t('stock.saveFailed') });
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  const dirty = value !== baseValue(row);
   return (
     <div className="flex items-center gap-2">
       <input
@@ -44,14 +27,14 @@ function QtyEditor({ row, onSaved }: { row: StockRow; onSaved: () => void }) {
         min={0}
         value={value}
         placeholder={t('stock.untracked')}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && dirty && void save()}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && dirty && onSave()}
         className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
         dir="ltr"
       />
       <button
         type="button"
-        onClick={() => void save()}
+        onClick={onSave}
         disabled={!dirty || busy}
         className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-40"
       >
@@ -73,17 +56,51 @@ export const CartelaStock: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [colors, setColors] = useState<StockRow[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
+  const [savingAll, setSavingAll] = useState(false);
+  const loadedOnce = React.useRef(false);
 
+  // إعادة تحميل صامتة بعد أول مرة: لا يُفرَّغ الجدول فلا تضيع القيم المعدّلة في الصفوف الأخرى.
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true);
     try {
       setRows(await listCartelaStock(search.trim()));
+      loadedOnce.current = true;
     } catch (e) {
       showToast({ type: 'error', message: e instanceof Error ? e.message : t('stock.loadFailed') });
     } finally {
       setLoading(false);
     }
   }, [search, showToast, t]);
+
+  const valueOf = (r: StockRow) => drafts[rowKey(r)] ?? baseValue(r);
+  const setDraft = (r: StockRow, v: string) => setDrafts((d) => ({ ...d, [rowKey(r)]: v }));
+  const allRows = [...rows, ...(openId ? colors : [])];
+  const dirtyRows = allRows.filter((r) => valueOf(r) !== baseValue(r));
+
+  const saveRows = async (list: StockRow[]) => {
+    const failed: string[] = [];
+    for (const r of list) {
+      const n = parseQty(valueOf(r));
+      const k = rowKey(r);
+      if (n !== null && !Number.isFinite(n)) { failed.push(r.title); continue; }
+      setBusyKeys((b) => new Set(b).add(k));
+      try {
+        await setCartelaStock({ cartelaId: r.cartelaId, colorId: r.colorId, quantity: n });
+        setDrafts((d) => { const next = { ...d }; delete next[k]; return next; });
+      } catch (e) {
+        failed.push(e instanceof Error ? e.message : r.title);
+      } finally {
+        setBusyKeys((b) => { const next = new Set(b); next.delete(k); return next; });
+      }
+    }
+    if (failed.length) showToast({ type: 'error', message: failed[0] });
+    else showToast({ type: 'success', message: t('stock.saved') });
+    await load();
+    if (openId) await loadColors(openId);
+  };
+  const saveAll = async () => { setSavingAll(true); try { await saveRows(dirtyRows); } finally { setSavingAll(false); } };
 
   useEffect(() => {
     const id = setTimeout(() => void load(), 250);
@@ -111,11 +128,6 @@ export const CartelaStock: React.FC = () => {
     void loadColors(cartelaId);
   };
 
-  const afterSave = async (cartelaId?: string) => {
-    await load();
-    if (cartelaId && openId === cartelaId) await loadColors(cartelaId);
-  };
-
   return (
     <div className="space-y-5 p-4 md:p-6" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -127,6 +139,17 @@ export const CartelaStock: React.FC = () => {
           {t('stock.goDelivery')}
         </Link>
       </div>
+
+      {dirtyRows.length > 0 && (
+        <div className="sticky top-2 z-10 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 shadow-sm">
+          <span className="text-sm font-bold text-violet-900">{t('stock.pendingChanges', { count: dirtyRows.length })}</span>
+          <button type="button" onClick={() => void saveAll()} disabled={savingAll}
+            className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">
+            {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {t('stock.saveAll')}
+          </button>
+        </div>
+      )}
 
       <input
         value={search}
@@ -171,7 +194,7 @@ export const CartelaStock: React.FC = () => {
                     <td className="p-3">{r.artCode || '—'}</td>
                     <td className="p-3 font-mono" dir="ltr">{r.serialNo || '—'}</td>
                     <td className="p-3">
-                      <QtyEditor row={r} onSaved={() => void afterSave()} />
+                      <QtyEditor row={r} value={valueOf(r)} onChange={(v) => setDraft(r, v)} onSave={() => void saveRows([r])} busy={busyKeys.has(rowKey(r)) || savingAll} />
                     </td>
                     <td className="p-3">{r.quantity === null ? '—' : r.held}</td>
                     <td className={`p-3 ${availableCls(r)}`}>{r.available === null ? '—' : r.available}</td>
@@ -193,7 +216,7 @@ export const CartelaStock: React.FC = () => {
                               <span className="text-sm font-bold">
                                 {c.colorName || c.colorCode} <span className="font-mono text-xs font-normal text-slate-500" dir="ltr">{c.colorCode}</span>
                               </span>
-                              <QtyEditor row={c} onSaved={() => void afterSave(r.cartelaId)} />
+                              <QtyEditor row={c} value={valueOf(c)} onChange={(v) => setDraft(c, v)} onSave={() => void saveRows([c])} busy={busyKeys.has(rowKey(c)) || savingAll} />
                               <span className="text-xs text-slate-500">
                                 {t('stock.colHeld')}: {c.quantity === null ? '—' : c.held} · {t('stock.colAvailable')}:{' '}
                                 <b className={availableCls(c)}>{c.available === null ? '—' : c.available}</b>
