@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { ChatWidget } from '../components/ChatWidget';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
@@ -636,6 +637,7 @@ export const DashboardLayout = () => {
           <SessionPresenceTracker />
           <BackButton />
           <Outlet />
+          <ChatWidget />
         </ToastProvider>
       </main>
     </div>
