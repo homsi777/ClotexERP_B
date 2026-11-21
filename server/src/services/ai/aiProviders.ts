@@ -30,15 +30,15 @@ export const AI_PROVIDERS: Record<AiProvider, AiProviderDefinition> = {
   gemini: {
     id: 'gemini',
     labelAr: 'Google Gemini',
-    defaultModel: process.env.DEFAULT_GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
+    defaultModel: process.env.DEFAULT_GEMINI_MODEL?.trim() || 'gemini-flash-latest',
     chatCompletionsUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     models: [
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (موصى به — مجاني محدود)' },
-      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+      { value: 'gemini-flash-latest', label: 'Gemini Flash (الأحدث تلقائياً — موصى به)' },
+      { value: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite (الأحدث تلقائياً)' },
+      { value: 'gemini-pro-latest', label: 'Gemini Pro (الأحدث تلقائياً)' },
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
     ],
-    keyHintAr: 'مفتاح Gemini من Google AI Studio — يبدأ عادة بـ AIza',
+    keyHintAr: 'مفتاح Gemini من Google AI Studio — يبدأ بـ AIza أو AQ.',
     keyPlaceholder: 'AIza...',
     docsUrl: 'https://aistudio.google.com/app/apikey',
   },
@@ -64,4 +64,13 @@ export function normalizeAiProvider(value: string | null | undefined): AiProvide
 
 export function getProviderDefinition(provider: AiProvider): AiProviderDefinition {
   return AI_PROVIDERS[provider];
+}
+
+/** نماذج Gemini القديمة (1.x/2.x) أوقفتها Google؛ أي إعداد محفوظ بها يُحوَّل للنموذج الافتراضي الحالي. */
+export function effectiveModel(provider: AiProvider, model: string | null | undefined): string {
+  const m = (model ?? '').trim();
+  const def = getProviderDefinition(provider).defaultModel;
+  if (!m) return def;
+  if (provider === 'gemini' && /^gemini-(1|2)(\.|-)/.test(m)) return def;
+  return m;
 }

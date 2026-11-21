@@ -17,7 +17,7 @@ export function AiAssistantSettingsPanel() {
   const [settings, setSettings] = useState<AiSettingsDto | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [provider, setProvider] = useState<AiProvider>('gemini');
-  const [model, setModel] = useState('gemini-2.0-flash');
+  const [model, setModel] = useState('gemini-flash-latest');
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');

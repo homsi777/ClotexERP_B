@@ -1,6 +1,7 @@
 import { getPool } from '../../db/pool.js';
 import {
   type AiProvider,
+  effectiveModel,
   getProviderDefinition,
   normalizeAiProvider,
 } from './aiProviders.js';
@@ -57,7 +58,7 @@ export async function getAiSettingsMasked(companyId: string): Promise<AiSettings
   return {
     enabled: row.is_enabled,
     provider,
-    model: row.model_name || defaultModel,
+    model: effectiveModel(provider, row.model_name || defaultModel),
     hasApiKey,
     maskedApiKey,
   };
@@ -123,7 +124,7 @@ export async function resolveAiConfig(companyId: string): Promise<ResolvedAiConf
   return {
     provider,
     apiKey: decryptSecret(row.openai_api_key_encrypted),
-    model: row.model_name?.trim() || getProviderDefinition(provider).defaultModel,
+    model: effectiveModel(provider, row.model_name),
   };
 }
 
@@ -139,8 +140,10 @@ export async function testAiConnection(
   if (!key || !isValidApiKey(provider, key)) {
     throw new Error('لم يتم ضبط مفتاح الذكاء الاصطناعي بعد. يرجى ضبطه من الإعدادات.');
   }
-  const model = modelOverride?.trim()
-    || (provider === settings.provider ? settings.model : getProviderDefinition(provider).defaultModel);
+  const model = effectiveModel(
+    provider,
+    modelOverride?.trim() || (provider === settings.provider ? settings.model : getProviderDefinition(provider).defaultModel),
+  );
   const result = await postChatCompletion(provider, key, {
     model,
     messages: [{ role: 'user', content: 'ping' }],

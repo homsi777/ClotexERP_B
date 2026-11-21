@@ -35,10 +35,10 @@ export const AI_MODEL_OPTIONS: Record<AiProvider, Array<{ value: string; label: 
     { value: 'gpt-4.1', label: 'GPT-4.1' },
   ],
   gemini: [
-    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (موصى به)' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini-flash-latest', label: 'Gemini Flash (الأحدث تلقائياً — موصى به)' },
+    { value: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite (الأحدث تلقائياً)' },
+    { value: 'gemini-pro-latest', label: 'Gemini Pro (الأحدث تلقائياً)' },
+    { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
   ],
   deepseek: [
     { value: 'deepseek-chat', label: 'DeepSeek Chat' },
@@ -48,7 +48,7 @@ export const AI_MODEL_OPTIONS: Record<AiProvider, Array<{ value: string; label: 
 
 export const AI_KEY_HINTS: Record<AiProvider, { hint: string; placeholder: string }> = {
   gemini: {
-    hint: 'مفتاح Gemini من Google AI Studio — يبدأ عادة بـ AIza',
+    hint: 'مفتاح Gemini من Google AI Studio — يبدأ بـ AIza أو AQ.',
     placeholder: 'AIza...',
   },
   deepseek: {
