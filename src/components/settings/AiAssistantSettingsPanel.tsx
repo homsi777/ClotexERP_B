@@ -81,7 +81,11 @@ export function AiAssistantSettingsPanel() {
       setSettings(row);
       setApiKey('');
       setStatusKind('ok');
-      setStatus('تم حفظ إعدادات مساعد CLOTEX.');
+      setStatus(
+        row.enabled
+          ? 'تم حفظ إعدادات مساعد CLOTEX.'
+          : 'تم الحفظ، لكن المساعد غير مفعَّل — فعّل خيار «تفعيل مساعد CLOTEX» واحفظ ليظهر الزر العائم.',
+      );
       notifyChanged();
     } catch (error) {
       setStatusKind('error');

@@ -40,6 +40,9 @@ export const ChatWidget: React.FC = () => {
 
   useEffect(() => {
     void fetchMe().then((u) => setMe(u.id)).catch(() => setMe(null));
+    const closeMe = () => setOpen(false);
+    window.addEventListener('clotex:close-chat', closeMe);
+    return () => window.removeEventListener('clotex:close-chat', closeMe);
   }, []);
 
   const loadPeers = useCallback(async () => {
@@ -232,7 +235,10 @@ export const ChatWidget: React.FC = () => {
 
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) window.dispatchEvent(new Event('clotex:close-ai'));
+          setOpen((v) => !v);
+        }}
         aria-label="المحادثات"
         className="relative flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl transition hover:bg-indigo-700"
       >

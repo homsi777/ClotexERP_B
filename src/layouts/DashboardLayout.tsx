@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChatWidget } from '../components/ChatWidget';
+import { AiAssistantLauncher } from '../components/ai/AiAssistantLauncher';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
@@ -35,7 +36,6 @@ import { ORDER_STATUS_LABELS } from '../pages/orders/orderStatusUi';
 import { useTranslation } from 'react-i18next';
 import { BackendConnectionBadge } from '../components/BackendConnectionBadge';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
-import { ClotexAssistant } from '../components/ai/ClotexAssistant';
 import { ToastProvider } from '../components/NonBlockingToast';
 import { SessionPresenceTracker } from '../components/SessionPresenceTracker';
 import { CompanySwitcher } from '../components/companies/CompanySwitcher';
@@ -448,7 +448,6 @@ const Topbar = () => {
         </div>
         <div className="flex items-center gap-2 shrink-0 md:order-1 md:justify-self-start md:gap-3">
           <LanguageSwitcher />
-          <ClotexAssistant />
           {renderNotificationBell('relative rounded-xl p-2 md:p-2.5 transition border')}
           <Link
             to="/login"
@@ -638,6 +637,7 @@ export const DashboardLayout = () => {
           <BackButton />
           <Outlet />
           <ChatWidget />
+          <AiAssistantLauncher />
         </ToastProvider>
       </main>
     </div>
