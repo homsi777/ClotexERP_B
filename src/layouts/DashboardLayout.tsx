@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
   Briefcase,
@@ -24,6 +24,7 @@ import {
   Wallet,
   X,
   Bell,
+  ArrowRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, tr } from 'date-fns/locale';
@@ -72,6 +73,26 @@ type NavItem =
       icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
       subItems: NavSubItem[];
     };
+
+/** سهم رجوع ثابت أعلى كل صفحة داخلية (عدا الرئيسية): يرجع للصفحة السابقة، وإن لم توجد سابقة (فتح رابط مباشر) يذهب للرئيسية. */
+const BackButton: React.FC = () => {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const { i18n } = useTranslation();
+  if (pathname === '/') return null;
+  const rtl = i18n.dir() === 'rtl';
+  const canGoBack = typeof window !== 'undefined' && (window.history.state?.idx ?? 0) > 0;
+  return (
+    <button
+      type="button"
+      onClick={() => (canGoBack ? navigate(-1) : navigate('/'))}
+      className="mb-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 print:hidden"
+    >
+      <ArrowRight className={`h-4 w-4 ${rtl ? '' : 'rotate-180'}`} />
+      {rtl ? 'رجوع' : 'Geri'}
+    </button>
+  );
+};
 
 const Topbar = () => {
   const { t, i18n } = useTranslation(['nav', 'common']);
@@ -613,6 +634,7 @@ export const DashboardLayout = () => {
       <main className={mainClass}>
         <ToastProvider>
           <SessionPresenceTracker />
+          <BackButton />
           <Outlet />
         </ToastProvider>
       </main>
