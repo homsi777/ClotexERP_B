@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { getPool } from '../db/pool.js';
 import { resolveFabricColorForImport } from '../utils/importColorResolver.js';
 import { cleanString } from '../utils/importColumnDetector.js';
-import { sanitizeStockImportRow } from '../utils/importMaterialCodeResolver.js';
+import { looksLikeUniqueDesignSku, sanitizeStockImportRow } from '../utils/importMaterialCodeResolver.js';
 import {
   applyPurchaseImportMaterialCodes,
   ensureFabricCategoryChainFromImport,
@@ -276,7 +276,7 @@ function parseRowPayload(payload: unknown): StockImportJobRow {
   };
 }
 
-interface PreparedRow {
+export interface PreparedRow {
   materialName: string;
   materialCode: string;
   matchByCode: string;
@@ -355,7 +355,14 @@ function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockIm
   };
 }
 
-async function ensureItem(
+/**
+ * يحدد خامة الاستيراد. الكود وحده لا يكفي: كود عام مشترك (مثل DYED لقماش مصبوغ) يخصّ خامات كثيرة بأسماء مختلفة،
+ * فلو طُوبق بالكود فقط لدخلت كل الخامات تحت أول خامة تحمله (حالة MASIMO التي دخلت تحت RANKLI SLUP).
+ *  - تطابق الاسم والكود معاً ← تلك الخامة.
+ *  - كود تصميم فريد (5114، NW-12…) ← يبقى المطابَق بالكود كما كان حتى لو اختلف الاسم.
+ *  - كود عام باسم مختلف ← خامة جديدة باسم الملف (كودها الداخلي IMP-الاسم-الكود).
+ */
+export async function ensureItem(
   client: PoolClient,
   companyId: string,
   supplierId: string | null,
@@ -363,20 +370,27 @@ async function ensureItem(
   _rowNo: number,
 ): Promise<{ id: string; created: boolean }> {
   const matCode = prepared.matchByCode.trim();
+  let internalCode = prepared.resolvedInternalCode.trim() || buildAutoInternalCode(prepared.materialName);
 
   if (matCode) {
-    const existingByCode = await client.query<{ id: string }>(
-      `SELECT id FROM fabric_items
+    const byCode = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM fabric_items
        WHERE company_id = $1
          AND (
            lower(btrim(internal_code)) = lower(btrim($2))
            OR lower(btrim(coalesce(supplier_code, ''))) = lower(btrim($2))
          )
-       LIMIT 1`,
-      [companyId, matCode],
+       ORDER BY (lower(btrim(name)) = lower(btrim($3))) DESC, created_at`,
+      [companyId, matCode, prepared.materialName],
     );
-    if (existingByCode.rows[0]?.id) return { id: existingByCode.rows[0].id, created: false };
-    // كود خامة صريح (5114 ≠ 5111) — لا ندمج باسم «asya» المشترك بين أكواد مختلفة.
+    const sameName = byCode.rows.find((r) => r.name.trim().toLowerCase() === prepared.materialName.trim().toLowerCase());
+    if (sameName) return { id: sameName.id, created: false };
+    if (byCode.rows[0]) {
+      // كود تصميم فريد يعرّف الخامة بذاته (5114 ≠ 5111)؛ الكود العام لا يدمج خامات مختلفة الأسماء.
+      if (looksLikeUniqueDesignSku(matCode)) return { id: byCode.rows[0].id, created: false };
+      const safeName = prepared.materialName.replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 32);
+      internalCode = `IMP-${safeName}-${matCode}`.toUpperCase();
+    }
   } else {
     const existingByName = await client.query<{ id: string }>(
       `SELECT id FROM fabric_items
@@ -389,7 +403,6 @@ async function ensureItem(
   }
 
   const supplierCode = prepared.materialCode.trim() || null;
-  const internalCode = prepared.resolvedInternalCode.trim() || buildAutoInternalCode(prepared.materialName);
   const inserted = await client.query<{ id: string }>(
     `INSERT INTO fabric_items
        (company_id, supplier_id, internal_code, supplier_code, name, unit, notes)
