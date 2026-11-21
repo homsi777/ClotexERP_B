@@ -246,6 +246,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
       `SELECT pe.id, pe.employee_code, pe.full_name, pe.address, pe.job_title, pe.department, pe.phone,
               pe.base_salary, pe.currency_code, pe.salary_period, pe.hire_date, pe.is_active, pe.notes,
               pe.gender, pe.birth_date, pe.insurance_start_date, pe.base_share_percent, pe.workday_hours,
+              pe.fingerprint_code, pe.factory, pe.category, pe.payment_method, pe.termination_date, pe.status, pe.shift_type_id,
               pe.created_at, pe.updated_at,
               COALESCE(sal.total_paid, 0)::text AS total_salary_paid,
               COALESCE(adv.total_advances, 0)::text AS total_advances,
