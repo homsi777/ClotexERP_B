@@ -9,6 +9,7 @@ import { postPayrollAccrualToGl, postPayrollPaymentToGl, reversePayrollAccrualGl
 import { applyPayrollCashOut } from '../services/payrollCashboxService.js';
 import { resolveCashboxOutAmount } from '../services/cashboxCrossCurrencyService.js';
 import { importDepartmentPayrollExcel } from '../services/hrPayrollImportService.js';
+import { importAdvancesFromExcel } from '../services/hr/advanceImportService.js';
 import { applyVoucherConfirmation, insertDraftVoucher } from '../services/voucherCashboxService.js';
 import { insertAuditLog } from '../services/auditLogService.js';
 import {
@@ -98,6 +99,7 @@ const payrollExcelRowSchema = z.object({
   category: z.string().optional().nullable(),
   paymentMethod: z.string().optional().nullable(),
   hireDate: z.string().optional().nullable(),
+  gender: z.enum(['MALE', 'FEMALE']).optional().nullable(),
   baseSalary: z.coerce.number(),
   comprehensiveWage: z.coerce.number().optional().nullable(),
   totalEntitlements: z.coerce.number(),
@@ -116,6 +118,33 @@ const importExcelBody = z.object({
   workdayHours: z.coerce.number().min(1).max(24).optional().nullable(),
   employeesOnly: z.boolean().optional().default(false),
   rows: z.array(payrollExcelRowSchema).min(1),
+});
+
+const importAdvancesBody = z.object({
+  fileName: z.string().min(1),
+  kind: z.enum(['OCT', 'SCHED']),
+  currencyCode: z.string().min(1).default('EGP'),
+  paidThrough: z.object({ month: z.coerce.number().int().min(1).max(12), year: z.coerce.number().int().min(2000).max(2100) }).nullable().optional(),
+  dryRun: z.boolean().default(false),
+  rows: z
+    .array(
+      z.object({
+        rowKey: z.string().min(1),
+        code: z.string().nullable().optional(),
+        name: z.string().min(1),
+        amount: z.coerce.number().positive(),
+        advanceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        dateIsEstimated: z.boolean().optional(),
+        notes: z.string().nullable().optional(),
+        comprehensiveWage: z.coerce.number().nonnegative().nullable().optional(),
+        createIfMissing: z.boolean().optional(),
+        installments: z
+          .array(z.object({ month: z.coerce.number().int().min(1).max(12), year: z.coerce.number().int().min(2000).max(2100), amount: z.coerce.number().positive() }))
+          .optional(),
+      }),
+    )
+    .min(1)
+    .max(2000),
 });
 
 function sumRun(lines: { baseSalary: number; allowances: number; deductions: number; net: number }[]) {
@@ -216,7 +245,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
     const rows = await pool.query(
       `SELECT pe.id, pe.employee_code, pe.full_name, pe.address, pe.job_title, pe.department, pe.phone,
               pe.base_salary, pe.currency_code, pe.salary_period, pe.hire_date, pe.is_active, pe.notes,
-              pe.birth_date, pe.insurance_start_date, pe.base_share_percent, pe.workday_hours,
+              pe.gender, pe.birth_date, pe.insurance_start_date, pe.base_share_percent, pe.workday_hours,
               pe.created_at, pe.updated_at,
               COALESCE(sal.total_paid, 0)::text AS total_salary_paid,
               COALESCE(adv.total_advances, 0)::text AS total_advances,
@@ -1154,6 +1183,56 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
       if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
       if (err?.code === 'DUPLICATE') return sendError(reply, 409, err.message || 'مكرر', 'DUPLICATE');
       return sendError(reply, 500, ArabicErrors.server, 'SERVER');
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/advances/import', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'advances.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { companyId, sub: userId } = req.user!;
+    const parsed = importAdvancesBody.safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message || ArabicErrors.validation, 'VALIDATION');
+    const d = parsed.data;
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await importAdvancesFromExcel(client, {
+        companyId,
+        userId,
+        fileName: d.fileName,
+        kind: d.kind,
+        currencyCode: d.currencyCode,
+        paidThrough: d.paidThrough ?? null,
+        dryRun: d.dryRun,
+        rows: d.rows,
+      });
+      if (d.dryRun) {
+        await client.query('ROLLBACK');
+      } else {
+        await insertAuditLog(client, {
+          companyId,
+          userId,
+          action: 'PAYROLL_ADVANCES_IMPORTED',
+          entityType: 'payroll_employee_advance',
+          entityId: null,
+          details: {
+            fileName: d.fileName,
+            advances: result.advancesCreated,
+            employeesCreated: result.employeesCreated,
+            installments: result.installmentsCreated,
+            totalAmount: result.totalAmount,
+          },
+        });
+        await client.query('COMMIT');
+      }
+      return reply.status(d.dryRun ? 200 : 201).send({ ok: true, data: result });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      const err = error as { code?: string; message?: string };
+      if (err?.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
+      throw error;
     } finally {
       client.release();
     }

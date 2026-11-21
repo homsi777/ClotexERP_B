@@ -13,6 +13,7 @@ export interface PayrollEmployeeDto {
   salary_period: 'weekly' | 'monthly';
   hire_date: string | null;
   /** TASK 015: لتفعيل شريحة الإجازة 30 يوماً. */
+  gender?: "MALE" | "FEMALE" | null;
   birth_date?: string | null;
   insurance_start_date?: string | null;
   /** TASK 016: نسبة الأساسي من الشامل وساعات يوم العمل (من صيغ ملفات المرتبات). */
@@ -406,4 +407,55 @@ export async function getLeaveBalances(year: number) {
   return apiFetch<{ ok: boolean; data: { year: number; rows: LeaveBalanceRow[] } }>(
     `/api/payroll/leave-balances?year=${year}`,
   );
+}
+
+export interface ImportAdvancesRowPayload {
+  rowKey: string;
+  code?: string | null;
+  name: string;
+  amount: number;
+  advanceDate: string;
+  dateIsEstimated?: boolean;
+  notes?: string | null;
+  comprehensiveWage?: number | null;
+  createIfMissing?: boolean;
+  installments?: { month: number; year: number; amount: number }[];
+}
+
+export interface ImportAdvancesRowResult {
+  rowKey: string;
+  name: string;
+  amount: number;
+  status: 'IMPORTED' | 'DUPLICATE' | 'MISSING' | 'AMBIGUOUS' | 'INVALID';
+  matchedBy: 'CODE' | 'NAME_EXACT' | 'NAME_PREFIX' | 'NAME_TOKENS' | 'CREATED' | null;
+  employeeCode: string | null;
+  employeeName: string | null;
+  createdEmployee: boolean;
+  installmentsCreated: number;
+  installmentsPaid: number;
+  scheduleGap: number;
+  note: string | null;
+}
+
+export interface ImportAdvancesResult {
+  dryRun: boolean;
+  rows: ImportAdvancesRowResult[];
+  advancesCreated: number;
+  employeesCreated: number;
+  installmentsCreated: number;
+  totalAmount: number;
+}
+
+export async function importAdvancesExcel(payload: {
+  fileName: string;
+  kind: 'OCT' | 'SCHED';
+  currencyCode: string;
+  paidThrough: { month: number; year: number } | null;
+  dryRun: boolean;
+  rows: ImportAdvancesRowPayload[];
+}) {
+  return apiFetch<{ ok: boolean; data: ImportAdvancesResult }>('/api/payroll/advances/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

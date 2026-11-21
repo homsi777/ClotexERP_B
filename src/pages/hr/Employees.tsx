@@ -363,6 +363,7 @@ export function Employees() {
                 <th className="p-3 text-start">{t('table.factory')}</th>
                 <th className="p-3 text-start">{t('table.department')}</th>
                 <th className="p-3 text-start">{t('table.jobTitle')}</th>
+                <th className="p-3 text-start">{t('table.gender', { defaultValue: 'النوع' })}</th>
                 <th className="p-3 text-start">{t('table.category')}</th>
                 <th className="p-3 text-start">{t('table.hireDate')}</th>
                 <th className="p-3 text-start">{t('table.fingerprintCode')}</th>
@@ -379,6 +380,7 @@ export function Employees() {
                   <td className="p-3">{emp.factory || '—'}</td>
                   <td className="p-3">{emp.department || '—'}</td>
                   <td className="p-3">{emp.job_title || '—'}</td>
+                  <td className="p-3">{emp.gender === 'MALE' ? 'ذكر' : emp.gender === 'FEMALE' ? 'أنثى' : '—'}</td>
                   <td className="p-3">{emp.category || '—'}</td>
                   <td className="p-3 text-xs" dir="ltr">{emp.hire_date ? emp.hire_date.slice(0, 10) : '—'}</td>
                   <td className="p-3 font-mono text-xs">{emp.fingerprint_code || '—'}</td>

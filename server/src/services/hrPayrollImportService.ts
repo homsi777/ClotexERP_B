@@ -21,6 +21,7 @@ export type PayrollExcelRowInput = {
   category?: string | null;
   paymentMethod?: string | null;
   hireDate?: string | null;
+  gender?: 'MALE' | 'FEMALE' | null;
   baseSalary: number;
   /** TASK 019: الأجر الشامل من الملف — هو أجر الموظف المعتمد (أجر اليوم = الشامل ÷ 30). */
   comprehensiveWage?: number | null;
@@ -98,6 +99,7 @@ async function resolveOrCreateEmployee(
          job_title = COALESCE(job_title, $10),
          category = COALESCE(category, $11),
          payment_method = COALESCE(payment_method, $12),
+         gender = COALESCE(gender, $13),
          updated_at = now()
        WHERE id = $1 AND company_id = $2`,
       [
@@ -113,6 +115,7 @@ async function resolveOrCreateEmployee(
         row.jobTitle ?? null,
         row.category ?? null,
         row.paymentMethod ?? null,
+        row.gender ?? null,
       ],
     );
     if (fillWage) {
@@ -142,8 +145,8 @@ async function resolveOrCreateEmployee(
   const ins = await client.query<{ id: string }>(
     `INSERT INTO payroll_employees (
        company_id, employee_code, full_name, fingerprint_code, factory, department, job_title, category,
-       payment_method, hire_date, base_salary, currency_code, status, base_share_percent, workday_hours
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11,$12,'ACTIVE',$13,$14)
+       payment_method, hire_date, base_salary, currency_code, status, base_share_percent, workday_hours, gender
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11,$12,'ACTIVE',$13,$14,$15)
      ON CONFLICT (company_id, employee_code) DO UPDATE SET fingerprint_code = EXCLUDED.fingerprint_code
      RETURNING id`,
     [
@@ -161,6 +164,7 @@ async function resolveOrCreateEmployee(
       currencyCode,
       derived.baseSharePercent,
       workdayHours,
+      row.gender ?? null,
     ],
   );
   const employeeId = ins.rows[0].id;

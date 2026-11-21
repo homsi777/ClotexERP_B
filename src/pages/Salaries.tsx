@@ -38,6 +38,7 @@ import {
   type PayrollAuditLogEntry,
 } from '../lib/api/payrollApi';
 import { PayrollExcelImportModal } from '../components/hr/PayrollExcelImportModal';
+import { AdvancesExcelImportModal } from '../components/hr/AdvancesExcelImportModal';
 import { renderPayslipA4Html } from '../lib/printing/renderPayslipA4';
 import { renderPayrollSignatureSheetA4Html } from '../lib/printing/renderPayrollSignatureSheetA4';
 import { openDocumentPrintWindow } from '../lib/printing/documentPrint';
@@ -99,6 +100,7 @@ export const Salaries = () => {
 
   const [payRun, setPayRun] = useState<PayrollRunDto | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [advancesImportOpen, setAdvancesImportOpen] = useState(false);
   const [confirmingRunId, setConfirmingRunId] = useState<string | null>(null);
   const [installmentsOpen, setInstallmentsOpen] = useState(false);
   const [pendingInstallments, setPendingInstallments] = useState<AdvanceInstallmentDto[]>([]);
@@ -649,6 +651,12 @@ export const Salaries = () => {
               {t('buttons.importExcel')}
             </button>
           )}
+          {hasPermission('advances.manage') && (
+            <button type="button" onClick={() => setAdvancesImportOpen(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-50">
+              <Upload className="w-4 h-4" />
+              استيراد سلف من Excel
+            </button>
+          )}
           <button type="button" onClick={printEmployeesA4} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-50">
             <Printer className="w-4 h-4" />
             {t('buttons.printA4')}
@@ -1065,6 +1073,7 @@ export const Salaries = () => {
         </div>
       )}
 
+      <AdvancesExcelImportModal open={advancesImportOpen} onClose={() => setAdvancesImportOpen(false)} onImported={() => void load()} />
       <PayrollExcelImportModal open={importModalOpen} onClose={() => setImportModalOpen(false)} onImported={() => void load()} />
 
       {printRun && (

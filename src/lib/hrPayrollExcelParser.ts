@@ -17,6 +17,8 @@ export interface PayrollExcelRow {
   category: string | null;
   paymentMethod: string | null;
   hireDate: string | null;
+  /** النوع من عمود «النوع» (ذكر/أنثى)، وإلا null. */
+  gender: 'MALE' | 'FEMALE' | null;
   baseSalary: number;
   /** الأجر الشامل (عمود «الأجر الشامل») — أجر الموظف المعتمد؛ الأساسي جزء منه. */
   comprehensiveWage: number;
@@ -58,6 +60,13 @@ function findLastCol(header: unknown[], label: string): number {
   return -1;
 }
 
+export function parseGender(value: unknown): 'MALE' | 'FEMALE' | null {
+  const t = String(value ?? '').replace(/[أإآ]/g, 'ا').replace(/\s+/g, '').trim();
+  if (t === 'ذكر') return 'MALE';
+  if (t === 'انثي' || t === 'انثى') return 'FEMALE';
+  return null;
+}
+
 export async function parsePayrollWorkbook(file: File): Promise<ParsedPayrollExcel> {
   const buf = await file.arrayBuffer();
   const workbook = XLSX.read(buf, { cellDates: false });
@@ -75,6 +84,7 @@ export async function parsePayrollWorkbook(file: File): Promise<ParsedPayrollExc
   const categoryCol = findCol(header, 'الفئة');
   const paymentMethodCol = findCol(header, 'طريقة القبض ');
   const hireDateCol = findCol(header, 'تاريخ التعيين ');
+  const genderCol = findCol(header, 'النوع');
   const baseSalaryCol = findCol(header, 'الاجر الاساسى ');
   const comprehensiveCol = findCol(header, 'الاجر الشامل');
   const totalEntitlementsCol = findCol(header, 'إجمالي الإستحقاقات');
@@ -86,7 +96,7 @@ export async function parsePayrollWorkbook(file: File): Promise<ParsedPayrollExc
   }
 
   const identityCols = new Set(
-    [codeCol, nameCol, factoryCol, departmentCol, jobTitleCol, categoryCol, paymentMethodCol, hireDateCol].filter(
+    [codeCol, nameCol, factoryCol, departmentCol, jobTitleCol, categoryCol, paymentMethodCol, hireDateCol, genderCol].filter(
       (c) => c >= 0,
     ),
   );
@@ -114,6 +124,7 @@ export async function parsePayrollWorkbook(file: File): Promise<ParsedPayrollExc
       category: categoryCol >= 0 ? String(r[categoryCol] ?? '').trim() || null : null,
       paymentMethod: paymentMethodCol >= 0 ? String(r[paymentMethodCol] ?? '').trim() || null : null,
       hireDate: hireDateCol >= 0 ? excelSerialToIsoDate(r[hireDateCol]) : null,
+      gender: genderCol >= 0 ? parseGender(r[genderCol]) : null,
       baseSalary: Number(r[baseSalaryCol]) || 0,
       comprehensiveWage: comprehensiveCol >= 0 ? Number(r[comprehensiveCol]) || 0 : 0,
       totalEntitlements: Number(r[totalEntitlementsCol]) || 0,
