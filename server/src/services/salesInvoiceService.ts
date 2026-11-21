@@ -110,7 +110,7 @@ export const salesInvoiceCreateSchema = salesInvoiceCreateBaseSchema
     (d) => Math.abs(d.subtotal - d.discountTotal + d.taxTotal - d.totalAmount) <= EPS,
     { message: 'إجمالي الفاتورة لا يطابق (المجموع − الخصم + الضريبة)', path: ['totalAmount'] },
   )
-  .refine((d) => salesLinesRequirePositiveUnitPrice(d.lines), {
+  .refine((d) => !d.confirm || salesLinesRequirePositiveUnitPrice(d.lines), {
     message: SALES_METER_PRICE_REQUIRED_MSG,
     path: ['lines'],
   });
@@ -128,11 +128,7 @@ export const salesInvoiceUpdateDraftSchema = salesInvoiceCreateBaseSchema
       return Math.abs(subtotal - discount + tax - total) <= EPS;
     },
     { message: 'إجمالي الفاتورة لا يطابق (المجموع − الخصم + الضريبة)', path: ['totalAmount'] },
-  )
-  .refine((d) => salesLinesRequirePositiveUnitPrice(d.lines), {
-    message: SALES_METER_PRICE_REQUIRED_MSG,
-    path: ['lines'],
-  });
+  );
 
 export type SalesInvoiceCreateInput = z.infer<typeof salesInvoiceCreateSchema>;
 
@@ -784,7 +780,8 @@ export async function createSalesInvoice(
     throw Object.assign(new Error('بيانات الفاتورة غير صالحة'), { code: 'VALIDATION', details: parsed.error.flatten() });
   }
   const d = parsed.data;
-  assertSalesInvoiceLinesHaveMeterPrice(d.lines);
+  // المسودة تُحفظ بلا سعر (الموظف يدخل العميل والبضاعة فقط)؛ التسعير مطلوب عند الترحيل/التأكيد.
+  if (d.confirm) assertSalesInvoiceLinesHaveMeterPrice(d.lines);
 
   const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
   let exchangeRateToUsd = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : NaN;
@@ -1040,11 +1037,7 @@ export async function updateSalesInvoiceDraft(
     await syncDraftSalesInvoiceRollReservations(client, companyId, userId, invoiceId, { previousRollIds });
   }
 
-  const persistedLines = await client.query<{ quantity: string; unit: string; unit_price: string }>(
-    `SELECT quantity, unit, unit_price FROM sales_invoice_lines WHERE invoice_id=$1 AND company_id=$2 ORDER BY line_no`,
-    [invoiceId, companyId],
-  );
-  assertSalesInvoiceLinesHaveMeterPrice(persistedLines.rows);
+  // مسودة: لا يُشترط السعر هنا (يُشترط عند التأكيد).
 }
 
 export type SalesInvoiceEditBlock = {

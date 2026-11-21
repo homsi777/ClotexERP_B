@@ -37,6 +37,14 @@ export type PermissionModule = {
   needsView?: string[];
   /** ربط إجراءات المصفوفة بأكواد الصلاحيات القديمة. */
   legacy?: Partial<Record<ActionKey, string[]>>;
+  /**
+   * أكواد قديمة «أساسية» (عرض/إدارة عامة) تُمنح عند أي صلاحية بالوحدة: الحارس المركزي يفرّق بين الإجراءات أصلاً،
+   * فلا نترك فحصاً داخلياً قديماً (مثل attendance.manage على قراءة التنبيهات) يرفض ما سمحت به المصفوفة.
+   * الإجراءات الدقيقة (اعتماد/صرف/تسعير/تكلفة) تبقى بربطها الحصري في `legacy`.
+   */
+  legacyAny?: string[];
+  /** مسارات قراءة (GET) مفتوحة لكل مستخدم مسجَّل: قوائم الأسماء لازمة للاختيار بالنماذج ولا تحوي أرقاماً مالية. */
+  openRoots?: string[];
 };
 
 const W = (...codes: string[]) => codes;
@@ -57,33 +65,33 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'dashboard', name: 'لوحة التحكم', group: 'general', actions: ['view'], prefixes: [], legacy: { view: W('dashboard.view') } },
   { code: 'reports', name: 'التقارير', group: 'general', financial: true, actions: ['view', 'print', 'export'], prefixes: ['/api/reports'], legacy: { view: W('reports.view') } },
 
-  { code: 'customers', name: 'العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/customers', '/api/customer-discounts', '/api/party-logs'],
+  { code: 'customers', name: 'العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/customers', '/api/customer-discounts', '/api/party-logs'], openRoots: ['/api/customers'], legacyAny: ['customers.view', 'customers.manage'],
     legacy: { view: W('customers.view'), create: W('customers.manage'), edit: W('customers.manage'), delete: W('customers.manage') } },
   { code: 'orders', name: 'أوردرات العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/customer-orders'],
     needsView: ['customers', 'inventory.items'], legacy: { price: W('orders.price') } },
   { code: 'sales.invoices', name: 'فواتير البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/sales-invoices'],
     needsView: ['customers', 'inventory.items', 'inventory.rolls'], legacy: { price: W('invoices.price') } },
   { code: 'sales.returns', name: 'مرتجعات البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/returns'], needsView: ['customers', 'sales.invoices'] },
-  { code: 'cartela', name: 'الكارتيلات', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela', '/api/cartela-custody'], needsView: ['customers', 'inventory.items'] },
+  { code: 'cartela', name: 'الكارتيلات', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela', '/api/cartela-custody'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'inventory.items'] },
 
-  { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/suppliers'],
+  { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/suppliers'], openRoots: ['/api/suppliers'], legacyAny: ['suppliers.view', 'suppliers.manage'],
     legacy: { view: W('suppliers.view'), create: W('suppliers.manage'), edit: W('suppliers.manage'), delete: W('suppliers.manage') } },
-  { code: 'purchases.invoices', name: 'فواتير الشراء', group: 'purchases', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'], prefixes: ['/api/purchase-invoices'],
+  { code: 'purchases.invoices', name: 'فواتير الشراء', group: 'purchases', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'], prefixes: ['/api/purchase-invoices'], legacyAny: ['purchases.view', 'purchases.manage'],
     needsView: ['suppliers', 'inventory.items'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), edit: W('purchases.manage'), delete: W('purchases.manage'), approve: W('purchases.manage') } },
-  { code: 'purchases.import', name: 'استيراد المشتريات (Excel)', group: 'purchases', financial: true, actions: ['view', 'create', 'approve'], prefixes: ['/api/purchases/import'],
+  { code: 'purchases.import', name: 'استيراد المشتريات (Excel)', group: 'purchases', financial: true, actions: ['view', 'create', 'approve'], prefixes: ['/api/purchases/import'], legacyAny: ['purchases.view', 'purchases.manage'],
     needsView: ['suppliers'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), approve: W('purchases.manage') } },
 
-  { code: 'inventory.items', name: 'تعريف الخامات والتصنيفات', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/fabric', '/api/inventory/fabric-classification'],
+  { code: 'inventory.items', name: 'تعريف الخامات والتصنيفات', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/fabric', '/api/inventory/fabric-classification'], legacyAny: ['inventory.view', 'inventory.manage'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage') } },
-  { code: 'inventory.rolls', name: 'الأتواب (الرولات) والجرد', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/rolls', '/api/inventory/stock-import', '/api/labels', '/api/intake-operations', '/api/intake-dispatch-slips'],
+  { code: 'inventory.rolls', name: 'الأتواب (الرولات) والجرد', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/rolls', '/api/inventory/stock-import', '/api/labels', '/api/intake-operations', '/api/intake-dispatch-slips'], legacyAny: ['inventory.view', 'inventory.manage'],
     needsView: ['inventory.items', 'inventory.warehouses'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage') } },
-  { code: 'inventory.yarn', name: 'الخيوط', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/yarn-lots'],
+  { code: 'inventory.yarn', name: 'الخيوط', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/yarn-lots'], legacyAny: ['inventory.view', 'inventory.manage'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage'), costView: W('inventory.yarn.cost.view') } },
-  { code: 'inventory.transfers', name: 'تحويلات المخزون', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/inventory/transfers'], needsView: ['inventory.rolls', 'inventory.warehouses'],
+  { code: 'inventory.transfers', name: 'تحويلات المخزون', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/inventory/transfers'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['inventory.rolls', 'inventory.warehouses'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), approve: W('inventory.manage') } },
-  { code: 'inventory.waste', name: 'الهالك والإتلاف', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve'], prefixes: ['/api/inventory/waste'], needsView: ['inventory.rolls'],
+  { code: 'inventory.waste', name: 'الهالك والإتلاف', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve'], prefixes: ['/api/inventory/waste'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['inventory.rolls'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), approve: W('inventory.manage') } },
-  { code: 'inventory.warehouses', name: 'المستودعات والمواقع والمناطق', group: 'inventory', actions: ['view', 'create', 'edit', 'delete'], prefixes: ['/api/warehouses', '/api/warehouse-locations', '/api/warehouse-zones'], openRead: true,
+  { code: 'inventory.warehouses', name: 'المستودعات والمواقع والمناطق', group: 'inventory', actions: ['view', 'create', 'edit', 'delete'], prefixes: ['/api/warehouses', '/api/warehouse-locations', '/api/warehouse-zones'], legacyAny: ['inventory.view', 'inventory.manage'], openRead: true,
     legacy: { create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage') } },
   { code: 'inventory.movements', name: 'سجل حركة المخزون', group: 'inventory', actions: ['view', 'print', 'export'], prefixes: ['/api/inventory-movements-log'] },
 
@@ -94,9 +102,9 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'finance.expenses', name: 'المصاريف التشغيلية', group: 'treasury', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'], prefixes: ['/api/expenses'], needsView: ['treasury.cashboxes'] },
   { code: 'finance.ledger', name: 'القيود المحاسبية والتدقيق المالي', group: 'treasury', financial: true, actions: ['view', 'create', 'approve', 'print', 'export'], prefixes: ['/api/finance', '/api/financial-audit'] },
 
-  { code: 'hr.payroll', name: 'الرواتب', group: 'hr', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'disburse', 'print', 'export'], prefixes: ['/api/payroll'],
-    legacy: { view: W('payroll.view'), create: W('payroll.manage'), edit: W('payroll.manage'), delete: W('payroll.manage'), approve: W('payroll.approve'), disburse: W('payroll.disburse') } },
-  { code: 'hr.attendance', name: 'الحضور والانصراف', group: 'hr', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'], prefixes: ['/api/attendance'],
+  { code: 'hr.payroll', name: 'الرواتب', group: 'hr', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'disburse', 'print', 'export'], prefixes: ['/api/payroll'], legacyAny: ['payroll.view', 'payroll.manage', 'advances.manage'],
+    legacy: { view: W('payroll.view'), create: W('payroll.manage'), edit: W('payroll.manage'), delete: W('payroll.manage'), approve: W('payroll.approve', 'advances.approve'), disburse: W('payroll.disburse') } },
+  { code: 'hr.attendance', name: 'الحضور والانصراف', group: 'hr', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'], prefixes: ['/api/attendance'], legacyAny: ['attendance.manage'],
     legacy: { create: W('attendance.manage'), edit: W('attendance.manage'), delete: W('attendance.manage'), approve: W('attendance.approve') } },
 
   { code: 'manufacturing.dashboard', name: 'لوحة التصنيع', group: 'manufacturing', actions: ['view'], prefixes: [], legacy: { view: W('manufacturing.dashboard.view') } },
@@ -117,7 +125,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'manufacturing.reports', name: 'تقارير الإنتاج', group: 'manufacturing', actions: ['view', 'print', 'export'], prefixes: ['/api/manufacturing/print'],
     legacy: { view: W('manufacturing.reports.view'), print: W('manufacturing.reports.print'), export: W('manufacturing.reports.export') } },
 
-  { code: 'external.jobs', name: 'مهام المصنعية الخارجية', group: 'external', actions: ['view', 'create', 'edit', 'delete', 'approve', 'price', 'print'], prefixes: ['/api/external-jobs'], needsView: ['suppliers', 'inventory.rolls'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage') } },
+  { code: 'external.jobs', name: 'مهام المصنعية الخارجية', group: 'external', actions: ['view', 'create', 'edit', 'delete', 'approve', 'price', 'print'], prefixes: ['/api/external-jobs'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['suppliers', 'inventory.rolls'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage') } },
   { code: 'external.matching', name: 'تسوية إرساليات المصنعية', group: 'external', financial: true, actions: ['view', 'approve'], prefixes: ['/api/external-job-matching'] },
 
   { code: 'system.settings', name: 'إعدادات النظام', group: 'system', actions: ['view', 'edit'], prefixes: [], legacy: { view: W('settings.view'), edit: W('settings.manage') } },
@@ -154,7 +162,9 @@ export function legacyCodesFor(codes: Iterable<string>): string[] {
     if (!VALID.has(c)) continue;
     const mod = c.slice(2, c.lastIndexOf('.'));
     const action = c.slice(c.lastIndexOf('.') + 1) as ActionKey;
-    for (const l of byCode.get(mod)?.legacy?.[action] ?? []) out.add(l);
+    const m = byCode.get(mod);
+    for (const l of m?.legacy?.[action] ?? []) out.add(l);
+    for (const l of m?.legacyAny ?? []) out.add(l);
   }
   return [...out];
 }
@@ -209,5 +219,7 @@ export function resolveRoutePolicy(routeUrl: string, method: string): RoutePolic
   let guard = 0;
   while (!m.actions.includes(action) && fallback[action] && guard++ < 4) action = fallback[action]!;
   if (!m.actions.includes(action)) action = 'view';
-  return { module: m, action, code: permissionCode(m.code, action), open: Boolean(m.openRead) && action === 'view' };
+  const normalized = routeUrl.length > 1 && routeUrl.endsWith('/') ? routeUrl.slice(0, -1) : routeUrl;
+  const openRoot = verb === 'GET' && (m.openRoots ?? []).includes(normalized);
+  return { module: m, action, code: permissionCode(m.code, action), open: (Boolean(m.openRead) && action === 'view') || openRoot };
 }

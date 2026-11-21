@@ -18,6 +18,7 @@ import {
   PieChart,
   Receipt,
   Settings,
+  ShieldCheck,
   Tags,
   Users,
   Wallet,
@@ -205,6 +206,7 @@ const Topbar = () => {
     { labelKey: 'journal', to: '/journal', icon: BookOpen },
     { labelKey: 'manufacturing', to: '/manufacturing', icon: Factory },
     { labelKey: 'partners', to: '/partners', icon: Handshake },
+    ...(navUser && (navUser.role === 'admin' || navUser.permissions.includes('users.manage')) ? [{ labelKey: 'permissions', to: '/permissions', icon: ShieldCheck } as NavItem] : []),
     { labelKey: 'settings', to: '/settings', icon: Settings },
   ];
   const navItems: NavItem[] = navItemsAll.flatMap((item): NavItem[] => {

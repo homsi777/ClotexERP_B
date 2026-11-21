@@ -1,3 +1,4 @@
+import { fetchMe, type AuthUser } from '../../lib/api/authApi';
 import React, { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
 import { createPortal, flushSync } from 'react-dom';
@@ -2180,6 +2181,11 @@ export const InvoiceForm = () => {
     });
   };
 
+  // موظف بصلاحيات مخصّصة بلا «تسعير/اعتماد»: فاتورة أولية (عميل + بضاعة) تُحفظ مسودة ويسعّرها ويرحّلها المحاسب.
+  const [permUser, setPermUser] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setPermUser).catch(() => setPermUser(null)); }, []);
+  const canPostInvoice = !permUser || permUser.role === 'admin' || permUser.permMode !== 'CUSTOM'
+    || ((permUser.permMatrix ?? []).includes('p:sales.invoices.approve') && (permUser.permMatrix ?? []).includes('p:sales.invoices.price'));
   const activeItems = items.filter((item) => !isEmptyInvoiceItem(item));
   const hasHardValidationErrors = activeItems.some(
     (item) => getItemError(item, 'length') || getItemError(item, 'weight'),
@@ -2414,8 +2420,9 @@ export const InvoiceForm = () => {
   const handleSave = async (status: 'draft' | 'final') => {
     if (editBlocked || draftLoading) return;
     if (!activeItems.length) return;
-    if (blockSalesSaveWithoutMeterPrice()) return;
-    if (hasValidationErrors) {
+    // السعر مطلوب عند الترحيل فقط؛ المسودة (عميل + بضاعة) تُحفظ بلا سعر ليسعّرها المحاسب.
+    if (status === 'final' && blockSalesSaveWithoutMeterPrice()) return;
+    if (hasHardValidationErrors || (status === 'final' && hasPriceValidationErrors)) {
       const blockedItem = activeItems.find(
         (item) => getItemError(item, 'length') || getItemError(item, 'price') || getItemError(item, 'weight'),
       );
@@ -3222,7 +3229,7 @@ export const InvoiceForm = () => {
               <span className="hidden sm:inline">{t('page.saveDraft')}</span>
             </button>
           ) : null}
-          <button onClick={() => handleSave('final')} disabled={hasHardValidationErrors || draftLoading || editBlocked} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50">
+          <button onClick={() => handleSave('final')} disabled={hasHardValidationErrors || draftLoading || editBlocked || (isSales && !canPostInvoice)} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50">
             <Save className="w-4 h-4" />
             <span className="hidden sm:inline">{salesConfirmedEdit || purchaseConfirmedEdit ? t('page.saveEdits') : t('page.saveFinal')}</span>
           </button>

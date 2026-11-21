@@ -43,7 +43,16 @@ assert.equal(expandImplied(['p:nope.view', 'x']).size, 0);
 // 4) الأكواد القديمة للفحوص الحالية
 assert.ok(legacyCodesFor([permissionCode('inventory.rolls', 'edit')]).includes('inventory.manage'));
 assert.ok(effectiveCustomPermissions([permissionCode('hr.payroll', 'approve')]).includes('payroll.approve'));
-assert.ok(!effectiveCustomPermissions([permissionCode('hr.payroll', 'view')]).includes('payroll.manage'));
+const payrollView = effectiveCustomPermissions([permissionCode('hr.payroll', 'view')]);
+assert.ok(payrollView.includes('payroll.view'));
+assert.ok(!payrollView.includes('payroll.approve') && !payrollView.includes('payroll.disburse'), 'fine-grained legacy stays exact');
+// الحضور: القراءة لا تُرفض بفحص attendance.manage الداخلي
+assert.ok(effectiveCustomPermissions([permissionCode('hr.attendance', 'view')]).includes('attendance.manage'));
+// أسماء العملاء والموردين مفتوحة القراءة (قوائم الاختيار) بلا فتح كشف الحساب
+assert.equal(p('/api/customers/', 'GET').open, true);
+assert.equal(p('/api/suppliers', 'GET').open, true);
+assert.equal(p('/api/customers/:id/statement', 'GET').open, false);
+assert.equal(p('/api/customers/', 'POST').open, false);
 // مستخدم بلا مالية: لا شيء مالي يتسرب
 const noFinance = effectiveCustomPermissions(PERMISSION_MODULES.filter((m) => !m.financial).flatMap((m) => m.actions.map((a) => permissionCode(m.code, a))));
 assert.ok(!noFinance.includes(permissionCode('treasury.vouchers', 'view')));

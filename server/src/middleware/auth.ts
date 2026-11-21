@@ -17,6 +17,9 @@ export type JwtPayload = {
   permissions: string[];
   /** مدير منصة حقيقي (مالك نظام clotex) — منفصل عن "أدمن" أي شركة عميل. */
   isPlatformAdmin: boolean;
+  /** يُملأ بالحارس فقط (غير موقَّع بالتوكن): صلاحيات المصفوفة الفعلية لمن بوضع «مخصّص». */
+  matrix?: string[];
+  customPerms?: boolean;
 };
 
 export function signAuthToken(payload: JwtPayload): string {
@@ -105,6 +108,8 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
     if (userCheck.rows[0].perm_mode === 'CUSTOM' && payload.role !== 'admin') {
       const eff = await effectivePermissionsForUser(pool, { id: payload.sub, role: payload.role, perm_mode: 'CUSTOM' });
       payload.permissions = eff.permissions;
+      payload.matrix = eff.matrix;
+      payload.customPerms = true;
       const policy = resolveRoutePolicy(request.routeOptions?.url ?? request.url.split('?')[0], request.method);
       if (policy && !policy.open && !eff.matrix.includes(policy.code)) {
         return sendError(reply, 403, `ليست لديك صلاحية «${ACTION_LABELS[policy.action]}» في «${policy.module.name}»`, 'FORBIDDEN');
@@ -131,6 +136,13 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
  * — وليست صلاحية "أدمن" عادية، لأن "أدمن" موجود بكل حساب على حدة ولا يجوز
  * أن يرى أو يتحكم بحسابات/تراخيص حسابات أخرى.
  */
+/** هل يملك المستخدم إجراءً بوحدة؟ المدير ومن بوضع الدور (الافتراضي) غير مقيَّدين بالمصفوفة. */
+export function userCan(user: JwtPayload | undefined, moduleCode: string, action: string): boolean {
+  if (!user) return false;
+  if (user.role === 'admin' || !user.customPerms) return true;
+  return (user.matrix ?? []).includes(`p:${moduleCode}.${action}`);
+}
+
 export function requirePlatformAdmin(user: JwtPayload | undefined): boolean {
   return Boolean(user?.isPlatformAdmin);
 }

@@ -69,5 +69,6 @@
   "cartelaMenu.stock": "مخزون الكارتيلات",
   "cartelaMenu.delivery": "تسليم كارتيلات",
   "cartelaMenu.custody": "عهدة الكارتيلات",
-  "cartelaMenu.generate": "توليد كارتيلة"
+  "cartelaMenu.generate": "توليد كارتيلة",
+  "permissions": "الصلاحيات"
 }
