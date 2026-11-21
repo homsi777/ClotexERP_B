@@ -70,5 +70,12 @@
   "cartelaMenu.delivery": "تسليم كارتيلات",
   "cartelaMenu.custody": "عهدة الكارتيلات",
   "cartelaMenu.generate": "توليد كارتيلة",
-  "permissions": "الصلاحيات"
+  "permissions": "الصلاحيات",
+  "hub.subtitle": "كل ما يخص المخزون في شاشة واحدة",
+  "hub.stock.title": "المخزون",
+  "hub.stock.desc": "الأتواب والمواد وحركاتها وقص التوب والخيط",
+  "hub.warehouses.title": "المستودعات والتنظيم",
+  "hub.warehouses.desc": "المستودعات والعنابر والمناقلات وإرساليات المخزون والإهلاك",
+  "hub.settings.title": "الإعدادات",
+  "hub.settings.desc": "تصنيفات الأقمشة وإعدادات المخزون والتسعير الجماعي"
 }

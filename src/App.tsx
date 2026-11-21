@@ -220,6 +220,7 @@ import { Employees } from './pages/hr/Employees';
 import { Attendance } from './pages/hr/Attendance';
 import { MonthlyAttendanceReview } from './pages/hr/MonthlyAttendanceReview';
 import { HrHome } from './pages/hr/HrHome';
+import { InventoryHub } from './pages/inventory/InventoryHub';
 import { Permissions } from './pages/Permissions';
 import { HrAnnualReports } from './pages/hr/HrAnnualReports';
 import { PayrollSalaryLog } from './pages/PayrollSalaryLog';
@@ -334,6 +335,7 @@ export default function App() {
 
             <Route path="salaries" element={<Salaries />} />
             <Route path="hr" element={<HrHome />} />
+            <Route path="inventory-hub" element={<InventoryHub />} />
             <Route path="permissions" element={<Permissions />} />
             <Route path="hr/annual-reports" element={<HrAnnualReports />} />
             <Route path="hr/employees" element={<Employees />} />

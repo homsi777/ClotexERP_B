@@ -70,5 +70,12 @@
   "cartelaMenu.delivery": "Kartela teslimi",
   "cartelaMenu.custody": "Kartela zimmeti",
   "cartelaMenu.generate": "Kartela Oluştur",
-  "permissions": "Yetkiler"
+  "permissions": "Yetkiler",
+  "hub.subtitle": "Stokla ilgili her şey tek ekranda",
+  "hub.stock.title": "Stok",
+  "hub.stock.desc": "Toplar, malzemeler, hareketler, top kesimi ve iplik",
+  "hub.warehouses.title": "Depolar ve Düzen",
+  "hub.warehouses.desc": "Depolar, koğuşlar, transferler, sevk irsaliyeleri ve zayiat",
+  "hub.settings.title": "Ayarlar",
+  "hub.settings.desc": "Kumaş kategorileri, stok ayarları ve toplu fiyatlandırma"
 }

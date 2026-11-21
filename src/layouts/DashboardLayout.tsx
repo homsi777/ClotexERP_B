@@ -111,26 +111,8 @@ const Topbar = () => {
 
   const navItemsAll: NavItem[] = [
     { labelKey: 'home', to: '/', icon: Home },
-    {
-      labelKey: 'inventory',
-      icon: Package,
-      subItems: [
-        { labelKey: 'inventory.createItem', to: '/inventory/create' },
-        { labelKey: 'inventory.intakeOperationNew', to: '/purchases/intake-operations/new' },
-        { labelKey: 'inventory.intakeDispatchSlips', to: '/inventory/intake-dispatch-slips' },
-        { labelKey: 'inventory.movementsLog', to: '/inventory/movements-log' },
-        { labelKey: 'inventory.yarn', to: '/inventory/yarn' },
-        { labelKey: 'inventory.rolls', to: '/inventory' },
-        { labelKey: 'inventory.rollCut', to: '/inventory/roll-cut' },
-        { labelKey: 'inventory.categories', to: '/inventory/categories' },
-        { labelKey: 'inventory.settings', to: '/inventory/settings' },
-        { labelKey: 'inventory.bulkPricing', to: '/inventory/bulk-pricing' },
-        { labelKey: 'inventory.warehouses', to: '/inventory/warehouses' },
-        { labelKey: 'inventory.zones', to: '/inventory/zones' },
-        { labelKey: 'inventory.transfers', to: '/inventory/transfers' },
-        { labelKey: 'inventory.depreciation', to: '/inventory/depreciation' },
-      ],
-    },
+    // المخزون: شاشة واحدة بشريط أيقونات أفقي (المخزون / المستودعات والتنظيم / الإعدادات) بدل القائمة المنسدلة.
+    { labelKey: 'inventory', to: '/inventory-hub', icon: Package },
     {
       labelKey: 'stickers',
       icon: Tags,
@@ -220,6 +202,11 @@ const Topbar = () => {
   const isRouteActive = (to?: string) => {
     if (!to) return false;
     if (to === '/') return location.pathname === '/';
+    if (to === '/inventory-hub') {
+      const p = location.pathname;
+      const isSticker = ['/inventory/labels', '/inventory/custom-label', '/inventory/print-jobs'].some((x) => p === x || p.startsWith(`${x}/`));
+      return p === to || (!isSticker && (p === '/inventory' || p.startsWith('/inventory/') || p.startsWith('/purchases/intake-operations')));
+    }
     return location.pathname === to || location.pathname.startsWith(`${to}/`);
   };
 
