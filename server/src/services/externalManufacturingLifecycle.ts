@@ -306,7 +306,7 @@ export async function receiveManufacturingBatch(db: Db, companyId: string, userI
   // إرسالية مخزون بالمستلم: تظهر الحركة في «إرساليات المخزون والشراء» (السعر يُضاف لاحقاً؛ لا قيد ولا فاتورة منها).
   const slipNo = await generateSequentialDocumentNo(db as PoolClient, companyId, 'INTAKE_DISPATCH_SLIP');
   const slip = (await db.query(`INSERT INTO intake_dispatch_slips(company_id,intake_operation_id,external_job_id,return_batch_id,slip_no,slip_type,warehouse_id,supplier_id,created_by_user_id)
-    VALUES($1,NULL,$2,$3,$4,'STOCK',$5,$6,$7) RETURNING id`, [companyId, jobId, batch.id, slipNo, input.destinationWarehouseId, job.supplier_id, userId])).rows[0];
+    VALUES($1,NULL,$2,$3,$4,'EXTERNAL',$5,$6,$7) RETURNING id`, [companyId, jobId, batch.id, slipNo, input.destinationWarehouseId, job.supplier_id, userId])).rows[0];
   for (const rollId of newRollIds) await db.query('INSERT INTO intake_dispatch_slip_lines(slip_id,fabric_roll_id) VALUES($1,$2)', [slip.id, rollId]);
   await syncManufacturingSourceBalances(db, companyId, userId, jobId);
   return { id: batch.id, duplicate: false };

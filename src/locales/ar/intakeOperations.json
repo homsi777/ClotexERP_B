@@ -33,7 +33,6 @@
   "continueButton": "متابعة إلى إنشاء مادة",
   "createdSuccess": "تم إنشاء عملية الإدخال رقم {{orderNo}}",
   "createFailed": "تعذر إنشاء عملية الإدخال",
-
   "dispatchSlipsTitle": "إرساليات المخزون والشراء",
   "dispatchSlipsSubtitle": "إرساليات بانتظار التسعير — السعر قابل للإضافة أو التعديل في أي وقت",
   "colSlipNo": "رقم الإرسالية",
@@ -45,21 +44,18 @@
   "colStatus": "الحالة",
   "colActions": "إجراءات",
   "noSlipsYet": "لا توجد إرساليات بعد",
-
   "postInvoice.button": "ترحيل لفاتورة شراء",
   "postInvoice.confirm": "ترحيل الإرسالية {{slipNo}} إلى فاتورة شراء حقيقية؟ تظهر بعدها بكشف حساب المورّد ولا يمكن التراجع عنها من هنا.",
   "postInvoice.success": "تم إنشاء فاتورة الشراء رقم {{invoiceNo}}",
   "postInvoice.failed": "تعذر الترحيل لفاتورة شراء",
   "postInvoice.needsPricingFirst": "سعّري كل الأسطر أولاً قبل الترحيل لفاتورة شراء",
   "postInvoice.statusBadge": "مُرحَّلة لفاتورة",
-
   "void.button": "إلغاء الإرسالية",
   "void.confirm": "إلغاء الإرسالية {{slipNo}}؟ إلغاء ورقي فقط — الأتواب تبقى بالمخزون كما هي.",
   "void.success": "تم إلغاء الإرسالية",
   "void.failed": "تعذر الإلغاء",
   "void.statusBadge": "ملغاة",
   "void.statusActive": "سارية",
-
   "print.button": "طباعة",
   "print.popupBlocked": "تم حظر نافذة الطباعة من المتصفح — اسمح بالنوافذ المنبثقة لهذا الموقع وأعد المحاولة.",
   "print.titleStock": "كشف إرسالية مخزون",
@@ -85,5 +81,7 @@
   "save": "حفظ",
   "enterAtLeastOnePrice": "أدخل سعراً لبند واحد على الأقل",
   "pricesSaved": "تم حفظ الأسعار",
-  "saveFailed": "تعذر الحفظ"
+  "saveFailed": "تعذر الحفظ",
+  "print.titleExternal": "كشف إرسالية استلام مصنعية خارجية",
+  "print.titleItemCreation": "كشف إرسالية إنشاء مادة جديدة"
 }

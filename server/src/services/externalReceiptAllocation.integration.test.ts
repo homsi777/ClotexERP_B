@@ -98,7 +98,7 @@ test('external receipt by total quantity: automatic allocation, split rolls, aut
     // إرسالية مخزون بالمستلم (4 رولات) تظهر في إرساليات المخزون والشراء
     const slip = await q(`SELECT s.slip_type,s.intake_operation_id,(SELECT count(*)::int FROM intake_dispatch_slip_lines l WHERE l.slip_id=s.id) AS n
       FROM intake_dispatch_slips s WHERE s.external_job_id=$1`, [job.id]);
-    assert.deepEqual(slip.map((r) => [r.slip_type, r.intake_operation_id, r.n]), [['STOCK', null, 4]]);
+    assert.deepEqual(slip.map((r) => [r.slip_type, r.intake_operation_id, r.n]), [['EXTERNAL', null, 4]]);
     const settled = await q('SELECT s.amount_m,l.sent_barcode FROM external_job_settlements s JOIN external_job_lines l ON l.id=s.source_line_id WHERE s.job_id=$1', [job.id]);
     assert.deepEqual(settled.map((r) => [r.sent_barcode, Number(r.amount_m)]), [['S3', 4]]);
     await closeManufacturingJob(client, company, job.id);

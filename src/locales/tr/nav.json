@@ -79,5 +79,6 @@
   "hub.settings.title": "Ayarlar",
   "hub.settings.desc": "Kumaş kategorileri, stok ayarları ve toplu fiyatlandırma",
   "cartelaMenu.colors": "Kartela renkleri",
-  "approvalsCenter": "Onay merkezi"
+  "approvalsCenter": "Onay merkezi",
+  "invoices.dispatchSlips": "Stok ve satın alma sevkiyatları"
 }

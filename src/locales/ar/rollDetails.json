@@ -11,7 +11,6 @@
   "movementTypes.adjustment": "تسوية",
   "movementTypes.damage": "تالف",
   "movementTypes.statusChange": "تغيير حالة",
-
   "editModal.title": "تعديل بيانات الثوب",
   "editModal.subtitle": "شاشة مبسطة بنفس روح إنشاء مادة جديدة للتعديل السريع.",
   "editModal.genericError": "حدث خطأ",
@@ -35,7 +34,6 @@
   "editModal.cancel": "إلغاء",
   "editModal.saving": "جاري الحفظ...",
   "editModal.save": "حفظ",
-
   "moveModal.title": "نقل الثوب",
   "moveModal.fromLabel": "من:",
   "moveModal.targetWarehouseLabel": "المستودع الهدف",
@@ -45,14 +43,12 @@
   "moveModal.cancel": "إلغاء",
   "moveModal.moving": "جاري النقل...",
   "moveModal.moveButton": "نقل الثوب",
-
   "statusModal.title": "تغيير حالة الثوب",
   "statusModal.newStatusLabel": "الحالة الجديدة",
   "statusModal.notesLabel": "ملاحظات",
   "statusModal.cancel": "إلغاء",
   "statusModal.saving": "جاري الحفظ...",
   "statusModal.save": "حفظ",
-
   "page.loading": "جاري التحميل...",
   "page.rollNotFound": "الثوب غير موجود",
   "page.backToInventory": "العودة إلى المخزون",
@@ -102,5 +98,6 @@
   "page.meterAbbrev": "م",
   "page.cmAbbrev": "سم",
   "page.kgAbbrev": "كجم",
-  "page.loadFailed": "تعذر تحميل بيانات الثوب"
+  "page.loadFailed": "تعذر تحميل بيانات الثوب",
+  "page.lotNoLabel": "اللوط"
 }

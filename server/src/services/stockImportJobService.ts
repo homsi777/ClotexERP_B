@@ -35,6 +35,8 @@ export interface StockImportJobRow {
   widthCm?: number;
   gsm?: number;
   actualWeightKg?: number;
+  /** اللوط من الملف — يُحفظ بعمود lot_no للتوب (فارغ إن لم يُذكر). */
+  lotNo?: string;
   date?: string;
   purchaseInvoiceNo?: string;
 }
@@ -271,6 +273,7 @@ function parseRowPayload(payload: unknown): StockImportJobRow {
     widthCm: Number(row.widthCm ?? 0) || 0,
     gsm: Number(row.gsm ?? 0) || 0,
     actualWeightKg: Number(row.actualWeightKg ?? 0) || 0,
+    lotNo: String(row.lotNo ?? '').trim(),
     date: String(row.date ?? '').trim(),
     purchaseInvoiceNo: String(row.purchaseInvoiceNo ?? '').trim(),
   };
@@ -291,6 +294,7 @@ export interface PreparedRow {
   gsm: number | null;
   actualWeightKg: number | null;
   calculatedWeightKg: number | null;
+  lotNo: string;
   date: string;
   purchaseInvoiceNo: string;
   wasClamped: boolean;
@@ -306,7 +310,10 @@ function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockIm
   const safeUnitCost = clamp(Number(row.costPrice ?? row.price ?? 0), MAX_LEN_M);
   const safeWidthCm = clamp(Number(row.widthCm ?? 0), MAX_WIDTH_CM);
   const safeGsm = clamp(Number(row.gsm ?? 0), MAX_GSM);
-  const safeActualWeightKg = clamp(Number(row.actualWeightKg ?? 0), MAX_WEIGHT_KG);
+  // صنف بالوزن (وحدة kg) بلا عمود وزن صريح: الكمية بالملف هي الوزن الفعلي (مثل RASHEL بالكيلو).
+  const isKgRow = String(row.unit ?? '').trim().toLowerCase() === 'kg';
+  const explicitWeight = clamp(Number(row.actualWeightKg ?? 0), MAX_WEIGHT_KG);
+  const safeActualWeightKg = explicitWeight > 0 ? explicitWeight : (isKgRow ? clamp(safeLengthM, MAX_WEIGHT_KG) : 0);
   const safeCalculatedWeightKg = clamp(calcWeight(safeLengthM, safeWidthCm, safeGsm) ?? 0, MAX_WEIGHT_KG);
 
   const rowForCodes = {
@@ -343,6 +350,7 @@ function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockIm
     widthCm: safeWidthCm > 0 ? safeWidthCm : null,
     gsm: safeGsm > 0 ? safeGsm : null,
     actualWeightKg: safeActualWeightKg > 0 ? safeActualWeightKg : null,
+    lotNo: String(row.lotNo ?? '').trim(),
     calculatedWeightKg: safeCalculatedWeightKg > 0 ? safeCalculatedWeightKg : null,
     date: String(row.date || '').trim(),
     purchaseInvoiceNo: String(row.purchaseInvoiceNo || '').trim(),
@@ -598,8 +606,8 @@ export async function advanceStockImportBatch(
              (company_id, barcode, item_id, color_id, supplier_id, warehouse_id,
               length_m, width_cm, gsm, calculated_weight_kg, actual_weight_kg,
               unit_cost, batch_no, purchase_invoice_no, import_batch_id, notes,
-              created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+              created_by_user_id, lot_no)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
            RETURNING id`,
           [
             companyId,
@@ -619,6 +627,7 @@ export async function advanceStockImportBatch(
             batchId,
             notes || null,
             batch.created_by_user_id,
+            prepared.lotNo || null,
           ],
         );
 

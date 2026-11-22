@@ -11,7 +11,6 @@
   "movementTypes.adjustment": "Düzeltme",
   "movementTypes.damage": "Hasarlı",
   "movementTypes.statusChange": "Durum Değişikliği",
-
   "editModal.title": "Top Bilgilerini Düzenle",
   "editModal.subtitle": "Yeni malzeme oluşturma ile aynı mantıkta basitleştirilmiş hızlı düzenleme ekranı.",
   "editModal.genericError": "Bir hata oluştu",
@@ -35,7 +34,6 @@
   "editModal.cancel": "İptal",
   "editModal.saving": "Kaydediliyor...",
   "editModal.save": "Kaydet",
-
   "moveModal.title": "Topu Taşı",
   "moveModal.fromLabel": "Kaynak:",
   "moveModal.targetWarehouseLabel": "Hedef Depo",
@@ -45,14 +43,12 @@
   "moveModal.cancel": "İptal",
   "moveModal.moving": "Taşınıyor...",
   "moveModal.moveButton": "Topu Taşı",
-
   "statusModal.title": "Top Durumunu Değiştir",
   "statusModal.newStatusLabel": "Yeni Durum",
   "statusModal.notesLabel": "Notlar",
   "statusModal.cancel": "İptal",
   "statusModal.saving": "Kaydediliyor...",
   "statusModal.save": "Kaydet",
-
   "page.loading": "Yükleniyor...",
   "page.rollNotFound": "Top bulunamadı",
   "page.backToInventory": "Stoğa Geri Dön",
@@ -102,5 +98,6 @@
   "page.meterAbbrev": "m",
   "page.cmAbbrev": "cm",
   "page.kgAbbrev": "kg",
-  "page.loadFailed": "Top bilgileri yüklenemedi"
+  "page.loadFailed": "Top bilgileri yüklenemedi",
+  "page.lotNoLabel": "Lot"
 }

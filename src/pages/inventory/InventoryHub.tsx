@@ -49,7 +49,6 @@ const SECTIONS: Section[] = [
       { to: '/inventory/warehouses', icon: Warehouse, labelKey: 'inventory.warehouses' },
       { to: '/inventory/zones', icon: Grid3x3, labelKey: 'inventory.zones' },
       { to: '/inventory/transfers', icon: ArrowRightLeft, labelKey: 'inventory.transfers' },
-      { to: '/inventory/intake-dispatch-slips', icon: Truck, labelKey: 'inventory.intakeDispatchSlips' },
       { to: '/inventory/depreciation', icon: Trash2, labelKey: 'inventory.depreciation' },
     ],
   },

@@ -6,19 +6,16 @@
   "rollStatus.transferred": "منقول",
   "rollStatus.atExternalJob": "بمهمة خارجية",
   "rollStatus.inactive": "غير نشط",
-
   "scope.available": "المتاح للبيع",
   "scope.sold": "المباع",
   "scope.inactive": "غير النشط",
   "scope.all": "الكل / الأرشيف",
-
   "modal.materialPicker.title": "اختر كود الخامة",
   "modal.materialPicker.subtitle": "ظهرت {{count}} أكواد متوفرة للخامة «{{search}}». اختر كودًا لعرضه فقط.",
   "modal.materialPicker.closeAria": "إغلاق اختيار كود الخامة",
   "modal.materialPicker.rollCountUnit": "{{count}} ثوب",
   "modal.materialPicker.metersUnit": "{{value}} م",
   "modal.materialPicker.footerNote": "يمكنك إغلاق البطاقة لعرض نتائج الخامة كاملة.",
-
   "modal.status.genericError": "حدث خطأ",
   "modal.status.title": "تغيير حالة الثوب",
   "modal.status.barcodePrefix": "الباركود: ",
@@ -28,21 +25,18 @@
   "modal.status.cancel": "إلغاء",
   "modal.status.saving": "جاري الحفظ...",
   "modal.status.save": "حفظ",
-
   "modal.deactivate.title": "تأكيد تعطيل الثوب",
   "modal.deactivate.barcodePrefix": "الباركود: ",
   "modal.deactivate.explanation": "سيتم تعطيل الثوب وإخفاؤه من المتاح للبيع، وسيبقى محفوظاً في السجلات والحركات السابقة.",
   "modal.deactivate.cancel": "إلغاء",
   "modal.deactivate.saving": "جاري التعطيل...",
   "modal.deactivate.confirm": "تأكيد التعطيل",
-
   "modal.bulkDeactivate.title": "تأكيد الحذف الجماعي",
   "modal.bulkDeactivate.countLabel": "عدد الأتواب المحددة: ",
   "modal.bulkDeactivate.explanation": "سيتم تعطيل الأتواب المحددة وإخفاؤها من المتاح للبيع، مع بقاء السجلات والحركات السابقة محفوظة.",
   "modal.bulkDeactivate.cancel": "إلغاء",
   "modal.bulkDeactivate.saving": "جاري الحذف...",
   "modal.bulkDeactivate.confirm": "تأكيد الحذف",
-
   "modal.editRoll.loadCategoriesFailed": "تعذر تحميل تصنيفات الخامات.",
   "modal.editRoll.requiredFields": "اختاري اسم الخامة وكود الخامة قبل الحفظ. اللون وكود اللون اختياريان.",
   "modal.editRoll.saveFailed": "تعذر حفظ تعديل التوب.",
@@ -70,7 +64,6 @@
   "modal.editRoll.cancel": "إلغاء",
   "modal.editRoll.saving": "جاري الحفظ...",
   "modal.editRoll.save": "حفظ التعديل",
-
   "main.defaultWarehouseLabel": "كل المستودعات",
   "main.loadFailed": "تعذر تحميل بيانات المخزون",
   "main.printTitleWithSearch": "كشف جرد — {{search}}",
@@ -80,13 +73,11 @@
   "main.deactivateFailed": "تعذر تعطيل الثوب",
   "main.bulkDeactivateNote": "حذف جماعي من شاشة المخزون",
   "main.bulkDeactivateFailed": "تعذر حذف {{count}} توب. أول باركود: {{firstBarcode}}",
-
   "main.importBanner.title": "تم تنفيذ الاستيراد الأولي وظهرت المواد في المخزون بنجاح.",
   "main.importBanner.stats": "الأتواب المضافة: {{rolls}} | الخامات الجديدة: {{items}} | الألوان الجديدة: {{colors}}",
   "main.importBanner.explanation": "يمكنك الآن مراجعة المواد داخل المخزون، ثم استكمال الخطوات اللاحقة مثل التسعير الجماعي عند الحاجة.",
   "main.importBanner.continueSteps": "استكمال الخطوات",
   "main.importBanner.hide": "إخفاء",
-
   "main.pageTitle": "أتواب الأقمشة",
   "main.defaultViewPrefix": "العرض الافتراضي: ",
   "main.defaultViewBold": "المتاح للبيع فقط",
@@ -99,7 +90,6 @@
   "main.addNewRollButton": "إضافة ثوب جديد",
   "main.bulkBarcodeButton": "توليد باركود جماعي",
   "main.importExcelButton": "استيراد من ملف Excel",
-
   "main.statRollCount": "عدد الأدواب (حسب الفلتر: {{scope}})",
   "main.statTotalMeters": "مجموع الأمتار — الصفحة الحالية ({{scope}})",
   "main.statTotalKg": "مجموع الكيلوغرامات — الصفحة الحالية ({{scope}})",
@@ -108,7 +98,6 @@
   "main.draftSaleNoticeSuffix": ".",
   "main.reservedWord": "محجوز",
   "main.draftWord": "مسودة",
-
   "main.searchPlaceholder": "بحث بالباركود، اسم الخامة، كود المورد، اسم اللون...",
   "main.selectedCodePrefix": "الكود المحدد: ",
   "main.changeCodeButton": "تغيير الكود",
@@ -128,14 +117,12 @@
   "main.printA4Button": "طباعة A4",
   "main.refreshButton": "تحديث",
   "main.scopeLabel": "نطاق العرض",
-
   "main.bulkModeActiveTitle": "وضع الحذف الجماعي مفعل",
   "main.bulkModeInstructions": "حدد الأتواب المطلوبة من الجدول ثم اضغط تأكيد الحذف. المحدد حاليا: {{count}}",
   "main.deselectAllVisible": "إلغاء تحديد الكل",
   "main.selectAllVisible": "تحديد الكل الظاهر",
   "main.confirmDeleteButton": "تأكيد الحذف ({{count}})",
   "main.cancelButton": "إلغاء",
-
   "main.selectAllAria": "تحديد كل الأتواب الظاهرة",
   "main.colBarcode": "الباركود",
   "main.colMaterialName": "اسم خامة",
@@ -150,7 +137,6 @@
   "main.emptyTitle": "لا توجد أتواب في المخزون",
   "main.emptyHintFiltered": "جرب تعديل معايير البحث أو نطاق العرض",
   "main.emptyHintDefault": "استورد أول ملف Excel للبدء",
-
   "main.selectRollAria": "تحديد الثوب {{barcode}}",
   "main.draftSaleTooltipWithInvoice": "مسودة بيع — فاتورة {{invoiceNo}}",
   "main.draftSaleTooltipOpen": "مسودة بيع — فتح الفاتورة",
@@ -165,7 +151,6 @@
   "main.statusChangeTooltip": "تغيير الحالة",
   "main.printLabelTooltip": "طباعة لصاقة",
   "main.deactivateTooltip": "تعطيل",
-
   "modal.bulkBarcode.loadItemsFailed": "فشل تحميل الخامات",
   "modal.bulkBarcode.saveFailed": "فشل حفظ الباركودات",
   "modal.bulkBarcode.title": "توليد باركود جماعي للخامات",
@@ -178,5 +163,6 @@
   "modal.bulkBarcode.colMaterialName": "اسم الخامة",
   "modal.bulkBarcode.colType": "النوع",
   "modal.bulkBarcode.cancel": "إلغاء",
-  "modal.bulkBarcode.generateAndSave": "توليد وحفظ ({{count}})"
+  "modal.bulkBarcode.generateAndSave": "توليد وحفظ ({{count}})",
+  "main.colLot": "اللوط"
 }

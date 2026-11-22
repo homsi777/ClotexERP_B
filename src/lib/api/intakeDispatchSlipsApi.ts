@@ -5,11 +5,11 @@ export interface ApiIntakeDispatchSlip {
   company_id: string;
   intake_operation_id: string;
   slip_no: string;
-  slip_type: 'STOCK' | 'PURCHASE';
+  slip_type: 'STOCK' | 'PURCHASE' | 'EXTERNAL' | 'ITEM_CREATION';
   warehouse_id: string;
-  supplier_id: string;
+  supplier_id: string | null;
   warehouse_name: string;
-  supplier_name: string;
+  supplier_name: string | null;
   order_no: string;
   operation_status: 'DRAFT' | 'COMPLETED' | 'VOID';
   purchase_invoice_id: string | null;
@@ -70,5 +70,14 @@ export async function createPurchaseInvoiceFromDispatchSlip(
     `/api/intake-dispatch-slips/${id}/create-purchase-invoice`,
     { method: 'POST' },
   );
+  return res.data;
+}
+
+/** إرسالية «إنشاء مادة جديدة» بعد إضافة الأتواب: تُرجع الإرسالية الجاهزة للطباعة. */
+export async function createItemCreationSlip(rollIds: string[]) {
+  const res = await apiFetch<{ ok: boolean; data: { id: string; slipNo: string; lineCount: number } }>('/api/intake-dispatch-slips/item-creation', {
+    method: 'POST',
+    body: JSON.stringify({ rollIds }),
+  });
   return res.data;
 }

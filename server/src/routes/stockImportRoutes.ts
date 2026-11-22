@@ -24,6 +24,7 @@ const stockRow = z.object({
   widthCm: z.number().min(0).optional().default(0),
   gsm: z.number().min(0).optional().default(0),
   actualWeightKg: z.number().min(0).optional().default(0),
+  lotNo: z.string().trim().max(64).optional().default(''),
   date: z.string().trim().max(64).optional().default(''),
   purchaseInvoiceNo: z.string().trim().max(64).optional().default(''),
 });

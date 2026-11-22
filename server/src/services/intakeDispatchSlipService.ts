@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { createPurchaseInvoice, confirmPurchaseInvoice } from './purchaseInvoiceService.js';
 import { todayYmd } from '../utils/businessDate.js';
+import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 
 export type IntakeDispatchSlipRow = {
   id: string;
@@ -9,9 +10,9 @@ export type IntakeDispatchSlipRow = {
   intake_operation_id: string | null;
   external_job_id?: string | null;
   slip_no: string;
-  slip_type: 'STOCK' | 'PURCHASE';
+  slip_type: 'STOCK' | 'PURCHASE' | 'EXTERNAL' | 'ITEM_CREATION';
   warehouse_id: string;
-  supplier_id: string;
+  supplier_id: string | null;
   purchase_invoice_id: string | null;
   created_at: string;
   updated_at: string;
@@ -38,14 +39,14 @@ export type IntakeDispatchSlipLineRow = {
 
 export async function listDispatchSlips(pool: Pool, companyId: string): Promise<IntakeDispatchSlipRow[]> {
   const res = await pool.query<IntakeDispatchSlipRow>(
-    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, COALESCE(io.order_no, 'مصنعية ' || ej.job_no) AS order_no,
+    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, COALESCE(io.order_no, 'مصنعية ' || ej.job_no, 'إنشاء مادة') AS order_no,
             COALESCE(io.status, 'COMPLETED') AS operation_status,
             pi.invoice_no AS purchase_invoice_no,
             (SELECT count(*) FROM intake_dispatch_slip_lines l WHERE l.slip_id = s.id) AS line_count,
             (SELECT count(*) FROM intake_dispatch_slip_lines l WHERE l.slip_id = s.id AND l.unit_price IS NOT NULL) AS priced_line_count
      FROM intake_dispatch_slips s
      JOIN warehouses w ON w.id = s.warehouse_id
-     JOIN suppliers sup ON sup.id = s.supplier_id
+     LEFT JOIN suppliers sup ON sup.id = s.supplier_id
      LEFT JOIN intake_operations io ON io.id = s.intake_operation_id
      LEFT JOIN external_jobs ej ON ej.id = s.external_job_id
      LEFT JOIN purchase_invoices pi ON pi.id = s.purchase_invoice_id
@@ -62,12 +63,12 @@ export async function getDispatchSlipWithLines(
   id: string,
 ): Promise<{ slip: IntakeDispatchSlipRow; lines: IntakeDispatchSlipLineRow[] } | null> {
   const slipRes = await pool.query<IntakeDispatchSlipRow>(
-    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, COALESCE(io.order_no, 'مصنعية ' || ej.job_no) AS order_no,
+    `SELECT s.*, w.name AS warehouse_name, sup.name AS supplier_name, COALESCE(io.order_no, 'مصنعية ' || ej.job_no, 'إنشاء مادة') AS order_no,
             COALESCE(io.status, 'COMPLETED') AS operation_status,
             pi.invoice_no AS purchase_invoice_no
      FROM intake_dispatch_slips s
      JOIN warehouses w ON w.id = s.warehouse_id
-     JOIN suppliers sup ON sup.id = s.supplier_id
+     LEFT JOIN suppliers sup ON sup.id = s.supplier_id
      LEFT JOIN intake_operations io ON io.id = s.intake_operation_id
      LEFT JOIN external_jobs ej ON ej.id = s.external_job_id
      LEFT JOIN purchase_invoices pi ON pi.id = s.purchase_invoice_id
@@ -285,4 +286,33 @@ export async function createPurchaseInvoiceFromDispatchSlip(
   ]);
 
   return created;
+}
+
+/**
+ * إرسالية «إنشاء مادة جديدة»: بعد إضافة الأتواب كإنشاء ينتهي المسار بإرسالية قابلة للطباعة بالأتواب المضافة.
+ * لا مورد ولا فاتورة؛ التسعير يُضاف لاحقاً. تُرفض أتواب غير موجودة/من فرع آخر.
+ */
+export async function createItemCreationSlip(
+  client: PoolClient,
+  input: { companyId: string; userId: string | null; rollIds: string[] },
+): Promise<{ id: string; slipNo: string; lineCount: number }> {
+  const ids = [...new Set(input.rollIds)];
+  if (!ids.length) throw Object.assign(new Error('لا أتواب للإرسالية'), { code: 'VALIDATION' });
+  if (ids.length > 1000) throw Object.assign(new Error('عدد الأتواب كبير'), { code: 'VALIDATION' });
+  const rolls = await client.query<{ id: string; warehouse_id: string }>(
+    `SELECT id, warehouse_id FROM fabric_rolls WHERE company_id = $1 AND id = ANY($2::uuid[]) ORDER BY created_at`,
+    [input.companyId, ids],
+  );
+  if (rolls.rows.length !== ids.length) throw Object.assign(new Error('بعض الأتواب غير موجودة'), { code: 'NOT_FOUND' });
+  const warehouseId = rolls.rows[0].warehouse_id;
+  const slipNo = await generateSequentialDocumentNo(client, input.companyId, 'INTAKE_DISPATCH_SLIP');
+  const slip = await client.query<{ id: string }>(
+    `INSERT INTO intake_dispatch_slips (company_id, intake_operation_id, slip_no, slip_type, warehouse_id, supplier_id, created_by_user_id)
+     VALUES ($1, NULL, $2, 'ITEM_CREATION', $3, NULL, $4) RETURNING id`,
+    [input.companyId, slipNo, warehouseId, input.userId],
+  );
+  for (const r of rolls.rows) {
+    await client.query('INSERT INTO intake_dispatch_slip_lines (slip_id, fabric_roll_id) VALUES ($1, $2)', [slip.rows[0].id, r.id]);
+  }
+  return { id: slip.rows[0].id, slipNo, lineCount: rolls.rows.length };
 }

@@ -33,7 +33,6 @@
   "continueButton": "Malzeme Girişine Geç",
   "createdSuccess": "{{orderNo}} numaralı giriş işlemi oluşturuldu",
   "createFailed": "Giriş işlemi oluşturulamadı",
-
   "dispatchSlipsTitle": "Stok ve Satın Alma İrsaliyeleri",
   "dispatchSlipsSubtitle": "Fiyatlandırma bekleyen irsaliyeler — fiyat her zaman eklenebilir veya düzenlenebilir",
   "colSlipNo": "İrsaliye No",
@@ -45,21 +44,18 @@
   "colStatus": "Durum",
   "colActions": "İşlemler",
   "noSlipsYet": "Henüz irsaliye yok",
-
   "postInvoice.button": "Satın Alma Faturasına Aktar",
   "postInvoice.confirm": "{{slipNo}} irsaliyesi gerçek bir satın alma faturasına aktarılsın mı? Sonrasında tedarikçi ekstresinde görünür ve buradan geri alınamaz.",
   "postInvoice.success": "{{invoiceNo}} numaralı satın alma faturası oluşturuldu",
   "postInvoice.failed": "Faturaya aktarılamadı",
   "postInvoice.needsPricingFirst": "Faturaya aktarmadan önce tüm satırları fiyatlandırın",
   "postInvoice.statusBadge": "Faturaya Aktarıldı",
-
   "void.button": "İrsaliyeyi İptal Et",
   "void.confirm": "{{slipNo}} irsaliyesi iptal edilsin mi? Yalnızca evrak iptali — toplar depoda olduğu gibi kalır.",
   "void.success": "İrsaliye iptal edildi",
   "void.failed": "İptal edilemedi",
   "void.statusBadge": "İptal Edildi",
   "void.statusActive": "Geçerli",
-
   "print.button": "Yazdır",
   "print.popupBlocked": "Tarayıcı yazdırma penceresini engelledi — bu site için açılır pencerelere izin verip tekrar deneyin.",
   "print.titleStock": "Stok İrsaliyesi Dökümü",
@@ -85,5 +81,7 @@
   "save": "Kaydet",
   "enterAtLeastOnePrice": "En az bir satır için fiyat girin",
   "pricesSaved": "Fiyatlar kaydedildi",
-  "saveFailed": "Kaydedilemedi"
+  "saveFailed": "Kaydedilemedi",
+  "print.titleExternal": "Dış fason teslim alma irsaliyesi",
+  "print.titleItemCreation": "Yeni malzeme oluşturma irsaliyesi"
 }

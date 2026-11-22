@@ -93,7 +93,7 @@ export function renderIntakeDispatchSlipA4Html(opts: {
   <div class="page">
     <div class="brand"><img src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" /></div>
     <div class="doc-title">
-      ${slip.slip_type === 'PURCHASE' ? t('print.titlePurchase') : t('print.titleStock')}
+      ${slip.slip_type === 'PURCHASE' ? t('print.titlePurchase') : slip.slip_type === 'EXTERNAL' ? t('print.titleExternal') : slip.slip_type === 'ITEM_CREATION' ? t('print.titleItemCreation') : t('print.titleStock')}
     </div>
 
     <div class="meta">

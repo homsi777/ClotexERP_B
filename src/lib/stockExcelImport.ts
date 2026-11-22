@@ -61,6 +61,8 @@ export interface StockExcelRow {
   gsm: number;
   /** الوزن الفعلي بالكيلوغرام. */
   actualWeightKg: number;
+  /** اللوط (رقم دفعة التصنيع/الصباغة) إن وُجد بالملف؛ يُحفظ برقم الدفعة للتوب. */
+  lotNo: string;
   /** الإجمالي — line total. */
   total: number;
   /** Original raw values keyed by header (for advanced debugging). */
@@ -149,6 +151,7 @@ const HEADER_MAP: Record<keyof Omit<StockExcelRow, 'rowIndex' | 'raw'>, string[]
   widthCm:   ['العرض', 'عرض', 'عرضالثوب', 'width', 'widthcm', 'en'],
   gsm:       ['gsm', 'جياسام', 'وزنالمتر', 'غرامالمتر', 'gramaj'],
   actualWeightKg: ['الوزن', 'وزن', 'الوزنالصافي', 'الوزنkg', 'weight', 'netweight', 'kg', 'kilo'],
+  lotNo:     ['اللوط', 'لوط', 'رقماللوط', 'lot', 'lotno', 'lotnumber', 'lotnr'],
   total:     ['الاجمالى', 'الاجمالي', 'الإجمالي', 'الاجماليه', 'total', 'tutar', 'amount'],
 };
 
@@ -297,9 +300,21 @@ function findHeaderIndex(headers: string[], candidates: string[]): number {
   return normHeaders.findIndex((header) => header && normCandidates.includes(header));
 }
 
+/** مرادفات الكيلوغرام الشائعة (كجم بالمصري، كغ/كغم بالشامي، كيلو). */
+const KG_UNITS = ['kg', 'kgs', 'kilo', 'kilogram', 'كيلو', 'كيلوجرام', 'كيلوغرام', 'كجم', 'كغ', 'كغم', 'كلغ'];
+
+export function isKgUnit(value: string): boolean {
+  return KG_UNITS.includes(normalize(value));
+}
+
+/** الوحدة كما تُحفظ: مرادفات الكيلو كلها ← 'kg' (وحدة النظام)؛ غيرها تبقى كما بالملف (سلوك الاستيراد الحالي). */
+export function canonicalImportUnit(value: string): string {
+  return isKgUnit(value) ? 'kg' : value;
+}
+
 function isKnownUnit(value: string): boolean {
   const n = normalize(value);
-  return ['متر', 'مترطولي', 'يارد', 'يارده', 'yard', 'yd', 'meter', 'metre', 'kg', 'كيلو', 'كغ'].includes(n);
+  return ['متر', 'مترطولي', 'يارد', 'يارده', 'yard', 'yd', 'meter', 'metre', ...KG_UNITS].map(normalize).includes(n);
 }
 
 function looksLikeColorCode(value: string): boolean {
@@ -468,7 +483,7 @@ function parseSheet(sheetName: string, ws: XLSX.WorkSheet): StockSheetPreview {
       date: cols.date >= 0 ? toDateString(row[cols.date]) : null,
       itemName,
       itemCode,
-      unit,
+      unit: canonicalImportUnit(unit),
       colorName,
       colorNameTr,
       colorCode,
@@ -480,6 +495,7 @@ function parseSheet(sheetName: string, ws: XLSX.WorkSheet): StockSheetPreview {
       widthCm: cols.widthCm >= 0 ? toNumber(row[cols.widthCm]) : 0,
       gsm: cols.gsm >= 0 ? toNumber(row[cols.gsm]) : 0,
       actualWeightKg: cols.actualWeightKg >= 0 ? toNumber(row[cols.actualWeightKg]) : 0,
+      lotNo: cols.lotNo >= 0 ? String(row[cols.lotNo] ?? '').trim() : '',
       total: cols.total >= 0 ? toNumber(row[cols.total]) : 0,
       raw,
     });

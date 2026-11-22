@@ -149,7 +149,10 @@ const ROLL_COLUMNS = `
   fr.length_m, fr.width_cm, fr.gsm,
   fr.calculated_weight_kg, fr.actual_weight_kg,
   fr.unit_cost, fr.currency_code,
-  fr.batch_no, fr.container_no, fr.purchase_invoice_no, fr.supplier_roll_ref,
+  fr.batch_no,
+  -- اللوط: المستورد من Excel بعمود lot_no؛ والأتواب اليدوية كانت تحفظ اللوط في batch_no (ما لم يكن وسم استيراد).
+  COALESCE(fr.lot_no, CASE WHEN fr.import_batch_id IS NULL THEN fr.batch_no END) AS lot_no,
+  fr.container_no, fr.purchase_invoice_no, fr.supplier_roll_ref,
   fr.status, fr.notes,
   fr.created_at, fr.updated_at,
   COALESCE(pl.label_print_count, 0)::int AS label_print_count,

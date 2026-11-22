@@ -1,3 +1,4 @@
+import { createItemCreationSlip } from '../../lib/api/intakeDispatchSlipsApi';
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
 import { canPriceUser } from '../../lib/priceAccess';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -1035,6 +1036,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     setSaving(true);
     const rollsToSave = draftRolls;
     let savedCount = 0;
+    const savedRollIds: string[] = [];
     let lastPrintInput: AdHocLabelInput | null = null;
     const soldLines: { rollId: string; unitPrice: number }[] = [];
 
@@ -1054,6 +1056,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       }
 
       savedCount += 1;
+      savedRollIds.push(result.rollId);
       lastPrintInput = result.printInput;
       if (draft.forSale) {
         soldLines.push({ rollId: result.rollId, unitPrice: Number(draft.sellingPrice) || 0 });
@@ -1087,6 +1090,18 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     setName('');
     resetEntryFieldsForNextRoll();
     setSaving(false);
+
+    // إنشاء مادة جديدة (بلا عملية إدخال ولا استلام مصنعية): ينتهي المسار بإرسالية قابلة للطباعة بالأتواب المضافة.
+    if (!intakeOperationId && !isReceipt && savedRollIds.length > 0) {
+      try {
+        const slip = await createItemCreationSlip(savedRollIds);
+        setSuccessMessage(t('toast.itemCreationSlip', { defaultValue: 'تم إنشاء الأتواب — إرسالية {{slipNo}} جاهزة للطباعة', slipNo: slip.slipNo }));
+        setTimeout(() => navigate(`/inventory/intake-dispatch-slips?print=${slip.id}`), 1200);
+      } catch {
+        /* الأتواب محفوظة؛ تعذّر إنشاء الإرسالية فقط */
+        setSaveError(t('errors.itemCreationSlipFailed', { defaultValue: 'حُفظت الأتواب لكن تعذّر إنشاء الإرسالية' }));
+      }
+    }
 
     if (intakeOperationId && savedCount > 0) {
       setFinalizing(true);

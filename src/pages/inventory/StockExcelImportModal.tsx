@@ -303,6 +303,7 @@ export const StockExcelImportModal: React.FC<Props> = ({ open, onClose, onImport
         widthCm:           Number(r.widthCm) || 0,
         gsm:               Number(r.gsm) || 0,
         actualWeightKg:    Number(r.actualWeightKg) || 0,
+        lotNo:             r.lotNo ?? '',
         date:              r.date ?? '',
         purchaseInvoiceNo: '',
       }));

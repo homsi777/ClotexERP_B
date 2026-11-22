@@ -30,6 +30,8 @@ export interface FabricRollDto {
   unit_cost: string | null;
   currency_code: string | null;
   batch_no: string | null;
+  /** اللوط (رقم دفعة التصنيع/الصباغة) — null إن لم يُسجَّل. */
+  lot_no?: string | null;
   container_no: string | null;
   purchase_invoice_no: string | null;
   supplier_roll_ref: string | null;

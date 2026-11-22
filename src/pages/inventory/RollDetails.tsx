@@ -517,6 +517,7 @@ export const RollDetails = () => {
         {/* References */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h3 className="font-bold text-slate-800 mb-3 pb-2 border-b border-slate-100">{t('page.purchaseRefsTitle')}</h3>
+          <DataRow label={t('page.lotNoLabel', { defaultValue: 'اللوط' })} value={roll.lot_no} />
           <DataRow label={t('page.batchNoLabel')} value={roll.batch_no} />
           <DataRow label={t('page.containerNoLabel')} value={roll.container_no} />
           <DataRow label={t('page.purchaseInvoiceLabel')} value={roll.purchase_invoice_no} />

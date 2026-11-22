@@ -210,6 +210,7 @@ const Topbar = () => {
       subItems: [
         { labelKey: 'invoices.sales', to: '/invoices/sales' },
         { labelKey: 'invoices.purchases', to: '/invoices/purchases' },
+        { labelKey: 'invoices.dispatchSlips', to: '/inventory/intake-dispatch-slips' },
         { labelKey: 'invoices.externalJobs', to: '/purchases/external-jobs' },
         { labelKey: 'invoices.externalJobMatching', to: '/purchases/external-job-matching' },
         { labelKey: 'invoices.exchange', to: '/invoices/exchange' },
@@ -280,7 +281,7 @@ const Topbar = () => {
     if (to === '/') return location.pathname === '/';
     if (to === '/inventory-hub') {
       const p = location.pathname;
-      const isSticker = ['/inventory/labels', '/inventory/custom-label', '/inventory/print-jobs'].some((x) => p === x || p.startsWith(`${x}/`));
+      const isSticker = ['/inventory/labels', '/inventory/custom-label', '/inventory/print-jobs', '/inventory/intake-dispatch-slips'].some((x) => p === x || p.startsWith(`${x}/`));
       return p === to || (!isSticker && (p === '/inventory' || p.startsWith('/inventory/') || p.startsWith('/purchases/intake-operations')));
     }
     return location.pathname === to || location.pathname.startsWith(`${to}/`);

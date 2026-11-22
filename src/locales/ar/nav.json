@@ -79,5 +79,6 @@
   "hub.settings.title": "الإعدادات",
   "hub.settings.desc": "تصنيفات الأقمشة وإعدادات المخزون والتسعير الجماعي",
   "cartelaMenu.colors": "ألوان الكارتيلات",
-  "approvalsCenter": "مركز الإعدادات (المسؤولون)"
+  "approvalsCenter": "مركز الإعدادات (المسؤولون)",
+  "invoices.dispatchSlips": "إرساليات المخزون والشراء"
 }

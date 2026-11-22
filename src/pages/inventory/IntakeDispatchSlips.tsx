@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router-dom';
+import { DateInput } from '../../components/common/DateInput';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Ban, FileCheck2, Loader2, Printer, Tag } from 'lucide-react';
@@ -16,6 +18,14 @@ import { renderIntakeDispatchSlipA4Html } from '../../lib/printing/renderIntakeD
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import i18n from '../../i18n/config';
 
+const SLIP_TYPE_LABEL: Record<ApiIntakeDispatchSlip['slip_type'], string> = {
+  PURCHASE: 'شراء',
+  STOCK: 'إدخال مخزون',
+  EXTERNAL: 'استلام مصنعية خارجية',
+  ITEM_CREATION: 'إنشاء مادة جديدة',
+};
+type SlipTypeFilter = '' | ApiIntakeDispatchSlip['slip_type'];
+
 export const IntakeDispatchSlips: React.FC = () => {
   const { t } = useTranslation('intakeOperations');
   const { showToast } = useToast();
@@ -29,6 +39,26 @@ export const IntakeDispatchSlips: React.FC = () => {
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [postingId, setPostingId] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<SlipTypeFilter>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'VOID'>('ALL');
+  const [search, setSearch] = useState('');
+  const [urlParams] = useSearchParams();
+  const printOnLoad = urlParams.get('print');
+
+  const visibleRows = rows.filter((r) => {
+    if (typeFilter && r.slip_type !== typeFilter) return false;
+    const day = r.created_at.slice(0, 10);
+    if (dateFrom && day < dateFrom) return false;
+    if (dateTo && day > dateTo) return false;
+    const isVoid = r.operation_status === 'VOID';
+    if (statusFilter === 'VOID' && !isVoid) return false;
+    if (statusFilter === 'ACTIVE' && isVoid) return false;
+    const q = search.trim().toLowerCase();
+    if (q && ![r.slip_no, r.order_no, r.supplier_name ?? '', r.warehouse_name, SLIP_TYPE_LABEL[r.slip_type]].some((v) => String(v).toLowerCase().includes(q))) return false;
+    return true;
+  });
 
   const load = async () => {
     setLoading(true);
@@ -45,6 +75,12 @@ export const IntakeDispatchSlips: React.FC = () => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // الوصول بعد «إنشاء مادة جديدة»: تُفتح الإرسالية للطباعة مباشرة.
+  useEffect(() => {
+    if (printOnLoad) void handlePrint(printOnLoad);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printOnLoad]);
 
   const openPricing = async (slipId: string) => {
     setOpenSlipId(slipId);
@@ -133,6 +169,32 @@ export const IntakeDispatchSlips: React.FC = () => {
         <p className="text-sm text-slate-500">{t('dispatchSlipsSubtitle')}</p>
       </div>
 
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3">
+        <label className="text-xs font-bold text-slate-600">نوع الحركة
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as SlipTypeFilter)} className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">كل الحركات</option>
+            {(Object.keys(SLIP_TYPE_LABEL) as ApiIntakeDispatchSlip['slip_type'][]).map((k) => <option key={k} value={k}>{SLIP_TYPE_LABEL[k]}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-bold text-slate-600">من تاريخ
+          <DateInput value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 block w-36 rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </label>
+        <label className="text-xs font-bold text-slate-600">إلى تاريخ
+          <DateInput value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="mt-1 block w-36 rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </label>
+        <label className="text-xs font-bold text-slate-600">الحالة
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'VOID')} className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="ALL">الكل</option>
+            <option value="ACTIVE">سارية</option>
+            <option value="VOID">ملغاة</option>
+          </select>
+        </label>
+        <label className="min-w-[220px] flex-1 text-xs font-bold text-slate-600">بحث
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="رقم الإرسالية، الأمر/المهمة، المورد، المستودع…" className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </label>
+        <span className="pb-2 text-xs text-slate-500">{visibleRows.length} من {rows.length}</span>
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
@@ -141,6 +203,7 @@ export const IntakeDispatchSlips: React.FC = () => {
               <th className="p-3 text-right font-bold">{t('colOrderNo')}</th>
               <th className="p-3 text-right font-bold">{t('colSlipType')}</th>
               <th className="p-3 text-right font-bold">{t('colSupplier')}</th>
+              <th className="p-3 text-right font-bold">التاريخ</th>
               <th className="p-3 text-right font-bold">{t('colWarehouse')}</th>
               <th className="p-3 text-right font-bold">{t('colPricing')}</th>
               <th className="p-3 text-right font-bold">{t('colStatus')}</th>
@@ -149,12 +212,12 @@ export const IntakeDispatchSlips: React.FC = () => {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="p-6 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline ml-2" />{t('loading')}</td></tr>
+              <tr><td colSpan={9} className="p-6 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline ml-2" />{t('loading')}</td></tr>
             )}
-            {!loading && rows.length === 0 && (
-              <tr><td colSpan={8} className="p-6 text-center text-slate-500">{t('noSlipsYet')}</td></tr>
+            {!loading && visibleRows.length === 0 && (
+              <tr><td colSpan={9} className="p-6 text-center text-slate-500">{t('noSlipsYet')}</td></tr>
             )}
-            {rows.map((row) => {
+            {visibleRows.map((row) => {
               const isVoid = row.operation_status === 'VOID';
               const isPosted = Boolean(row.purchase_invoice_id);
               const fullyPriced = row.line_count > 0 && row.priced_line_count === row.line_count;
@@ -162,8 +225,9 @@ export const IntakeDispatchSlips: React.FC = () => {
               <tr key={row.id} className={`border-t border-slate-100 hover:bg-slate-50/70 ${isVoid ? 'opacity-60' : ''}`}>
                 <td className="p-3 font-mono font-bold text-indigo-700" dir="ltr">{row.slip_no}</td>
                 <td className="p-3 font-mono text-slate-600" dir="ltr">{row.order_no}</td>
-                <td className="p-3">{row.slip_type === 'STOCK' ? t('actionStock') : t('actionPurchase')}</td>
-                <td className="p-3 text-slate-700">{row.supplier_name}</td>
+                <td className="p-3">{SLIP_TYPE_LABEL[row.slip_type]}</td>
+                <td className="p-3 text-slate-700">{row.supplier_name ?? '—'}</td>
+                <td className="p-3 text-xs text-slate-500" dir="ltr">{row.created_at.slice(0, 10).split('-').reverse().join('/')}</td>
                 <td className="p-3 text-slate-700">{row.warehouse_name}</td>
                 <td className="p-3 text-slate-600">
                   {row.priced_line_count}/{row.line_count}

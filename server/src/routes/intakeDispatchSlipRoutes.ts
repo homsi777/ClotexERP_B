@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import {
+  createItemCreationSlip,
   createPurchaseInvoiceFromDispatchSlip,
   getDispatchSlipWithLines,
   listDispatchSlips,
@@ -24,6 +26,28 @@ export const intakeDispatchSlipRoutes: FastifyPluginAsync = async (app) => {
     const { companyId } = req.user!;
     const rows = await listDispatchSlips(getPool(), companyId);
     return reply.send({ ok: true, data: rows });
+  });
+
+  // إنشاء مادة جديدة: بعد إضافة الأتواب تُنشأ إرسالية قابلة للطباعة بها.
+  app.post('/item-creation', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId, sub: userId } = req.user!;
+    const parsed = z.object({ rollIds: z.array(z.string().uuid()).min(1).max(1000) }).safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, 'أتواب غير صالحة', 'VALIDATION');
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const data = await createItemCreationSlip(client, { companyId, userId, rollIds: parsed.data.rollIds });
+      await client.query('COMMIT');
+      return reply.status(201).send({ ok: true, data });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      const err = e as { code?: string; message?: string };
+      if (err.code === 'VALIDATION') return sendError(reply, 400, err.message || 'غير صالح', 'VALIDATION');
+      if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
+      throw e;
+    } finally {
+      client.release();
+    }
   });
 
   app.get('/:id', { preHandler: authenticateRequest }, async (req, reply) => {

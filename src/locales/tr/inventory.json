@@ -6,19 +6,16 @@
   "rollStatus.transferred": "Transfer Edildi",
   "rollStatus.atExternalJob": "Harici İşte",
   "rollStatus.inactive": "Pasif",
-
   "scope.available": "Satışa Uygun",
   "scope.sold": "Satılan",
   "scope.inactive": "Pasif Olan",
   "scope.all": "Tümü / Arşiv",
-
   "modal.materialPicker.title": "Kumaş Kodu Seçin",
   "modal.materialPicker.subtitle": "«{{search}}» kumaşı için {{count}} kod bulundu. Yalnızca birini görüntülemek için seçin.",
   "modal.materialPicker.closeAria": "Kumaş kodu seçimini kapat",
   "modal.materialPicker.rollCountUnit": "{{count}} top",
   "modal.materialPicker.metersUnit": "{{value}} m",
   "modal.materialPicker.footerNote": "Kumaşın tüm sonuçlarını görmek için bu kartı kapatabilirsiniz.",
-
   "modal.status.genericError": "Bir hata oluştu",
   "modal.status.title": "Top Durumunu Değiştir",
   "modal.status.barcodePrefix": "Barkod: ",
@@ -28,21 +25,18 @@
   "modal.status.cancel": "İptal",
   "modal.status.saving": "Kaydediliyor...",
   "modal.status.save": "Kaydet",
-
   "modal.deactivate.title": "Topu Pasifleştirmeyi Onayla",
   "modal.deactivate.barcodePrefix": "Barkod: ",
   "modal.deactivate.explanation": "Top pasifleştirilip satışa uygun listesinden gizlenecek; geçmiş kayıt ve hareketler saklı kalacaktır.",
   "modal.deactivate.cancel": "İptal",
   "modal.deactivate.saving": "Pasifleştiriliyor...",
   "modal.deactivate.confirm": "Pasifleştirmeyi Onayla",
-
   "modal.bulkDeactivate.title": "Toplu Silmeyi Onayla",
   "modal.bulkDeactivate.countLabel": "Seçili top sayısı: ",
   "modal.bulkDeactivate.explanation": "Seçili toplar pasifleştirilip satışa uygun listesinden gizlenecek; geçmiş kayıt ve hareketler saklı kalacaktır.",
   "modal.bulkDeactivate.cancel": "İptal",
   "modal.bulkDeactivate.saving": "Siliniyor...",
   "modal.bulkDeactivate.confirm": "Silmeyi Onayla",
-
   "modal.editRoll.loadCategoriesFailed": "Kumaş kategorileri yüklenemedi.",
   "modal.editRoll.requiredFields": "Kaydetmeden önce kumaş adını ve kumaş kodunu seçin. Renk ve renk kodu isteğe bağlıdır.",
   "modal.editRoll.saveFailed": "Top düzenlemesi kaydedilemedi.",
@@ -70,7 +64,6 @@
   "modal.editRoll.cancel": "İptal",
   "modal.editRoll.saving": "Kaydediliyor...",
   "modal.editRoll.save": "Değişikliği Kaydet",
-
   "main.defaultWarehouseLabel": "Tüm Depolar",
   "main.loadFailed": "Envanter verileri yüklenemedi",
   "main.printTitleWithSearch": "Envanter Listesi — {{search}}",
@@ -80,13 +73,11 @@
   "main.deactivateFailed": "Top pasifleştirilemedi",
   "main.bulkDeactivateNote": "Envanter ekranından toplu silindi",
   "main.bulkDeactivateFailed": "{{count}} top silinemedi. İlk barkod: {{firstBarcode}}",
-
   "main.importBanner.title": "İlk içe aktarma başarıyla tamamlandı ve malzemeler envanterde göründü.",
   "main.importBanner.stats": "Eklenen toplar: {{rolls}} | Yeni kumaşlar: {{items}} | Yeni renkler: {{colors}}",
   "main.importBanner.explanation": "Artık envanterdeki malzemeleri inceleyebilir, ardından gerektiğinde toplu fiyatlandırma gibi sonraki adımları tamamlayabilirsiniz.",
   "main.importBanner.continueSteps": "Adımlara Devam Et",
   "main.importBanner.hide": "Gizle",
-
   "main.pageTitle": "Kumaş Topları",
   "main.defaultViewPrefix": "Varsayılan görünüm: ",
   "main.defaultViewBold": "Yalnızca satışa uygun",
@@ -99,7 +90,6 @@
   "main.addNewRollButton": "Yeni Top Ekle",
   "main.bulkBarcodeButton": "Toplu Barkod Oluştur",
   "main.importExcelButton": "Excel Dosyasından İçe Aktar",
-
   "main.statRollCount": "Top Sayısı (filtreye göre: {{scope}})",
   "main.statTotalMeters": "Toplam Metre — Bu Sayfa ({{scope}})",
   "main.statTotalKg": "Toplam Kilogram — Bu Sayfa ({{scope}})",
@@ -108,7 +98,6 @@
   "main.draftSaleNoticeSuffix": ".",
   "main.reservedWord": "rezerve edilmiştir",
   "main.draftWord": "(taslak)",
-
   "main.searchPlaceholder": "Barkod, kumaş adı, tedarikçi kodu, renk adıyla arayın...",
   "main.selectedCodePrefix": "Seçili kod: ",
   "main.changeCodeButton": "Kodu Değiştir",
@@ -128,14 +117,12 @@
   "main.printA4Button": "A4 Yazdır",
   "main.refreshButton": "Yenile",
   "main.scopeLabel": "Görünüm Kapsamı",
-
   "main.bulkModeActiveTitle": "Toplu Silme Modu Etkin",
   "main.bulkModeInstructions": "Tablodan gerekli topları seçin, ardından Silmeyi Onayla'ya tıklayın. Şu anda seçili: {{count}}",
   "main.deselectAllVisible": "Tüm Seçimi Kaldır",
   "main.selectAllVisible": "Görüneni Tümünü Seç",
   "main.confirmDeleteButton": "Silmeyi Onayla ({{count}})",
   "main.cancelButton": "İptal",
-
   "main.selectAllAria": "Görünen tüm topları seç",
   "main.colBarcode": "Barkod",
   "main.colMaterialName": "Kumaş Adı",
@@ -150,7 +137,6 @@
   "main.emptyTitle": "Envanterde top yok",
   "main.emptyHintFiltered": "Arama kriterlerini veya görünüm kapsamını değiştirmeyi deneyin",
   "main.emptyHintDefault": "Başlamak için ilk Excel dosyanızı içe aktarın",
-
   "main.selectRollAria": "{{barcode}} numaralı topu seç",
   "main.draftSaleTooltipWithInvoice": "Taslak satış — Fatura {{invoiceNo}}",
   "main.draftSaleTooltipOpen": "Taslak satış — Faturayı aç",
@@ -165,7 +151,6 @@
   "main.statusChangeTooltip": "Durumu Değiştir",
   "main.printLabelTooltip": "Etiket Yazdır",
   "main.deactivateTooltip": "Pasifleştir",
-
   "modal.bulkBarcode.loadItemsFailed": "Kumaşlar yüklenemedi",
   "modal.bulkBarcode.saveFailed": "Barkodlar kaydedilemedi",
   "modal.bulkBarcode.title": "Kumaşlar İçin Toplu Barkod Oluştur",
@@ -178,5 +163,6 @@
   "modal.bulkBarcode.colMaterialName": "Kumaş Adı",
   "modal.bulkBarcode.colType": "Tür",
   "modal.bulkBarcode.cancel": "İptal",
-  "modal.bulkBarcode.generateAndSave": "Oluştur ve Kaydet ({{count}})"
+  "modal.bulkBarcode.generateAndSave": "Oluştur ve Kaydet ({{count}})",
+  "main.colLot": "Lot"
 }

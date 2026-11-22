@@ -18,6 +18,7 @@ export interface StockImportRow {
   widthCm?: number;
   gsm?: number;
   actualWeightKg?: number;
+  lotNo?: string;
   date?: string;
   purchaseInvoiceNo?: string;
 }

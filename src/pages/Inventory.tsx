@@ -1507,6 +1507,7 @@ return (
                   </button>
                 </th>
                 <th className="text-right py-3 px-4 font-bold text-slate-600">{t('main.colColorCode')}</th>
+                <th className="text-right py-3 px-4 font-bold text-slate-600 whitespace-nowrap">{t('main.colLot', { defaultValue: 'اللوط' })}</th>
                 <th className="text-right py-3 px-4 font-bold text-slate-600 whitespace-nowrap">{t('main.colLength')}</th>
                 <th className="text-right py-3 px-4 font-bold text-slate-600 whitespace-nowrap">{t('main.colWeightKg')}</th>
                 <th className="text-right py-3 px-4 font-bold text-slate-600">{t('main.colWarehouse')}</th>
@@ -1637,6 +1638,7 @@ return (
                     <td className="py-2.5 px-4 font-mono text-xs text-slate-600">
                       {colorCodeDisplay}
                     </td>
+                    <td className="py-2.5 px-4 font-mono text-xs text-slate-600 whitespace-nowrap">{roll.lot_no || '—'}</td>
                     <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap">
                       {parseFloat(roll.length_m || '0').toFixed(2)}{t('main.metersUnitSuffix')}
                     </td>
