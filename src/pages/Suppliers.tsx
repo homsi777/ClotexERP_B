@@ -25,7 +25,7 @@ export const Suppliers = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState(lastSuppliersSearchTerm);
+  const [search, setSearch] = useState(new URLSearchParams(window.location.search).get('search') ?? lastSuppliersSearchTerm);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [page, setPage] = useState(1);
   const pageSize = 20;

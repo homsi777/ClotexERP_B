@@ -55,7 +55,7 @@ export const Depreciation = () => {
   const [rows, setRows] = useState<InventoryWasteRow[]>([]);
   const [total, setTotal] = useState(0);
   const [draftTotal, setDraftTotal] = useState(0);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(new URLSearchParams(window.location.search).get('search') ?? '');
   const [filterOpen, setFilterOpen] = useState(false);
   // اعتماد الإهلاك (الخصم من المخزون) للمدير/المحاسب أو من مُنح «اعتماد»؛ غيرهم يحفظون مسودة تنتظر الاعتماد.
   const [me, setMe] = useState<AuthUser | null>(null);

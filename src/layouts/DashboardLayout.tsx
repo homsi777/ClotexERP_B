@@ -47,7 +47,7 @@ import { fetchMe, type AuthUser } from '../lib/api/authApi';
 import { canSeePath } from '../lib/permissionNav';
 import { getCheckDueSummary, type CheckDueItem } from '../lib/api/checksApi';
 import { fetchPricingQueue, type PricingQueueItem } from '../lib/api/pricingQueueApi';
-import { pendingEditRequests, decideEditRequestApi, ENTITY_AR, type EditRequestDto } from '../lib/api/editRequestsApi';
+import { pendingEditRequests, decideEditRequestApi, entityPath, ENTITY_AR, type EditRequestDto } from '../lib/api/editRequestsApi';
 import { canPriceUser, canSeeFinanceUser, canApproveUser } from '../lib/priceAccess';
 import { listInventoryWaste } from '../lib/api/inventoryWasteApi';
 import { applyCompanyDefaultLanguage } from '../i18n/applyCompanyLanguage';
@@ -398,7 +398,7 @@ const Topbar = () => {
               <ul className="space-y-1">
                 {wasteDrafts.slice(0, 8).map((w) => (
                   <li key={w.id}>
-                    <Link to="/inventory/depreciation" onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-rose-100/70">
+                    <Link to={`/inventory/depreciation?search=${encodeURIComponent(w.waste_no)}`} onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-rose-100/70">
                       <span className="truncate font-mono font-bold">{w.waste_no}</span>
                       <span className="shrink-0 truncate text-slate-600">{w.reason || ''}</span>
                     </Link>
@@ -413,7 +413,7 @@ const Topbar = () => {
               <ul className="space-y-1.5">
                 {approvals.slice(0, 8).map((r) => (
                   <li key={r.id} className="rounded-lg bg-white/70 px-2 py-1.5 text-xs">
-                    <div className="font-bold">{r.requestedByName} يطلب تعديل {ENTITY_AR[r.entityType]} «{r.entityLabel}»</div>
+                    <Link to={entityPath(r)} onClick={() => setNotifyOpen(false)} className="block font-bold text-violet-900 hover:underline">{r.requestedByName} يطلب تعديل {ENTITY_AR[r.entityType]} «{r.entityLabel}»</Link>
                     <div className="text-slate-600">{r.reason}</div>
                     <div className="mt-1 flex gap-1.5">
                       <button type="button" onClick={() => void decide(r.id, true)} className="rounded bg-emerald-600 px-2 py-0.5 font-bold text-white hover:bg-emerald-700">موافقة</button>
@@ -445,7 +445,7 @@ const Topbar = () => {
               <ul className="space-y-1">
                 {checkDue.items.slice(0, 6).map((c) => (
                   <li key={c.id}>
-                    <Link to="/treasury/checks-vault" onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-amber-100/60">
+                    <Link to={`/treasury/checks-vault?check=${c.id}&search=${encodeURIComponent(c.check_no)}`} onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-amber-100/60">
                       <span className="truncate font-mono font-bold">{c.check_no} · {c.party_name || c.bank_name}</span>
                       <span className={`shrink-0 font-bold ${c.days_remaining < 0 ? 'text-rose-700' : 'text-amber-800'}`}>
                         {c.days_remaining === 0 ? t('countdown.today', { ns: 'checksVault' }) : c.days_remaining > 0 ? t('countdown.in', { ns: 'checksVault', count: c.days_remaining }) : t('countdown.overdue', { ns: 'checksVault', count: -c.days_remaining })}
@@ -466,7 +466,7 @@ const Topbar = () => {
                   return (
                     <li key={o.id}>
                       <Link
-                        to="/orders"
+                        to={`/orders?order=${o.id}`}
                         className="block rounded-xl border border-transparent px-3 py-3 hover:border-amber-200/80 hover:bg-amber-50/60 transition text-right"
                         onClick={() => setNotifyOpen(false)}
                       >

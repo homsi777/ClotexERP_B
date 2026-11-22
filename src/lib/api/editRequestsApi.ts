@@ -44,3 +44,13 @@ export function setSupervisorApi(userId: string, supervisorId: string | null) {
 }
 
 export { setEditGrant };
+
+/** رابط العنصر المطلوب تعديله (يُفتح من إشعار الجرس). */
+export function entityPath(r: Pick<EditRequestDto, 'entityType' | 'entityId' | 'entityLabel'>): string {
+  switch (r.entityType) {
+    case 'SALES_INVOICE': return `/invoices/sales/${r.entityId}/edit`;
+    case 'PURCHASE_INVOICE': return `/invoices/purchases/${r.entityId}/edit`;
+    case 'SUPPLIER': return `/suppliers?search=${encodeURIComponent(r.entityLabel)}`;
+    default: return `/customers?search=${encodeURIComponent(r.entityLabel)}`;
+  }
+}

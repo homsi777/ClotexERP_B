@@ -1,7 +1,7 @@
 import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Loader2, AlertTriangle, Banknote, CheckCircle2, Undo2, Printer, ArrowUp, ArrowDown, X, LayoutGrid, Table2 } from 'lucide-react';
 import {
   listChecks,
@@ -49,7 +49,8 @@ export const ChecksVault: React.FC = () => {
   const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
 
   const [status, setStatus] = useState<CheckStatus | ''>('');
-  const [search, setSearch] = useState('');
+  const [urlParams] = useSearchParams();
+  const [search, setSearch] = useState(urlParams.get('search') ?? '');
   const [sortBy, setSortBy] = useState<CheckSortBy>('dueDate');
 
   const [addOpen, setAddOpen] = useState(false);
@@ -88,6 +89,12 @@ export const ChecksVault: React.FC = () => {
       });
       setRows(res.rows);
       setTotal(res.total);
+      // وصول من إشعار الجرس: يُفتح الشيك المعني مباشرة.
+      const wanted = urlParams.get('check');
+      if (wanted) {
+        const hit = res.rows.find((r) => r.id === wanted);
+        if (hit) setViewing(hit);
+      }
     } catch (e) {
       showToast({ type: 'error', message: e instanceof ApiRequestError ? e.message : t('loadFailed') });
     } finally {

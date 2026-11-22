@@ -38,7 +38,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
   const [attachments, setAttachments] = useState('');
   const [completed, setCompleted] = useState<string[]>([]);
   const [receiveStep, setReceiveStep] = useState<1 | 2>(1);
-  const [tab, setTab] = useState<'overview'|'receive'|'quality'|'settlements'|'pricing'>(initialTab || (query.get('quality')==='1'?'quality':'overview'));
+  const [tab, setTab] = useState<'overview'|'receive'|'quality'|'settlements'|'pricing'>(initialTab || (['overview','receive','quality','settlements','pricing'].includes(query.get('tab') ?? '') ? (query.get('tab') as 'overview'|'receive'|'quality'|'settlements'|'pricing') : (query.get('quality')==='1'?'quality':'overview')));
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
