@@ -30,6 +30,11 @@ export interface PartyStatementParty {
   telegram_label?: string | null;
 }
 
+export interface PendingCheck {
+  checkId: string; checkNo: string; bankName: string; dueDate: string; status: string;
+  voucherNo: string; currency: string; amount: number; amountUsd: number;
+}
+
 export interface PartyStatementData {
   customer?: PartyStatementParty;
   supplier?: PartyStatementParty;
@@ -43,7 +48,11 @@ export interface PartyStatementData {
     debit: number;
     credit: number;
     closingBalance: number;
+    /** شيكات قيد التحصيل (لا تُخصم من الرصيد الحالي) والرصيد المتوقع بعد تحصيلها. */
+    pendingChecksTotal?: number;
+    expectedBalance?: number;
   };
+  pendingChecks?: PendingCheck[];
 }
 
 function buildStatementQuery(params: { fromDate?: string; toDate?: string; currency?: string }) {
@@ -81,7 +90,10 @@ export interface PartyStatementByCurrencyEntry {
     debit: number;
     credit: number;
     closingBalance: number;
+    pendingChecksTotal?: number;
+    expectedBalance?: number;
   };
+  pendingChecks?: PendingCheck[];
 }
 
 export interface PartyStatementByCurrencyData {

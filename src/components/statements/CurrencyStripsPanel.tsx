@@ -46,6 +46,18 @@ export const CurrencyStripsPanel: React.FC<Props> = ({ strips, loading, error, i
                     <span className="text-[11px] font-normal text-slate-500">({side})</span>
                   </span>
                 </div>
+                {s.pendingChecksTotal > 0 && (
+                  <div className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-amber-900" data-testid="pending-checks">
+                    <div>
+                      شيكات قيد التحصيل: <b className="font-mono">{money(s.pendingChecksTotal)} {s.currency}</b>
+                      {' — '}الرصيد المتوقع بعد التحصيل: <b className="font-mono">{money(Math.abs(s.expectedBalance))} {s.currency}</b>
+                      <span className="text-[11px] text-amber-700"> ({s.expectedBalance >= 0 ? debitSide : creditSide})</span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-amber-800">
+                      {s.pendingChecks.map((c) => `${c.checkNo} / ${c.bankName} / ${c.dueDate} / ${money(c.amount)}`).join('  •  ')}
+                    </div>
+                  </div>
+                )}
                 {s.conversion && (
                   <div className="mt-1 text-[12px] text-blue-800">
                     {k('rateLine', {

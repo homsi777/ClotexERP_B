@@ -1,8 +1,16 @@
-import { getPool } from '../db/pool.js';
+import { getPool as realGetPool } from '../db/pool.js';
+
+/** للاختبارات فقط: يستبدل مصدر الاتصال (عميل معاملة تُلغى بعد الاختبار). */
+let dbOverride: { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> } | null = null;
+export function __setStatementDbForTests(db: typeof dbOverride) { dbOverride = db; }
+const getPool = () => (dbOverride ?? realGetPool()) as ReturnType<typeof realGetPool>;
 
 /** ملحق وصف كشف الحساب لسند فيه شيك: «— شيك رقم X / بنك Y» ليظهر استلام الشيك بوضوح. */
 const VOUCHER_CHECK_SUFFIX = `COALESCE((SELECT ' — شيك رقم ' || string_agg(c.check_no || ' / ' || c.bank_name || ' / استحقاق ' || to_char(c.due_date,'YYYY-MM-DD') || COALESCE(' / ' || NULLIF(c.account_holder_name,''), ''), '، ') FROM voucher_lines vl JOIN checks c ON c.id = vl.check_id WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id), '')`;
 
+
+/** مجموع بنود الشيكات في سند القبض (تُستثنى من صف السند وتُحتسب عند التحصيل). */
+const VOUCHER_CHECK_AMOUNT = `COALESCE((SELECT SUM(vl.amount) FROM voucher_lines vl WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id AND vl.check_id IS NOT NULL), 0)`;
 
 /** سند محوَّل بسعر صرف (اختياري): يظهر المكافئ والسعر بجانب المبلغ الأصلي. */
 const VOUCHER_CONVERT_SUFFIX = `CASE WHEN v.converted_amount IS NOT NULL THEN ' — ما يعادل ' || trim(to_char(v.converted_amount,'FM999999999990.00')) || ' ' || v.convert_to_currency_code || ' بسعر ' || trim(to_char(v.convert_rate,'FM999999990.999999')) ELSE '' END`;
@@ -31,6 +39,11 @@ type StatementSourceRow = {
   source_id: string;
   status: string;
   notes: string | null;
+};
+
+export type PendingCheckRow = {
+  checkId: string; checkNo: string; bankName: string; dueDate: string; status: string;
+  voucherNo: string; currency: string; amount: number; amountUsd: number;
 };
 
 function toIsoDate(value: unknown) {
@@ -127,13 +140,36 @@ function customerRowsQuery(period: 'opening' | 'period', filters: PartyStatement
               ELSE 'دفعة / تسوية فاتورة'
             END) || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS type_label,
            v.voucher_no AS document_no, COALESCE(v.description, 'سند قبض مؤكد') || ${VOUCHER_CHECK_SUFFIX} || ${VOUCHER_CONVERT_SUFFIX} AS description,
-           0::numeric AS debit, v.amount AS credit, v.currency_code,
+           0::numeric AS debit, GREATEST(v.amount - ${VOUCHER_CHECK_AMOUNT}, 0) AS credit, v.currency_code,
            0::numeric AS debit_usd,
-           COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END) AS credit_usd,
+           COALESCE(v.amount_usd, CASE WHEN v.currency_code='USD' THEN v.amount ELSE v.amount / NULLIF(v.exchange_rate_to_usd, 0) END)
+             * GREATEST(v.amount - ${VOUCHER_CHECK_AMOUNT}, 0) / NULLIF(v.amount, 0) AS credit_usd,
            'VOUCHER' AS source_type, v.id AS source_id, v.status, v.notes
     FROM vouchers v
     WHERE v.company_id=$1 AND v.party_id=$2 AND v.party_type='CUSTOMER' AND v.voucher_type='RECEIPT' AND v.status='CONFIRMED'
     ${dateCondition('v', 'voucher_date')}
+
+    UNION ALL
+    -- شيك مقبوض: لا يُخصم من ذمة العميل إلا عند تأكيد تحصيله (CLEARED)، بتاريخ التحصيل.
+    SELECT x.row_date, x.created_at, 'CHECK_COLLECTION' AS type, 'تحصيل شيك' AS type_label,
+           x.check_no AS document_no,
+           ('تحصيل شيك رقم ' || x.check_no || ' / ' || x.bank_name || ' (سند ' || x.voucher_no || ')') AS description,
+           0::numeric AS debit, x.line_amount AS credit, x.currency_code,
+           0::numeric AS debit_usd,
+           COALESCE(x.line_amount_usd, CASE WHEN x.currency_code='USD' THEN x.line_amount ELSE x.line_amount / NULLIF(x.exchange_rate_to_usd, 0) END) AS credit_usd,
+           'VOUCHER' AS source_type, x.voucher_id AS source_id, 'CONFIRMED' AS status, NULL::text AS notes
+    FROM (
+      SELECT COALESCE((SELECT max(h.changed_at)::date FROM check_status_history h WHERE h.check_id = c.id AND h.to_status = 'CLEARED'), c.updated_at::date) AS row_date,
+             c.updated_at AS created_at, c.check_no, c.bank_name, v.voucher_no, v.id AS voucher_id,
+             vl.amount AS line_amount, vl.amount_usd AS line_amount_usd, v.currency_code, v.exchange_rate_to_usd
+      FROM voucher_lines vl
+      JOIN vouchers v ON v.id = vl.voucher_id AND v.company_id = vl.company_id
+      JOIN checks c ON c.id = vl.check_id AND c.company_id = vl.company_id
+      WHERE v.company_id=$1 AND v.party_id=$2 AND v.party_type='CUSTOMER' AND v.voucher_type='RECEIPT'
+        AND v.status='CONFIRMED' AND c.status='CLEARED'
+    ) x
+    WHERE true
+    ${dateCondition('x', 'row_date')}
 
     UNION ALL
     SELECT v.voucher_date AS row_date, v.created_at, 'PAYMENT_VOUCHER' AS type,
@@ -354,6 +390,33 @@ async function buildStatement(kind: PartyKind, companyId: string, partyId: strin
     };
   });
 
+  // شيكات العميل قيد التحصيل (مستلمة/مودعة ولم تُحصَّل): لا تُخصم من الرصيد الحالي،
+  // وتُعرض مع «الرصيد المتوقع» بعد تحصيلها.
+  let pendingChecks: PendingCheckRow[] = [];
+  if (kind === 'CUSTOMER') {
+    const pendParams: unknown[] = [companyId, partyId];
+    let pendCond = '';
+    if (filters.toDate) { pendParams.push(filters.toDate); pendCond += ` AND v.voucher_date <= $${pendParams.length}::date`; }
+    if (filters.currency) { pendParams.push(filters.currency); pendCond += ` AND v.currency_code = $${pendParams.length}`; }
+    const pend = await pool.query<{ check_id: string; check_no: string; bank_name: string; due_date: string; status: string; voucher_no: string; currency_code: string; amount: string; amount_usd: string }>(
+      `SELECT c.id AS check_id, c.check_no, c.bank_name, c.due_date::text AS due_date, c.status, v.voucher_no, v.currency_code,
+              vl.amount::text AS amount,
+              COALESCE(vl.amount_usd, CASE WHEN v.currency_code='USD' THEN vl.amount ELSE vl.amount / NULLIF(v.exchange_rate_to_usd, 0) END)::text AS amount_usd
+         FROM voucher_lines vl
+         JOIN vouchers v ON v.id = vl.voucher_id AND v.company_id = vl.company_id
+         JOIN checks c ON c.id = vl.check_id AND c.company_id = vl.company_id
+        WHERE v.company_id=$1 AND v.party_id=$2 AND v.party_type='CUSTOMER' AND v.voucher_type='RECEIPT'
+          AND v.status='CONFIRMED' AND c.status IN ('RECEIVED','DEPOSITED')${pendCond}
+        ORDER BY c.due_date ASC, c.check_no ASC`,
+      pendParams,
+    );
+    pendingChecks = pend.rows.map((r) => ({
+      checkId: r.check_id, checkNo: r.check_no, bankName: r.bank_name, dueDate: r.due_date.slice(0, 10), status: r.status,
+      voucherNo: r.voucher_no, currency: r.currency_code, amount: Number(r.amount), amountUsd: Number(r.amount_usd),
+    }));
+  }
+  const pendingChecksTotal = pendingChecks.reduce((s, c) => s + (useOriginalCurrency ? c.amount : c.amountUsd), 0);
+
   return {
     [kind === 'CUSTOMER' ? 'customer' : 'supplier']: party,
     period: {
@@ -366,7 +429,11 @@ async function buildStatement(kind: PartyKind, companyId: string, partyId: strin
       debit: totalDebit,
       credit: totalCredit,
       closingBalance: running,
+      /** الرصيد بعد تحصيل الشيكات قيد التحصيل (للعميل فقط). */
+      pendingChecksTotal,
+      expectedBalance: running - pendingChecksTotal,
     },
+    pendingChecks,
   };
 }
 
@@ -405,6 +472,7 @@ async function buildStatementByCurrency(
     openingBalance: number;
     rows: PartyStatementByCurrency['rows'];
     totals: PartyStatementByCurrency['totals'];
+    pendingChecks: PendingCheckRow[];
   }>;
 }> {
   const all = await buildStatement(kind, companyId, partyId, filters);
@@ -418,6 +486,7 @@ async function buildStatementByCurrency(
         openingBalance: scoped.openingBalance,
         rows: scoped.rows,
         totals: scoped.totals,
+        pendingChecks: scoped.pendingChecks,
       };
     }),
   );

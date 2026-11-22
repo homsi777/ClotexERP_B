@@ -18,7 +18,8 @@
 export type CurrencyBalanceInput = {
   currency: string;
   openingBalance: number;
-  totals: { debit: number; credit: number; closingBalance: number };
+  totals: { debit: number; credit: number; closingBalance: number; pendingChecksTotal?: number; expectedBalance?: number };
+  pendingChecks?: { checkNo: string; bankName: string; dueDate: string; amount: number }[];
 };
 
 /** وحدات العملة مقابل 1 دولار. USD = 1 ضمنياً حتى لو لم يُذكر. */
@@ -31,6 +32,10 @@ export type CurrencyStrip = {
   credit: number;
   /** الرصيد الختامي موقّعاً: موجب = مدين، سالب = دائن (نفس اصطلاح الخادم). */
   closingBalance: number;
+  /** شيكات قيد التحصيل (لا تُخصم من الرصيد) والرصيد المتوقع بعد تحصيلها. */
+  pendingChecksTotal: number;
+  expectedBalance: number;
+  pendingChecks: { checkNo: string; bankName: string; dueDate: string; amount: number }[];
   conversion:
     | null
     | {
@@ -61,6 +66,9 @@ export function buildCurrencyStrips(
       debit: entry.totals.debit,
       credit: entry.totals.credit,
       closingBalance: entry.totals.closingBalance,
+      pendingChecksTotal: entry.totals.pendingChecksTotal ?? 0,
+      expectedBalance: entry.totals.expectedBalance ?? entry.totals.closingBalance,
+      pendingChecks: entry.pendingChecks ?? [],
       conversion: null,
       missingRate: false,
     };
