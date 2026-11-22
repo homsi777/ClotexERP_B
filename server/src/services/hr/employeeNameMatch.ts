@@ -15,34 +15,24 @@ export function normalizeArabicName(raw: string): string {
     .toLowerCase();
 }
 
-function editDistanceAtMostOne(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (Math.abs(a.length - b.length) > 1) return false;
-  let i = 0;
-  let j = 0;
-  let edits = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      i++;
-      j++;
-      continue;
-    }
-    edits++;
-    if (edits > 1) return false;
-    if (a.length > b.length) i++;
-    else if (a.length < b.length) j++;
-    else {
-      i++;
-      j++;
-    }
+/** حرف زائد/ناقص فقط (عشيري/عشري). الاستبدال مرفوض عمداً: «احمد/محمد» و«عواد/عماد» شخصان مختلفان. */
+function oneLetterInsertedOrDeleted(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) !== 1) return false;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  for (let i = 0; i < long.length; i++) {
+    if (long.slice(0, i) + long.slice(i + 1) === short) return true;
   }
-  return edits + (a.length - i) + (b.length - j) <= 1;
+  return false;
 }
 
+/** تطابق كلمة بالضبط (بعد التطبيع). */
 function tokenEq(a: string, b: string): boolean {
-  if (a === b) return true;
-  // «عشيري/عشري»: خطأ إملائي بحرف واحد يُقبل للكلمات الطويلة فقط.
-  return a.length >= 4 && b.length >= 4 && editDistanceAtMostOne(a, b);
+  return a === b;
+}
+
+/** تسامح إملائي (للكلمات من 4 أحرف فأكثر): لا يُطبَّق تلقائياً أبداً، بل يُعرض للتأكيد. */
+function tokenFuzzy(a: string, b: string): boolean {
+  return a === b || (a.length >= 4 && b.length >= 4 && oneLetterInsertedOrDeleted(a, b));
 }
 
 export interface NameCandidate {
@@ -53,6 +43,8 @@ export interface NameCandidate {
 
 export type NameMatch =
   | { kind: 'EXACT' | 'PREFIX' | 'TOKENS'; candidate: NameCandidate }
+  /** تشابه إملائي فقط (حرف زائد/ناقص) — لا يُعتمد تلقائياً؛ يحتاج تأكيداً بشرياً. */
+  | { kind: 'FUZZY'; candidate: NameCandidate }
   | { kind: 'AMBIGUOUS'; candidates: NameCandidate[] }
   | { kind: 'NONE' };
 
@@ -83,5 +75,13 @@ export function matchEmployeeByName(rawName: string, employees: NameCandidate[])
   });
   if (subset.length === 1) return { kind: 'TOKENS', candidate: subset[0].e };
   if (subset.length > 1) return { kind: 'AMBIGUOUS', candidates: subset.map((p) => p.e) };
+
+  // آخر مرحلة: تشابه إملائي (كلمات بادئة الاسم) — مرشح واحد فقط وبصفة «غير مؤكد».
+  const fuzzy = prepared.filter((p) => {
+    const toks = p.norm.split(' ');
+    return wantedTokens.length <= toks.length && wantedTokens.every((t, i) => tokenFuzzy(t, toks[i]));
+  });
+  if (fuzzy.length === 1) return { kind: 'FUZZY', candidate: fuzzy[0].e };
+  if (fuzzy.length > 1) return { kind: 'AMBIGUOUS', candidates: fuzzy.map((p) => p.e) };
   return { kind: 'NONE' };
 }

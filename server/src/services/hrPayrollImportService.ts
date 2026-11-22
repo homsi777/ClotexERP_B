@@ -4,6 +4,9 @@ import { checkStoredWage, deriveEmployeeWage } from './hr/employeeWageFromPayrol
 
 type ServiceErrorCode = 'VALIDATION' | 'DUPLICATE';
 
+/** بداية ملاحظة الموظفين المُنشَئين تلقائياً من ملف بصمة (createEmployeesFromFingerprints). */
+export const FINGERPRINT_PLACEHOLDER_NOTE = 'أُنشئ من استيراد ملف بصمة';
+
 function fail(message: string, code: ServiceErrorCode): never {
   throw Object.assign(new Error(message), { code });
 }
@@ -77,8 +80,8 @@ async function resolveOrCreateEmployee(
   workdayHours: number | null,
 ): Promise<{ id: string; created: boolean; mismatch: WageMismatch | null; wageFilled: boolean }> {
   const derived = deriveEmployeeWage({ comprehensive: row.comprehensiveWage, base: row.baseSalary });
-  const existing = await client.query<{ id: string; base_salary: string; full_name: string }>(
-    `SELECT id, base_salary, full_name FROM payroll_employees WHERE company_id = $1 AND fingerprint_code = $2`,
+  const existing = await client.query<{ id: string; base_salary: string; full_name: string; notes: string | null }>(
+    `SELECT id, base_salary, full_name, notes FROM payroll_employees WHERE company_id = $1 AND fingerprint_code = $2`,
     [companyId, row.employeeCode],
   );
   if (existing.rows.length) {
@@ -118,6 +121,15 @@ async function resolveOrCreateEmployee(
         row.gender ?? null,
       ],
     );
+    // موظف أُنشئ من ملف بصمة باسم الجهاز (مقطوع أو بالإنجليزية) ← يُعتمد الاسم الكامل من ملف المرتبات.
+    // لا يُمسّ أي اسم عدّله المستخدم: الشرط بقاء ملاحظة الإنشاء التلقائي كما هي.
+    const fileName = (row.fullName ?? '').trim();
+    if (e.notes?.startsWith(FINGERPRINT_PLACEHOLDER_NOTE) && fileName && fileName !== e.full_name.trim()) {
+      await client.query(
+        `UPDATE payroll_employees SET full_name = $3, notes = $4, updated_at = now() WHERE id = $1 AND company_id = $2`,
+        [e.id, companyId, fileName, `استُكملت البيانات من ملف المرتبات؛ الاسم بالجهاز كان: ${e.full_name.trim()}`],
+      );
+    }
     if (fillWage) {
       await client.query(
         `INSERT INTO employee_wage_rule_history (company_id, employee_id, effective_from, base_salary, notes, created_by_user_id)

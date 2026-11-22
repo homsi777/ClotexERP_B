@@ -29,11 +29,19 @@ test('بداية الاسم تطابق موظفاً واحداً', () => {
   assert.equal(m3.kind === 'PREFIX' && m3.candidate.code, '182');
 });
 
-test('تسامح إملائي بحرف واحد وذ/ز', () => {
-  const m = matchEmployeeByName('احمد حسن عشيرى', E);
-  assert.equal(m.kind !== 'NONE' && m.kind !== 'AMBIGUOUS' && m.candidate.code, '326');
+test('ذ/ز يُطبَّعان؛ والتشابه الإملائي (حرف زائد/ناقص) FUZZY لا يُعتمد تلقائياً', () => {
   const z = matchEmployeeByName('هيثم ذكريا', E);
-  assert.equal(z.kind !== 'NONE' && z.kind !== 'AMBIGUOUS' && z.candidate.code, '135');
+  assert.equal(z.kind, 'TOKENS');
+  assert.equal(z.kind === 'TOKENS' && z.candidate.code, '135');
+  const f = matchEmployeeByName('احمد حسن عشيرى', E);
+  assert.equal(f.kind, 'FUZZY', 'عشيري/عشري: يحتاج تأكيداً');
+  assert.equal(f.kind === 'FUZZY' && f.candidate.code, '326');
+});
+
+test('احمد ≠ محمد وعواد ≠ عماد: لا يُستبدل حرف أبداً', () => {
+  const people = [{ id: 'a', code: '227', name: 'محمد عماد' }, { id: 'b', code: '9', name: 'محمد احمد' }];
+  assert.equal(matchEmployeeByName('احمد عواد', people).kind, 'NONE');
+  assert.equal(matchEmployeeByName('محمد عماد رجب', [{ id: 'c', code: '1', name: 'محمد عماد' }]).kind, 'NONE', 'الاسم الأطول لا يطابق اسماً مقطوعاً');
 });
 
 test('تطابق تام يُفضَّل على البداية، والملتبس لا يُخمَّن، وغير الموجود NONE', () => {

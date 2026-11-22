@@ -162,6 +162,12 @@ export async function importAdvancesFromExcel(client: PoolClient, input: ImportA
         results.push(base);
         continue;
       }
+      if (m.kind === 'FUZZY') {
+        base.status = 'AMBIGUOUS';
+        base.note = `تشابه إملائي فقط مع: ${m.candidate.code} ${m.candidate.name} — تأكد يدوياً (لم تُنسب السلفة)`;
+        results.push(base);
+        continue;
+      }
       if (m.kind !== 'NONE') {
         emp = candidateById.get(m.candidate.id) ?? null;
         base.matchedBy = m.kind === 'EXACT' ? 'NAME_EXACT' : m.kind === 'PREFIX' ? 'NAME_PREFIX' : 'NAME_TOKENS';
