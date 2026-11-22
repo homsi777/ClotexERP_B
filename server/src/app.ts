@@ -39,6 +39,7 @@ import { voucherRoutes } from './routes/voucherRoutes.js';
 import { checksRoutes } from './routes/checksRoutes.js';
 import { payrollRoutes } from './routes/payrollRoutes.js';
 import { chatRoutes } from './routes/chatRoutes.js';
+import { checkImagesRoutes } from './routes/checkImagesRoutes.js';
 import { attendanceRoutes } from './routes/attendanceRoutes.js';
 import { reportRoutes } from './routes/reportRoutes.js';
 import { financeRoutes } from './routes/financeRoutes.js';
@@ -172,6 +173,7 @@ export async function buildApp() {
   await app.register(checksRoutes, { prefix: '/api/checks' });
   await app.register(payrollRoutes, { prefix: '/api/payroll' });
   await app.register(chatRoutes, { prefix: '/api/chat' });
+  await app.register(checkImagesRoutes, { prefix: '/api/check-images' });
   await app.register(attendanceRoutes, { prefix: '/api/attendance' });
   await app.register(reportRoutes, { prefix: '/api/reports' });
   await app.register(financeRoutes, { prefix: '/api/finance' });

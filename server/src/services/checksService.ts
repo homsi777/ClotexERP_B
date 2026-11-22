@@ -116,6 +116,13 @@ export async function createCheck(client: PoolClient, input: CreateCheckInput): 
   );
   const check = row.rows[0];
   await insertStatusHistory(client, { checkId: check.id, fromStatus: null, toStatus: 'RECEIVED', userId: input.userId });
+  if (input.imageData) {
+    // الصورة الأولى تُحفظ أيضاً كأصل في check_images كي يمكن تعديلها لاحقاً دون فقدان الأصل.
+    await client.query(
+      `INSERT INTO check_images (company_id, check_id, side, sort_order, original_data, created_by_user_id) VALUES ($1,$2,'FRONT',0,$3,$4)`,
+      [input.companyId, check.id, input.imageData, input.userId],
+    );
+  }
   return check;
 }
 

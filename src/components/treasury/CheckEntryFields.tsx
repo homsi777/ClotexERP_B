@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { compressOrderLineImage, compressOrderLineImageErrorMessage } from '../../lib/compressOrderLineImage';
 import { getCheckImage } from '../../lib/api/checksApi';
+import { ImageEditorModal } from '../common/ImageEditorModal';
 
 /** بيانات شيك جديد يُدخل مع السند (الصورة اختيارية). */
 export interface CheckDraft {
@@ -24,6 +25,8 @@ export const CheckImageInput: React.FC<{ value: string | null; onChange: (v: str
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** الصورة المختارة بانتظار المعاينة/القص/التدوير قبل اعتمادها. */
+  const [pending, setPending] = useState<string | null>(null);
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
@@ -31,7 +34,7 @@ export const CheckImageInput: React.FC<{ value: string | null; onChange: (v: str
     setError('');
     try {
       const res = await compressOrderLineImage(file);
-      onChange(res.dataUrl);
+      setPending(res.dataUrl);
     } catch (e) {
       setError(compressOrderLineImageErrorMessage(e));
     } finally {
@@ -71,6 +74,20 @@ export const CheckImageInput: React.FC<{ value: string | null; onChange: (v: str
       </div>
       <p className="text-[11px] text-slate-500">{t('form.imageOptional')}</p>
       {error && <p className="text-xs text-rose-600">{error}</p>}
+      {pending && (
+        <ImageEditorModal
+          title="معاينة وتحرير صورة الشيك"
+          originalSrc={pending}
+          saveLabel="اعتماد الصورة"
+          maxEdge={1600}
+          quality={0.85}
+          onSave={(r) => {
+            onChange(r.dataUrl);
+            setPending(null);
+          }}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </div>
   );
 };
@@ -105,6 +122,11 @@ export const CheckEntryFields: React.FC<{ value: CheckDraft; onChange: (v: Check
 };
 
 const imageCache = new Map<string, string | null>();
+
+/** بعد تعديل/إضافة صورة شيك تُمسح نسخته المخزَّنة لتُجلب من جديد. */
+export function clearCheckImageCache(checkId: string): void {
+  imageCache.delete(checkId);
+}
 
 /** صورة شيك تُجلب عند الطلب (القوائم لا تحمل الصور) مع تخزين مؤقت بالذاكرة. */
 export const CheckImage: React.FC<{ checkId: string; className?: string }> = ({ checkId, className }) => {

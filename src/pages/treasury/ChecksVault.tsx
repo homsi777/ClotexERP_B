@@ -17,9 +17,9 @@ import { listCustomers, type ApiCustomer } from '../../lib/api/customersApi';
 import { listSuppliers, type ApiSupplier } from '../../lib/api/suppliersApi';
 import { ApiRequestError } from '../../lib/api/client';
 import { useToast } from '../../components/NonBlockingToast';
-import { renderChecksSheetA4Html } from '../../lib/printing/renderChecksSheetA4';
-import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { CheckImage, CheckImageInput } from '../../components/treasury/CheckEntryFields';
+import { CheckImagesPanel } from '../../components/treasury/CheckImagesPanel';
+import { ChecksPrintDialog } from '../../components/treasury/ChecksPrintDialog';
 import { useDefaultCurrency, savePreferredCurrency } from '../../hooks/useDefaultCurrency';
 import { todayYmd, toYmd, daysUntil } from '../../lib/businessDate';
 
@@ -61,6 +61,7 @@ export const ChecksVault: React.FC = () => {
   const [depositingId, setDepositingId] = useState<string | null>(null);
   const [depositBankId, setDepositBankId] = useState('');
   const [selectedChecks, setSelectedChecks] = useState<CheckDto[]>([]);
+  const [printOpen, setPrintOpen] = useState(false);
 
   const [form, setForm] = useState({
     checkNo: '', bankName: '', accountHolderName: '',
@@ -222,9 +223,7 @@ export const ChecksVault: React.FC = () => {
   };
   const printSelected = () => {
     if (selectedChecks.length === 0) return;
-    const lang = i18n.language === 'tr' ? 'tr' : 'ar';
-    const html = renderChecksSheetA4Html({ checks: selectedChecks, lang });
-    openDocumentPrintWindow(html, t('print.title'));
+    setPrintOpen(true);
   };
 
   return (
@@ -368,7 +367,7 @@ export const ChecksVault: React.FC = () => {
       {viewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewing(null)}>
           <div className="max-h-[92vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
-            {viewing.has_image ? <CheckImage checkId={viewing.id} className="max-h-[60vh] w-full rounded-lg object-contain bg-slate-50" /> : <div className="p-6 text-center text-slate-400">{t('gallery.noImage')}</div>}
+            <CheckImagesPanel checkId={viewing.id} onChanged={() => void load()} />
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div><span className="text-slate-500">{t('col.checkNo')}: </span><b className="font-mono" dir="ltr">{viewing.check_no}</b></div>
               <div><span className="text-slate-500">{t('col.bank')}: </span><b>{viewing.bank_name}</b></div>
@@ -582,6 +581,14 @@ export const ChecksVault: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {printOpen && (
+        <ChecksPrintDialog
+          checks={selectedChecks}
+          onRemove={removeSelected}
+          onClose={() => setPrintOpen(false)}
+        />
       )}
     </div>
   );

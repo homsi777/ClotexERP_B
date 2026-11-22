@@ -1,5 +1,6 @@
 import { BRAND } from '../../branding';
 import i18n from '../../i18n/config';
+import { buildCheckInfoHtml } from './renderChecksImagesA4';
 
 function escapeHtml(s: unknown): string {
   return String(s ?? '')
@@ -19,11 +20,16 @@ export type PrintableCheck = {
   currency_code: string;
   due_date: string;
   image_data: string | null;
+  /** حقول اختيارية لقسم «معلومات القبض/التسليم» (وضع الكروت مع الخيار). */
+  account_holder_name?: string | null;
+  received_date?: string | null;
+  status?: string;
+  delivered_at?: string | null;
 };
 
 /** صفحة A4 لطباعة دفعة شيكات مُحدَّدة — صور الشيكات جنباً إلى جنب ثم صفوفاً،
  * بترتيب المستخدم بالضبط (لا إعادة فرز)، مع بياناتها الأساسية تحت كل صورة. */
-export function renderChecksSheetA4Html(opts: { checks: PrintableCheck[]; lang: 'ar' | 'tr' }): string {
+export function renderChecksSheetA4Html(opts: { checks: PrintableCheck[]; lang: 'ar' | 'tr'; includeInfo?: boolean }): string {
   const { checks, lang } = opts;
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
   const t = (key: string, options?: Record<string, unknown>) =>
@@ -43,6 +49,7 @@ export function renderChecksSheetA4Html(opts: { checks: PrintableCheck[]; lang: 
         <div><span class="lbl">${t('col.amount')}:</span> <span class="mono">${Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${escapeHtml(c.currency_code)}</span></div>
         <div><span class="lbl">${t('col.dueDate')}:</span> ${escapeHtml(c.due_date)}</div>
       </div>
+      ${opts.includeInfo ? buildCheckInfoHtml(c) : ''}
     </div>`,
     )
     .join('');
@@ -77,6 +84,8 @@ export function renderChecksSheetA4Html(opts: { checks: PrintableCheck[]; lang: 
     .meta { font-size: 9pt; display: grid; gap: 1mm; }
     .meta .lbl { font-weight: 700; color: #555; }
     .mono { font-family: monospace; }
+    .info { margin-top: 2mm; padding-top: 2mm; border-top: 0.2mm dashed #bbb; display: grid; gap: 0.8mm; font-size: 8.5pt; }
+    .info .lbl { font-weight: 700; color: #444; }
   </style>
 </head>
 <body>
