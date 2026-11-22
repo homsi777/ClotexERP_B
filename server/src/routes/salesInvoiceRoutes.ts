@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getPool } from '../db/pool.js';
-import { userCan } from '../middleware/auth.js';
+import { canPrice } from '../middleware/auth.js';
+import { listPricingQueue, maskMoneyRow, unpricedInvoiceBody } from '../services/pricingQueueService.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
@@ -32,17 +33,6 @@ function foreignKeyViolationMessage(e: unknown): string | null {
   return 'أحد السطور مرتبط بعنصر مخزون غير موجود.';
 }
 
-/** يصفّر الأسعار والإجماليات: فاتورة أولية (عميل + بضاعة) يسعّرها المحاسب لاحقاً. */
-function unpricedInvoiceBody(body: unknown): unknown {
-  if (!body || typeof body !== 'object') return body;
-  const b = { ...(body as Record<string, unknown>) };
-  const lines = Array.isArray(b.lines) ? (b.lines as Record<string, unknown>[]).map((l) => ({
-    ...l, unitPrice: 0, unitPriceUsd: 0, lineDiscount: 0, lineTax: 0, lineTotal: 0, lineDiscountUsd: 0, lineTaxUsd: 0, lineTotalUsd: 0,
-  })) : b.lines;
-  return { ...b, lines, subtotal: 0, discountTotal: 0, taxTotal: 0, totalAmount: 0, paidAmount: 0, remainingAmount: 0,
-    subtotalUsd: 0, discountTotalUsd: 0, taxTotalUsd: 0, totalAmountUsd: 0, paidAmountUsd: 0, remainingAmountUsd: 0, paymentStatus: 'unpaid' };
-}
-
 export const salesInvoiceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
@@ -57,7 +47,15 @@ export const salesInvoiceRoutes: FastifyPluginAsync = async (app) => {
       page: q.page ? parseInt(q.page, 10) : undefined,
       pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
     });
-    return reply.send({ ok: true, ...result });
+    const rows = canPrice(req.user, 'sales.invoices') ? result.rows : (result.rows as Record<string, unknown>[]).map((r) => maskMoneyRow(r, 'header'));
+    return reply.send({ ok: true, ...result, rows });
+  });
+
+  // مسودات بحاجة إلى تسعير (لإشعارات المحاسب/المدير): من لا يملك التسعير يرى قائمة فارغة.
+  app.get('/pricing-queue', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    if (!canPrice(req.user, 'sales.invoices')) return reply.send({ ok: true, data: { total: 0, items: [] } });
+    return reply.send({ ok: true, data: await listPricingQueue(getPool(), companyId) });
   });
 
   app.get('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -66,20 +64,18 @@ export const salesInvoiceRoutes: FastifyPluginAsync = async (app) => {
     const pool = getPool();
     const data = await getSalesInvoiceById(pool, companyId, id);
     if (!data) return sendError(reply, 404, 'فاتورة المبيعات غير موجودة', 'NOT_FOUND');
+    if (!canPrice(req.user, 'sales.invoices')) return reply.send({ ok: true, data: { header: maskMoneyRow(data.header, 'header'), lines: data.lines.map((l) => maskMoneyRow(l, 'line')) } });
     return reply.send({ ok: true, data });
   });
 
   app.post('/', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     // موظف بلا صلاحية «اعتماد» لا يرحّل مباشرة، وبلا «تسعير» تُحفظ فاتورته مسودة بلا أسعار للمحاسب.
-    if ((req.body as { confirm?: boolean } | null)?.confirm && !userCan(req.user, 'sales.invoices', 'approve')) {
-      return sendError(reply, 403, 'ترحيل الفاتورة من صلاحية المحاسب؛ احفظها كمسودة', 'FORBIDDEN');
-    }
     const pool = getPool();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const result = await createSalesInvoice(client, companyId, userId, userCan(req.user, 'sales.invoices', 'price') ? req.body : unpricedInvoiceBody(req.body));
+      const result = await createSalesInvoice(client, companyId, userId, canPrice(req.user, 'sales.invoices') ? req.body : unpricedInvoiceBody({ ...(req.body as Record<string, unknown>), confirm: false }));
       await client.query('COMMIT');
       return reply.status(201).send({ ok: true, data: result });
     } catch (e: unknown) {
@@ -116,7 +112,7 @@ export const salesInvoiceRoutes: FastifyPluginAsync = async (app) => {
 
   app.put('/:id/confirmed', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
-    if (!userCan(req.user, 'sales.invoices', 'price')) return sendError(reply, 403, 'تعديل فاتورة مرحّلة يتطلب صلاحية التسعير', 'FORBIDDEN');
+    if (!canPrice(req.user, 'sales.invoices')) return sendError(reply, 403, 'تعديل فاتورة مرحّلة يتطلب صلاحية التسعير', 'FORBIDDEN');
     const { id } = req.params as { id: string };
     const pool = getPool();
     const client = await pool.connect();
@@ -148,7 +144,7 @@ export const salesInvoiceRoutes: FastifyPluginAsync = async (app) => {
     try {
       await client.query('BEGIN');
       let body = req.body;
-      if (!userCan(req.user, 'sales.invoices', 'price')) {
+      if (!canPrice(req.user, 'sales.invoices')) {
         // سُعّرت المسودة من المحاسب؟ لا يُسمح لموظف بلا تسعير بتعديلها فتُصفَّر أسعاره.
         const priced = await client.query(`SELECT 1 FROM sales_invoice_lines WHERE invoice_id=$1 AND company_id=$2 AND unit_price > 0 LIMIT 1`, [id, companyId]);
         if (priced.rows.length) {

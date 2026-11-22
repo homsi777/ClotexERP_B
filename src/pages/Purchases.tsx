@@ -28,6 +28,8 @@ import { ApiRequestError } from '../lib/api/client';
 import { TelegramSendButton } from '../components/telegram/TelegramSendButton';
 import { sendTelegramPurchaseInvoiceById } from '../lib/telegramSendById';
 import { useTranslation } from 'react-i18next';
+import { fetchMe, type AuthUser } from '../lib/api/authApi';
+import { canPriceUser } from '../lib/priceAccess';
 
 const SCAN_DEBOUNCE_MS = 300;
 /** Minimum normalized length to auto-fire after debounce (warehouse scanners). */
@@ -39,6 +41,10 @@ type DocFilter = '' | 'DRAFT' | 'CONFIRMED' | 'VOIDED' | 'ALL';
 export const Purchases = () => {
   const { t } = useTranslation('invoices');
   const { showToast } = useToast();
+  const [me, setMe] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setMe).catch(() => setMe(null)); }, []);
+  // من لا يملك التسعير لا يرى الأعمدة المالية (إجمالي/مدفوع/متبقي/حالة الدفع).
+  const showMoney = canPriceUser(me, 'purchases.invoices');
   const { suppliers, importConfirmedPurchaseInvoice } = useStore();
   const [purchaseInvoices, setPurchaseInvoices] = useState<ListedPurchaseInvoice[]>([]);
   const [piLoading, setPiLoading] = useState(true);
@@ -464,11 +470,11 @@ export const Purchases = () => {
                 <th className="px-6 py-4">{t('list.colInvoiceNo')}</th>
                 <th className="px-6 py-4">{t('list.colDate')}</th>
                 <th className="px-6 py-4">{t('list.colSupplier')}</th>
-                <th className="px-6 py-4">{t('list.colTotal')}</th>
-                <th className="px-6 py-4">{t('list.colPaid')}</th>
-                <th className="px-6 py-4">{t('list.colRemaining')}</th>
+                {showMoney && <th className="px-6 py-4">{t('list.colTotal')}</th>}
+                {showMoney && <th className="px-6 py-4">{t('list.colPaid')}</th>}
+                {showMoney && <th className="px-6 py-4">{t('list.colRemaining')}</th>}
                 <th className="px-6 py-4">{t('list.colDocumentStatus')}</th>
-                <th className="px-4 py-4 whitespace-nowrap">{t('list.colPaymentStatus')}</th>
+                {showMoney && <th className="px-4 py-4 whitespace-nowrap">{t('list.colPaymentStatus')}</th>}
                 <th className="px-6 py-4">{t('list.colActions')}</th>
               </tr>
             </thead>
@@ -479,15 +485,15 @@ export const Purchases = () => {
                 const doc = invoice.documentStatus ?? '';
                 const ps = payStatus(invoice);
                 return (
-                  <tr key={invoice.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={invoice.id} className={`transition-colors ${invoice.needsPricing ? 'bg-orange-50 hover:bg-orange-100/70 border-s-4 border-orange-400' : 'hover:bg-slate-50/50'}`}>
                     <td className="px-6 py-4 font-mono font-medium text-indigo-600">{displayStoredInvoiceNo(invoice.invoiceNumber)}</td>
                     <td className="px-6 py-4 text-slate-500 font-medium">
                       {format(new Date(invoice.date), 'PP', { locale: ar })}
                     </td>
                     <td className="px-6 py-4 text-slate-700 font-bold">{partyName}</td>
-                    <td className="px-6 py-4 font-semibold text-slate-900">{invoice.totalAmount.toFixed(2)}</td>
-                    <td className="px-6 py-4 font-semibold text-emerald-600">{invoice.paidAmount.toFixed(2)}</td>
-                    <td className="px-6 py-4 font-semibold text-rose-600">{invoice.remainingAmount.toFixed(2)}</td>
+                    {showMoney && <td className="px-6 py-4 font-semibold text-slate-900">{invoice.totalAmount.toFixed(2)}</td>}
+                    {showMoney && <td className="px-6 py-4 font-semibold text-emerald-600">{invoice.paidAmount.toFixed(2)}</td>}
+                    {showMoney && <td className="px-6 py-4 font-semibold text-rose-600">{invoice.remainingAmount.toFixed(2)}</td>}
                     <td className="px-6 py-4">
                       <span
                         className={`px-2 py-1 rounded text-xs font-bold ${
@@ -502,8 +508,11 @@ export const Purchases = () => {
                       >
                         {arDocumentStatus(doc)}
                       </span>
+                        {invoice.needsPricing && (
+                          <span className="mt-1 block text-[11px] font-bold text-orange-700">بحاجة إلى تسعير</span>
+                        )}
                     </td>
-                    <td className="px-4 py-4">
+                    {showMoney && <td className="px-4 py-4">
                       <span
                         className={`inline-flex items-center justify-center whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${
                           ps === 'paid'
@@ -515,7 +524,7 @@ export const Purchases = () => {
                       >
                         {arInvoicePaymentStatusTable(ps)}
                       </span>
-                    </td>
+                    </td>}
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1.5 justify-end">
                         {doc === 'DRAFT' ? (
@@ -597,7 +606,7 @@ export const Purchases = () => {
               })}
               {purchaseInvoices.length === 0 && !piLoading && (
                  <tr>
-                 <td colSpan={9} className="px-6 py-12 text-center text-slate-500">{t('list.emptyPurchases')}</td>
+                 <td colSpan={showMoney ? 9 : 5} className="px-6 py-12 text-center text-slate-500">{t('list.emptyPurchases')}</td>
                </tr>
               )}
             </tbody>

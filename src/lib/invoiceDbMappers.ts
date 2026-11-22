@@ -285,7 +285,7 @@ export function mapPurchaseInvoiceDetailToInvoice(data: {
   };
 }
 
-export type ListedSaleInvoice = Invoice & { partyLabel?: string };
+export type ListedSaleInvoice = Invoice & { partyLabel?: string; needsPricing?: boolean; moneyHidden?: boolean };
 
 export function mapSalesListRowToInvoice(row: Record<string, unknown>): ListedSaleInvoice {
   const cn = row.customer_name != null ? String(row.customer_name).trim() : '';
@@ -311,10 +311,12 @@ export function mapSalesListRowToInvoice(row: Record<string, unknown>): ListedSa
     documentStatus: normalizeDocumentStatus(row.document_status),
     items: [],
     partyLabel: row.customer_name ? String(row.customer_name) : undefined,
+    needsPricing: Boolean(row.needs_pricing),
+    moneyHidden: Boolean(row.money_hidden),
   };
 }
 
-export type ListedPurchaseInvoice = Invoice & { partyLabel?: string };
+export type ListedPurchaseInvoice = Invoice & { partyLabel?: string; needsPricing?: boolean; moneyHidden?: boolean };
 
 export function mapPurchaseListRowToInvoice(row: Record<string, unknown>): ListedPurchaseInvoice {
   const sn = row.supplier_name != null ? String(row.supplier_name).trim() : '';
@@ -340,5 +342,7 @@ export function mapPurchaseListRowToInvoice(row: Record<string, unknown>): Liste
     documentStatus: normalizeDocumentStatus(row.document_status),
     items: [],
     partyLabel: row.supplier_name ? String(row.supplier_name) : undefined,
+    needsPricing: Boolean(row.needs_pricing),
+    moneyHidden: Boolean(row.money_hidden),
   };
 }

@@ -1,3 +1,4 @@
+import { PURCHASE_NEEDS_PRICING_SQL } from './pricingQueueService.js';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { postPurchaseInvoiceToGl, reversePurchaseInvoiceGl } from './glPostingService.js';
@@ -456,7 +457,7 @@ export async function listPurchaseInvoices(
   const where = conds.join(' AND ');
   const [rows, countRow] = await Promise.all([
     db.query(
-      `SELECT pi.*, s.name AS supplier_name
+      `SELECT pi.*, s.name AS supplier_name, ${PURCHASE_NEEDS_PRICING_SQL} AS needs_pricing
        FROM purchase_invoices pi
        INNER JOIN suppliers s ON s.id = pi.supplier_id AND s.company_id = pi.company_id
        WHERE ${where}

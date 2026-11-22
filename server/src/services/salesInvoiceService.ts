@@ -1,3 +1,4 @@
+import { SALES_NEEDS_PRICING_SQL } from './pricingQueueService.js';
 import {reserveRoll,releaseRollReservation,getRollReservation,assertReservationForInvoice,consumeRollReservation} from './rollReservationService.js';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
@@ -713,7 +714,7 @@ export async function listSalesInvoices(
   const where = conds.join(' AND ');
   const [rows, countRow] = await Promise.all([
     db.query(
-      `SELECT si.*, c.name AS customer_name
+      `SELECT si.*, c.name AS customer_name, ${SALES_NEEDS_PRICING_SQL} AS needs_pricing
        FROM sales_invoices si
        INNER JOIN customers c ON c.id = si.customer_id AND c.company_id = si.company_id
        WHERE ${where}

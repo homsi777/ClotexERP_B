@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getPool } from '../db/pool.js';
-import { authenticateRequest } from '../middleware/auth.js';
+import { authenticateRequest, canPrice } from '../middleware/auth.js';
+import { listPricingQueue, maskMoneyRow, unpricedInvoiceBody } from '../services/pricingQueueService.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import {
@@ -31,7 +32,15 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
       page: q.page ? parseInt(q.page, 10) : undefined,
       pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
     });
-    return reply.send({ ok: true, ...result });
+    const rows = canPrice(req.user, 'purchases.invoices') ? result.rows : (result.rows as Record<string, unknown>[]).map((r) => maskMoneyRow(r, 'header'));
+    return reply.send({ ok: true, ...result, rows });
+  });
+
+  // مسودات شراء بحاجة إلى تسعير (إشعارات المحاسب/المدير).
+  app.get('/pricing-queue', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    if (!canPrice(req.user, 'purchases.invoices')) return reply.send({ ok: true, data: { total: 0, items: [] } });
+    return reply.send({ ok: true, data: await listPricingQueue(getPool(), companyId) });
   });
 
   app.post('/repair-stale-rolls', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -61,6 +70,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     const pool = getPool();
     const data = await getPurchaseInvoiceById(pool, companyId, id);
     if (!data) return sendError(reply, 404, 'فاتورة الشراء غير موجودة', 'NOT_FOUND');
+    if (!canPrice(req.user, 'purchases.invoices')) return reply.send({ ok: true, data: { header: maskMoneyRow(data.header, 'header'), lines: data.lines.map((l) => maskMoneyRow(l, 'line')) } });
     return reply.send({ ok: true, data });
   });
 
@@ -70,7 +80,9 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const result = await createPurchaseInvoice(client, companyId, userId, req.body);
+      // موظف بلا صلاحية تسعير: تُحفظ مسودة بلا أسعار يسعّرها المحاسب/المدير لاحقاً.
+      const body = canPrice(req.user, 'purchases.invoices') ? req.body : unpricedInvoiceBody({ ...(req.body as Record<string, unknown>), confirm: false });
+      const result = await createPurchaseInvoice(client, companyId, userId, body);
       await client.query('COMMIT');
       return reply.status(201).send({ ok: true, data: result });
     } catch (e: unknown) {
@@ -101,6 +113,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
 
   app.put('/:id/confirmed', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
+    if (!canPrice(req.user, 'purchases.invoices')) return sendError(reply, 403, 'تعديل فاتورة مرحّلة يتطلب صلاحية التسعير', 'FORBIDDEN');
     const { id } = req.params as { id: string };
     const pool = getPool();
     const client = await pool.connect();
@@ -129,7 +142,16 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await updatePurchaseInvoiceDraft(client, companyId, userId, id, req.body);
+      let body = req.body;
+      if (!canPrice(req.user, 'purchases.invoices')) {
+        const priced = await client.query(`SELECT 1 FROM purchase_invoice_lines WHERE invoice_id=$1 AND company_id=$2 AND unit_cost > 0 LIMIT 1`, [id, companyId]);
+        if (priced.rows.length) {
+          await client.query('ROLLBACK');
+          return sendError(reply, 403, 'سعّر المحاسب هذه الفاتورة؛ تعديلها من صلاحية التسعير', 'FORBIDDEN');
+        }
+        body = unpricedInvoiceBody(body);
+      }
+      await updatePurchaseInvoiceDraft(client, companyId, userId, id, body);
       await client.query('COMMIT');
       return reply.send({ ok: true });
     } catch (e: unknown) {
@@ -188,6 +210,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/:id/confirm', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
+    if (!canPrice(req.user, 'purchases.invoices')) return sendError(reply, 403, 'ترحيل فاتورة الشراء من صلاحية المحاسب أو المدير', 'FORBIDDEN');
     const { id } = req.params as { id: string };
     const body = (req.body as Record<string, unknown>) || {};
     const pool = getPool();

@@ -76,7 +76,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
 
   { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/suppliers'], openRoots: ['/api/suppliers'], legacyAny: ['suppliers.view', 'suppliers.manage'],
     legacy: { view: W('suppliers.view'), create: W('suppliers.manage'), edit: W('suppliers.manage'), delete: W('suppliers.manage') } },
-  { code: 'purchases.invoices', name: 'فواتير الشراء', group: 'purchases', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export'], prefixes: ['/api/purchase-invoices'], legacyAny: ['purchases.view', 'purchases.manage'],
+  { code: 'purchases.invoices', name: 'فواتير الشراء', group: 'purchases', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/purchase-invoices'], legacyAny: ['purchases.view', 'purchases.manage'],
     needsView: ['suppliers', 'inventory.items'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), edit: W('purchases.manage'), delete: W('purchases.manage'), approve: W('purchases.manage') } },
   { code: 'purchases.import', name: 'استيراد المشتريات (Excel)', group: 'purchases', financial: true, actions: ['view', 'create', 'approve'], prefixes: ['/api/purchases/import'], legacyAny: ['purchases.view', 'purchases.manage'],
     needsView: ['suppliers'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), approve: W('purchases.manage') } },

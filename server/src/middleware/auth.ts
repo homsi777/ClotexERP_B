@@ -143,6 +143,20 @@ export function userCan(user: JwtPayload | undefined, moduleCode: string, action
   return (user.matrix ?? []).includes(`p:${moduleCode}.${action}`);
 }
 
+/**
+ * حق التسعير/الترحيل المالي بوحدة (فواتير بيع/شراء…): المدير دائماً؛ بوضع «مخصّص» من مُنح «تسعير» (أو «اعتماد» إن لم تُعرَّف «تسعير» للوحدة)؛
+ * وبوضع الدور: المحاسب والمدير التشغيلي فقط. الباقون (مخزون/مشاهد…) يحفظون مسودات بلا أسعار يسعّرها المحاسب لاحقاً.
+ */
+export function canPrice(user: JwtPayload | undefined, moduleCode: string): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.customPerms) {
+    const m = user.matrix ?? [];
+    return m.includes(`p:${moduleCode}.price`) || m.includes(`p:${moduleCode}.approve`);
+  }
+  return user.role === 'accountant' || user.role === 'manager';
+}
+
 export function requirePlatformAdmin(user: JwtPayload | undefined): boolean {
   return Boolean(user?.isPlatformAdmin);
 }

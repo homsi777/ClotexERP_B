@@ -46,6 +46,8 @@ import { useAnchoredPopoverStyle } from '../lib/useAnchoredPopoverStyle';
 import { fetchMe, type AuthUser } from '../lib/api/authApi';
 import { canSeePath } from '../lib/permissionNav';
 import { getCheckDueSummary, type CheckDueItem } from '../lib/api/checksApi';
+import { fetchPricingQueue, type PricingQueueItem } from '../lib/api/pricingQueueApi';
+import { canPriceUser } from '../lib/priceAccess';
 import { applyCompanyDefaultLanguage } from '../i18n/applyCompanyLanguage';
 
 /** أيام حتى موعد التوريد المتوقع (تاريخ محلي) */
@@ -120,7 +122,19 @@ const Topbar = () => {
     return () => { active = false; window.clearInterval(id); };
   }, [location.pathname]);
   const checkAlertCount = checkDue.overdue + checkDue.dueSoon;
-  const hasAlerts = pickupAlerts.length > 0 || checkAlertCount > 0;
+  // مسودات فواتير بحاجة إلى تسعير: إشعار للمحاسب/المدير فقط.
+  const [pricingQueue, setPricingQueue] = useState<PricingQueueItem[]>([]);
+  const mayPrice = canPriceUser(navUser, 'sales.invoices') || canPriceUser(navUser, 'purchases.invoices');
+  useEffect(() => {
+    if (!mayPrice) { setPricingQueue([]); return; }
+    let active = true;
+    const load = () => fetchPricingQueue().then((r) => { if (active) setPricingQueue(r.items); }).catch(() => undefined);
+    void load();
+    const id = window.setInterval(load, 2 * 60 * 1000);
+    return () => { active = false; window.clearInterval(id); };
+  }, [mayPrice, location.pathname]);
+  const pricingCount = pricingQueue.length;
+  const hasAlerts = pickupAlerts.length > 0 || checkAlertCount > 0 || pricingCount > 0;
 
   useEffect(() => {
     if (!notifyOpen) return;
@@ -313,7 +327,7 @@ const Topbar = () => {
         <Bell className={`w-5 h-5 ${hasAlerts ? 'text-amber-600' : ''}`} strokeWidth={2} />
         {hasAlerts && (
           <span className="notify-badge-pulse absolute -top-0.5 -start-0.5 min-w-[18px] h-[18px] px-0.5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-[9px] font-bold text-white flex items-center justify-center shadow-md ring-2 ring-white md:min-w-[20px] md:h-5 md:px-1 md:text-[10px]">
-            {pickupAlerts.length + checkAlertCount > 99 ? '99+' : pickupAlerts.length + checkAlertCount}
+            {pickupAlerts.length + checkAlertCount + pricingCount > 99 ? '99+' : pickupAlerts.length + checkAlertCount + pricingCount}
           </span>
         )}
       </button>
@@ -338,6 +352,21 @@ const Topbar = () => {
             </p>
           </div>
           <OrderNotificationInbox/>
+          {pricingCount > 0 && (
+            <div className="border-b border-orange-100 bg-orange-50/60 px-3 py-2">
+              <p className="mb-1 text-xs font-black text-orange-900">فواتير بحاجة إلى تسعير ({pricingCount})</p>
+              <ul className="space-y-1">
+                {pricingQueue.slice(0, 8).map((q) => (
+                  <li key={`${q.kind}:${q.id}`}>
+                    <Link to={q.kind === 'SALES' ? `/invoices/sales/${q.id}/edit` : `/invoices/purchases/${q.id}/edit`} onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-orange-100/70">
+                      <span className="truncate font-mono font-bold">{q.invoiceNo} · {q.partyName}</span>
+                      <span className="shrink-0 font-bold text-orange-800">{q.kind === 'SALES' ? 'بيع' : 'شراء'}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {checkAlertCount > 0 && (
             <div className="border-b border-amber-100 bg-amber-50/50 px-3 py-2">
               <p className="mb-1 text-xs font-black text-amber-900">{t('dueNotice.title', { ns: 'checksVault' })} ({checkAlertCount})</p>

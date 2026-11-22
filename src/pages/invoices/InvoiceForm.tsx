@@ -1,4 +1,5 @@
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
+import { canPriceUser } from '../../lib/priceAccess';
 import React, { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
 import { createPortal, flushSync } from 'react-dom';
@@ -839,7 +840,8 @@ export const InvoiceForm = () => {
     setWarehousesLoading(true);
     void (async () => {
       try {
-       const [cust, sup, stock, yarnLots, boxes, rates, whs] = await Promise.all([
+       // كل طلب مستقل: فشل واحد (مثلاً الصناديق بلا صلاحية خزينة) لا يُسقط بقية القوائم — وإلا اختفى العملاء عن حساب بصلاحيات محدودة.
+       const [cust, sup, stock, yarnLots, boxes, rates, whs] = await Promise.allSettled([
          listCustomers({ status: 'active', pageSize: 1000 }),
          listSuppliers({ status: 'active', pageSize: 1000 }),
          listFabricRolls({ onlyAvailable: true, pageSize: 10000 }), // متاح للبيع فقط (AVAILABLE + length_m > 0)
@@ -849,18 +851,26 @@ export const InvoiceForm = () => {
          listWarehouses({ status: 'active' }),
        ]);
         if (cancelled) return;
-        setApiCustomers(cust.data);
-        setApiSuppliers(sup.data);
-        setApiRolls(stock.data.filter((r) => (isSales ? isRollApplicableToSalesInvoice(r) : isRollAvailableForSale(r))));
-        setApiYarnLots(isSales ? yarnLots.data.filter(isYarnLotAvailableForSale) : []);
-        setExchangeRates(rates.data);
-        setApiWarehouses(whs);
+        const val = <T,>(r: PromiseSettledResult<T>): T | null => (r.status === 'fulfilled' ? r.value : null);
+        const custV = val(cust);
+        const supV = val(sup);
+        const stockV = val(stock);
+        const yarnV = val(yarnLots);
+        const boxesV = val(boxes);
+        const ratesV = val(rates);
+        const whsV = val(whs) ?? [];
+        setApiCustomers(custV?.data ?? []);
+        setApiSuppliers(supV?.data ?? []);
+        setApiRolls((stockV?.data ?? []).filter((r) => (isSales ? isRollApplicableToSalesInvoice(r) : isRollAvailableForSale(r))));
+        setApiYarnLots(isSales ? (yarnV?.data ?? []).filter(isYarnLotAvailableForSale) : []);
+        setExchangeRates(ratesV?.data ?? []);
+        setApiWarehouses(whsV);
         setWarehouse((prev) => {
-          if (prev && whs.some((w) => w.id === prev)) return prev;
-          return whs[0]?.id ?? '';
+          if (prev && whsV.some((w) => w.id === prev)) return prev;
+          return whsV[0]?.id ?? '';
         });
         setCashboxOptions(
-          (boxes.data ?? []).map((b) => ({ id: b.id, name: b.name, code: b.code })),
+          (boxesV?.data ?? []).map((b) => ({ id: b.id, name: b.name, code: b.code })),
         );
       } catch {
         if (cancelled) return;
@@ -2184,8 +2194,8 @@ export const InvoiceForm = () => {
   // موظف بصلاحيات مخصّصة بلا «تسعير/اعتماد»: فاتورة أولية (عميل + بضاعة) تُحفظ مسودة ويسعّرها ويرحّلها المحاسب.
   const [permUser, setPermUser] = useState<AuthUser | null>(null);
   useEffect(() => { void fetchMe().then(setPermUser).catch(() => setPermUser(null)); }, []);
-  const canPostInvoice = !permUser || permUser.role === 'admin' || permUser.permMode !== 'CUSTOM'
-    || ((permUser.permMatrix ?? []).includes('p:sales.invoices.approve') && (permUser.permMatrix ?? []).includes('p:sales.invoices.price'));
+  // بيع وشراء: من لا يملك التسعير (محاسب/مدير أو «تسعير» بالمصفوفة) يحفظ مسودة بلا أسعار تظهر للمحاسب بإشعار.
+  const canPostInvoice = canPriceUser(permUser, isSales ? 'sales.invoices' : 'purchases.invoices');
   const activeItems = items.filter((item) => !isEmptyInvoiceItem(item));
   const hasHardValidationErrors = activeItems.some(
     (item) => getItemError(item, 'length') || getItemError(item, 'weight'),
@@ -3224,17 +3234,23 @@ export const InvoiceForm = () => {
             <span className="hidden sm:inline">{t('page.cancel')}</span>
           </button>
           {!salesConfirmedEdit && !purchaseConfirmedEdit ? (
-            <button onClick={() => handleSave('draft')} disabled={hasHardValidationErrors || draftLoading || editBlocked} className="bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition shadow-sm font-medium disabled:opacity-50">
+            <button onClick={() => handleSave('draft')} disabled={hasHardValidationErrors || draftLoading || editBlocked} className={canPostInvoice ? 'bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition shadow-sm font-medium disabled:opacity-50' : 'bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50'}>
               <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('page.saveDraft')}</span>
+              <span className="hidden sm:inline">{canPostInvoice ? t('page.saveDraft') : 'حفظ للتسعير (مسودة)'}</span>
             </button>
           ) : null}
-          <button onClick={() => handleSave('final')} disabled={hasHardValidationErrors || draftLoading || editBlocked || (isSales && !canPostInvoice)} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50">
+          {canPostInvoice && <button onClick={() => handleSave('final')} disabled={hasHardValidationErrors || draftLoading || editBlocked} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50">
             <Save className="w-4 h-4" />
             <span className="hidden sm:inline">{salesConfirmedEdit || purchaseConfirmedEdit ? t('page.saveEdits') : t('page.saveFinal')}</span>
-          </button>
+          </button>}
         </div>
       </div>
+
+      {!canPostInvoice && permUser && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
+          تُحفظ هذه الفاتورة كمسودة «بحاجة إلى تسعير»: أدخل الطرف والبضاعة والكميات فقط. يسعّرها ويرحّلها المحاسب أو المدير، وتصله إشعاراً.
+        </div>
+      )}
 
       <div
         className={`bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-6 ${editBlocked || draftLoading ? 'pointer-events-none opacity-50' : ''}`}
