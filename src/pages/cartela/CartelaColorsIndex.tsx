@@ -11,18 +11,20 @@ const displayName = (r: CartelaColorIndexRow) => r.name_ar || r.name_tr || '—'
 export const CartelaColorsIndex: React.FC = () => {
   const [view, setView] = useState<View>('table');
   const [search, setSearch] = useState('');
-  const [rows, setRows] = useState<CartelaColorIndexRow[]>([]);
+  const [allRows, setAllRows] = useState<CartelaColorIndexRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
-  const [printing, setPrinting] = useState(false);
+  const [printing, setPrinting] = useState<CartelaColorIndexRow[] | null>(null);
+  const [fabricFilter, setFabricFilter] = useState('');
+  const [codeFilter, setCodeFilter] = useState('');
 
   const load = useCallback(async (term: string) => {
     setLoading(true);
     setError('');
     try {
-      setRows(await listCartelaColorsIndex(term));
+      setAllRows(await listCartelaColorsIndex(term));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذّر تحميل الألوان');
     } finally {
@@ -35,6 +37,16 @@ export const CartelaColorsIndex: React.FC = () => {
     const id = window.setTimeout(() => void load(search), 350);
     return () => window.clearTimeout(id);
   }, [search, load]);
+
+  const fabricOptions = useMemo(() => [...new Set(allRows.map((r) => r.fabric_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar')), [allRows]);
+  const codeOptions = useMemo(
+    () => [...new Set(allRows.filter((r) => !fabricFilter || r.fabric_name === fabricFilter).map((r) => r.material_code ?? '').filter(Boolean))].sort(),
+    [allRows, fabricFilter],
+  );
+  const rows = useMemo(
+    () => allRows.filter((r) => (!fabricFilter || r.fabric_name === fabricFilter) && (!codeFilter || (r.material_code ?? '') === codeFilter)),
+    [allRows, fabricFilter, codeFilter],
+  );
 
   const tree = useMemo(() => {
     const fabrics = new Map<string, Map<string, { title: string; serial: string; material: string; colors: CartelaColorIndexRow[] }>>();
@@ -89,7 +101,7 @@ export const CartelaColorsIndex: React.FC = () => {
         <button
           type="button"
           disabled={!selectedRows.length}
-          onClick={() => setPrinting(true)}
+          onClick={() => setPrinting(selectedRows)}
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-black disabled:opacity-40"
         >
           <Printer className="h-4 w-4" />
@@ -115,6 +127,14 @@ export const CartelaColorsIndex: React.FC = () => {
             <ListTree className="h-4 w-4" /> شجرة
           </button>
         </div>
+        <select value={fabricFilter} onChange={(e) => { setFabricFilter(e.target.value); setCodeFilter(''); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" aria-label="تصفية حسب الخامة">
+          <option value="">كل الخامات</option>
+          {fabricOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select value={codeFilter} onChange={(e) => setCodeFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" aria-label="تصفية حسب كود الخامة" dir="ltr">
+          <option value="">كل أكواد الخامة</option>
+          {codeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
         <span className="text-xs text-slate-500">
           {loading ? <Loader2 className="inline h-4 w-4 animate-spin" /> : `${rows.length} لون`}
           {picked.size > 0 && ` — المحدد ${picked.size}`}
@@ -137,6 +157,7 @@ export const CartelaColorsIndex: React.FC = () => {
                 <th className="p-3">كود اللون</th>
                 <th className="p-3">اسم اللون</th>
                 <th className="p-3">الباركود</th>
+                <th className="p-3">طباعة</th>
               </tr>
             </thead>
             <tbody>
@@ -151,11 +172,16 @@ export const CartelaColorsIndex: React.FC = () => {
                   <td className="p-3 font-mono font-bold" dir="ltr">{r.color_code}</td>
                   <td className="p-3">{displayName(r)}</td>
                   <td className="p-3 font-mono text-xs" dir="ltr">{r.barcode_code}</td>
+                  <td className="p-3">
+                    <button type="button" onClick={() => setPrinting([r])} title="طباعة ملصق هذا اللون" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                      <Printer className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!rows.length && !loading && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">لا توجد ألوان مطابقة.</td>
+                  <td colSpan={8} className="p-8 text-center text-slate-400">لا توجد ألوان مطابقة.</td>
                 </tr>
               )}
             </tbody>
@@ -194,6 +220,7 @@ export const CartelaColorsIndex: React.FC = () => {
                                 <span className="font-mono font-bold" dir="ltr">{x.color_code}</span>
                                 <span className="flex-1">{displayName(x)}</span>
                                 <span className="font-mono text-xs text-slate-500" dir="ltr">{x.barcode_code}</span>
+                                <button type="button" onClick={() => setPrinting([x])} title="طباعة ملصق هذا اللون" className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-white"><Printer className="h-3.5 w-3.5" /></button>
                               </li>
                             ))}
                           </ul>
@@ -208,7 +235,7 @@ export const CartelaColorsIndex: React.FC = () => {
         </div>
       )}
 
-      {printing && <CartelaColorLabelPrintModal colors={selectedRows} onClose={() => setPrinting(false)} />}
+      {printing && <CartelaColorLabelPrintModal colors={printing} onClose={() => setPrinting(null)} />}
     </div>
   );
 };

@@ -20,6 +20,7 @@ function labelHtml(cell: CartelaColorLabelCell): string {
     <div class="mat" dir="ltr">${esc(cell.materialCode)}</div>
     <div class="col" dir="ltr">${esc(cell.colorCode)}</div>
     <div class="bc">${svg}</div>
+    <div class="bt" dir="ltr">${esc(cell.barcodeCode)}</div>
   </div>`;
 }
 
@@ -40,7 +41,8 @@ const css = `
   .mat { font-size: 9pt; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .col { font-size: 12pt; font-weight: 900; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bc { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  .bc svg { width: 100%; height: 11.5mm; display: block; }
+  .bc svg { width: 100%; height: 9mm; display: block; }
+  .bt { font-size: 7pt; font-weight: 700; letter-spacing: 0.4px; line-height: 1.1; text-align: center; font-family: monospace; white-space: nowrap; overflow: hidden; }
 `;
 
 /** صفحة واحدة 50×25 لكل ملصق؛ copies = عدد النسخ لكل لون. */

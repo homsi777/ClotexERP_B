@@ -3268,7 +3268,8 @@ export const InvoiceForm = () => {
               placeholder={isSales ? t('party.partyPlaceholder') : t('party.supplierPlaceholder')}
               emptyLabel={isSales ? t('party.partyEmpty') : t('party.supplierEmpty')}
             />
-            {partyId && selectedParty ? (
+            {/* الرصيد السابق مالي: لا يظهر لمن لا يملك التسعير (محاسب/مدير). */}
+            {partyId && selectedParty && canPostInvoice ? (
               <p className={`text-xs font-bold font-mono px-0.5 ${balanceColor}`}>
                 {partyStatementBalanceLoading
                   ? t('party.loadingBalance')
