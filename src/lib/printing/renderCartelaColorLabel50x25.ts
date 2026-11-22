@@ -1,4 +1,5 @@
 import { buildCode128Svg } from './renderCartelaLabel';
+import { code128WidthMm } from './code128Width';
 
 /** ملصق اللون الفرعي للكارتيلة: 5×2.5 سم (50×25 مم) = كود الخامة / كود اللون / باركود — دون اسم الخامة (ملاحظة بشير). */
 export const CARTELA_COLOR_LABEL_WIDTH_MM = 50;
@@ -19,7 +20,7 @@ function labelHtml(cell: CartelaColorLabelCell): string {
   return `<div class="label">
     <div class="mat" dir="ltr">${esc(cell.materialCode)}</div>
     <div class="col" dir="ltr">${esc(cell.colorCode)}</div>
-    <div class="bc">${svg}</div>
+    <div class="bc"><div class="bcw" style="width:${code128WidthMm(bc)}mm">${svg}</div></div>
     <div class="bt" dir="ltr">${esc(cell.barcodeCode)}</div>
   </div>`;
 }
@@ -41,7 +42,8 @@ const css = `
   .mat { font-size: 9pt; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .col { font-size: 12pt; font-weight: 900; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bc { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  .bc svg { width: 100%; height: 9mm; display: block; }
+  .bcw { height: 9mm; }
+  .bc svg { width: 100%; height: 100%; display: block; }
   .bt { font-size: 7pt; font-weight: 700; letter-spacing: 0.4px; line-height: 1.1; text-align: center; font-family: monospace; white-space: nowrap; overflow: hidden; }
 `;
 
