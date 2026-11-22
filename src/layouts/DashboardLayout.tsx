@@ -151,6 +151,7 @@ const Topbar = () => {
       subItems: [
         { labelKey: 'cartelaMenu.generate', to: '/cartela' },
         { labelKey: 'cartelaMenu.library', to: '/cartela/library' },
+        { labelKey: 'cartelaMenu.colors', to: '/cartela/colors' },
         { labelKey: 'cartelaMenu.stock', to: '/cartela/stock' },
         { labelKey: 'cartelaMenu.delivery', to: '/cartela/delivery' },
         { labelKey: 'cartelaMenu.custody', to: '/cartela/custody' },

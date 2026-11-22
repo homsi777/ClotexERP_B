@@ -24,7 +24,7 @@ import { renderInventoryRollsAuditA4Html } from '../../lib/printing/renderInvent
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { getPrintAdapter } from '../../lib/printing/printAdapters';
 import { useToast } from '../NonBlockingToast';
-import { CartelaColorBatchPrintModal } from './CartelaColorBatchPrintModal';
+import { CartelaColorLabelPrintModal } from './CartelaColorLabelPrintModal';
 
 type ColorForm = {
   colorCode: string;
@@ -837,7 +837,7 @@ export const CartelaColorSwatchesPanel: React.FC<SwatchPanelProps> = ({ cartelaI
       </div>
 
       {batchOpen && (
-        <CartelaColorBatchPrintModal colors={selectedColors} onClose={() => setBatchOpen(false)} />
+        <CartelaColorLabelPrintModal colors={selectedColors} onClose={() => setBatchOpen(false)} />
       )}
 
       {formOpen && (

@@ -269,7 +269,7 @@ export interface SiblingColorsResult {
   candidates: SiblingColor[];
 }
 export interface CloneSiblingsResult {
-  created: { id: string; serialNo: string; colorCode: string | null; colorName: string | null }[];
+  created: { id: string; colorCode: string | null; colorName: string | null; barcodeCode: string }[];
   failed: { colorCode: string | null; colorName: string | null; message: string }[];
 }
 

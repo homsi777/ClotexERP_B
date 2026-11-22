@@ -577,6 +577,42 @@ export const cartelaRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  // فهرس كل ألوان الكارتيلات (جدول بحث + شجرة): ما يُعرض هنا = الألوان الفرعية لكل الكارتيلات بالفرع.
+  app.get('/colors-index', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const search = String((req.query as Record<string, string>).search ?? '').trim();
+    const params: unknown[] = [companyId];
+    let where = 'c.company_id = $1';
+    if (search) {
+      params.push(`%${search}%`);
+      where += ` AND (c.color_code ILIKE $2 OR c.name_ar ILIKE $2 OR c.name_tr ILIKE $2 OR c.barcode_code ILIKE $2
+                      OR cl.art_code ILIKE $2 OR cl.design_no ILIKE $2 OR cl.title ILIKE $2 OR cl.serial_no ILIKE $2 OR fi.name ILIKE $2)`;
+    }
+    const rows = await getPool().query(
+      `SELECT c.id, c.cartela_label_id, c.color_no, c.color_code, c.barcode_code, c.name_ar, c.name_tr, c.notes, c.image_url,
+              c.fabric_color_id, c.sort_order, c.created_at, c.updated_at,
+              COALESCE(NULLIF(btrim(cl.art_code), ''), NULLIF(btrim(cl.design_no), ''), '') AS material_code,
+              cl.title AS cartela_title, cl.serial_no AS cartela_serial, COALESCE(fi.name, cl.title) AS fabric_name
+         FROM cartela_label_colors c
+         JOIN cartela_labels cl ON cl.id = c.cartela_label_id AND cl.company_id = c.company_id
+         LEFT JOIN fabric_items fi ON fi.id = cl.fabric_item_id AND fi.company_id = cl.company_id
+        WHERE ${where}
+        ORDER BY COALESCE(fi.name, cl.title), cl.art_code, cl.serial_no, c.color_no
+        LIMIT 3000`,
+      params,
+    );
+    return reply.send({
+      ok: true,
+      data: rows.rows.map((row) => ({
+        ...mapCartelaColorRow(row),
+        material_code: row.material_code,
+        cartela_title: row.cartela_title,
+        cartela_serial: row.cartela_serial,
+        fabric_name: row.fabric_name,
+      })),
+    });
+  });
+
   app.get('/:cartelaId/colors', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const { cartelaId } = req.params as { cartelaId: string };
@@ -588,14 +624,16 @@ export const cartelaRoutes: FastifyPluginAsync = async (app) => {
       if (!parent.rows.length) return sendError(reply, 404, 'الكارتيلا غير موجودة', 'NOT_FOUND');
 
       const rows = await getPool().query(
-        `SELECT id, cartela_label_id, color_no, color_code, barcode_code, name_ar, name_tr, notes, image_url,
-                fabric_color_id, sort_order, created_at, updated_at
-           FROM cartela_label_colors
-          WHERE company_id = $1 AND cartela_label_id = $2
-          ORDER BY color_no ASC, sort_order ASC`,
+        `SELECT c.id, c.cartela_label_id, c.color_no, c.color_code, c.barcode_code, c.name_ar, c.name_tr, c.notes, c.image_url,
+                c.fabric_color_id, c.sort_order, c.created_at, c.updated_at,
+                COALESCE(NULLIF(btrim(cl.art_code), ''), NULLIF(btrim(cl.design_no), ''), '') AS material_code
+           FROM cartela_label_colors c
+           JOIN cartela_labels cl ON cl.id = c.cartela_label_id AND cl.company_id = c.company_id
+          WHERE c.company_id = $1 AND c.cartela_label_id = $2
+          ORDER BY c.color_no ASC, c.sort_order ASC`,
         [companyId, cartelaId],
       );
-      return reply.send({ ok: true, data: rows.rows.map((row) => mapCartelaColorRow(row)) });
+      return reply.send({ ok: true, data: rows.rows.map((row) => ({ ...mapCartelaColorRow(row), material_code: row.material_code })) });
     } catch (err) {
       if (mapCartelaDbError(reply, err)) return reply;
       throw err;

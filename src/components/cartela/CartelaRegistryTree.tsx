@@ -8,8 +8,7 @@ import {
   type CartelaColorSwatchDto,
 } from '../../lib/api/cartelaColorApi';
 import { groupCartelasByFabric } from '../../lib/cartela/cartelaTree';
-import { CARTELA_COLOR_PRESET_2_5X5 } from '../../lib/cartela/cartelaColorPrintSettings';
-import { CartelaColorBatchPrintModal } from './CartelaColorBatchPrintModal';
+import { CartelaColorLabelPrintModal } from './CartelaColorLabelPrintModal';
 import { useToast } from '../NonBlockingToast';
 
 type Props = {
@@ -293,11 +292,7 @@ export const CartelaRegistryTree: React.FC<Props> = ({
       })}
 
       {printColors && (
-        <CartelaColorBatchPrintModal
-          colors={printColors}
-          presetSettings={CARTELA_COLOR_PRESET_2_5X5}
-          onClose={() => setPrintColors(null)}
-        />
+        <CartelaColorLabelPrintModal colors={printColors} onClose={() => setPrintColors(null)} />
       )}
     </div>
   );

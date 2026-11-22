@@ -17,6 +17,15 @@ export interface CartelaColorSwatchDto {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  /** كود الخامة (كود الدسان) للكارتيلة الأم — يُطبع على ملصق اللون. */
+  material_code?: string;
+}
+
+/** صف فهرس كل ألوان الكارتيلات (جدول البحث/الشجرة). */
+export interface CartelaColorIndexRow extends CartelaColorSwatchDto {
+  cartela_title: string;
+  cartela_serial: string;
+  fabric_name: string;
 }
 
 export type CartelaColorSwatchPayload = {
@@ -35,6 +44,12 @@ export type CartelaColorLookupResult = CartelaLabelDto & {
   match_type: 'cartela' | 'color';
   color?: CartelaColorSwatchDto;
 };
+
+export async function listCartelaColorsIndex(search = ''): Promise<CartelaColorIndexRow[]> {
+  const qs = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+  const res = await apiFetch<{ ok: boolean; data: CartelaColorIndexRow[] }>(`/api/cartela/colors-index${qs}`);
+  return res.data;
+}
 
 export async function listCartelaColors(cartelaId: string): Promise<CartelaColorSwatchDto[]> {
   const res = await apiFetch<{ ok: boolean; data: CartelaColorSwatchDto[] }>(

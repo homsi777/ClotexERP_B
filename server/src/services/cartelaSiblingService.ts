@@ -1,7 +1,5 @@
 import type { PoolClient } from 'pg';
-import { buildColorBarcodeCode } from './cartelaColorService.js';
-import { allocateCartelaSerialNo } from './cartelaSerialService.js';
-import { ensureFabricVariantForColor } from './fabricItemVariantLinkService.js';
+import { allocateNextColorNo, buildColorBarcodeCode, normalizeColorCode, validateColorCode } from './cartelaColorService.js';
 
 type Db = Pick<PoolClient, 'query'>;
 
@@ -60,11 +58,14 @@ async function computeCandidates(db: Db, companyId: string, source: Record<strin
   // ألوان الخامات: فاريانتات مسجّلة + ألوان أتواب فعلية (قد لا يكون لها فاريانت بعد).
   const colors = await db.query(
     `SELECT x.item_id, x.color_id, fc.color_code, fc.name_ar,
-            EXISTS (
+            (EXISTS (
               SELECT 1 FROM fabric_item_variants v
                 JOIN cartela_labels cl ON cl.fabric_variant_id = v.id
                WHERE v.company_id = $1 AND v.item_id = x.item_id AND v.color_id = x.color_id
-            ) AS has_cartela
+            ) OR EXISTS (
+              SELECT 1 FROM cartela_label_colors clc
+               WHERE clc.company_id = $1 AND clc.cartela_label_id = $3 AND clc.fabric_color_id = x.color_id
+            )) AS has_cartela
        FROM (
          SELECT v.item_id, v.color_id FROM fabric_item_variants v
           WHERE v.company_id = $1 AND v.is_active AND v.item_id = ANY($2::uuid[])
@@ -74,7 +75,7 @@ async function computeCandidates(db: Db, companyId: string, source: Record<strin
        ) x
        JOIN fabric_colors fc ON fc.id = x.color_id
       ORDER BY fc.color_code NULLS LAST, fc.name_ar`,
-    [companyId, itemIds],
+    [companyId, itemIds, source.id],
   );
 
   // لون الكارتيلة المصدر نفسها يُستبعد.
@@ -101,18 +102,20 @@ export async function listSiblingColors(db: Db, companyId: string, cartelaId: st
 }
 
 export type CloneOutcome = {
-  created: { id: string; serialNo: string; colorCode: string | null; colorName: string | null }[];
+  /** الألوان المضافة كألوان فرعية داخل الكارتيلة نفسها (لا كارتيلات مستقلة). */
+  created: { id: string; colorCode: string | null; colorName: string | null; barcodeCode: string }[];
   failed: { colorCode: string | null; colorName: string | null; message: string }[];
 };
 
 /**
- * ينشئ كارتيلة لكل لون مختار بنفس مواصفات المصدر (عنوان، كود الدسان، التركيب، العرض، الوزن، رموز العناية، الشعار، الخط).
- * كل لون بنقطة حفظ مستقلة: فشل لون (كود لون غير صالح مثلاً) لا يُفشل البقية. على المستدعي فتح المعاملة.
+ * ملاحظة بشير: الألوان الأخرى لنفس الخامة تُضاف كألوان فرعية داخل الكارتيلة المصدر (cartela_label_colors)
+ * وليست كارتيلات منفردة. كود اللون الفرعي = كود لون الخامة إن صلح، وإلا C-NN؛ والباركود = الرقم التسلسلي-كود اللون.
+ * كل لون بنقطة حفظ مستقلة: فشل لون لا يُفشل البقية. على المستدعي فتح المعاملة.
  */
 export async function cloneCartelaToSiblings(
   client: PoolClient,
   companyId: string,
-  userId: string | null,
+  _userId: string | null,
   cartelaId: string,
   picks: { itemId: string; colorId: string }[],
 ): Promise<CloneOutcome> {
@@ -120,7 +123,10 @@ export async function cloneCartelaToSiblings(
   const source = await loadSource(client, companyId, cartelaId);
   const allowed = await computeCandidates(client, companyId, source);
   if (!allowed.linked) throw new SiblingError('الكارتيلة غير مرتبطة بخامة من المخزون', 'VALIDATION');
+  const serialNo = String(source.serial_no ?? '').trim();
+  if (!serialNo) throw new SiblingError('احفظ الكارتيلة برقم تسلسلي قبل إضافة ألوان', 'VALIDATION');
   const byKey = new Map(allowed.candidates.map((c) => [`${c.itemId}|${c.colorId}`, c]));
+  await client.query(`SELECT 1 FROM cartela_labels WHERE id = $1 AND company_id = $2 FOR UPDATE`, [cartelaId, companyId]);
 
   const out: CloneOutcome = { created: [], failed: [] };
   const seen = new Set<string>();
@@ -130,38 +136,32 @@ export async function cloneCartelaToSiblings(
     seen.add(key);
     const cand = byKey.get(key);
     if (!cand) {
-      out.failed.push({ colorCode: null, colorName: null, message: 'اللون غير مؤهل (له كارتيلة بالفعل أو ليس من نفس كود الدسان)' });
+      out.failed.push({ colorCode: null, colorName: null, message: 'اللون غير مؤهل (له كارتيلة أو لون فرعي بالفعل، أو ليس من نفس كود الدسان)' });
       continue;
     }
-    await client.query('SAVEPOINT cartela_clone_one');
+    await client.query('SAVEPOINT cartela_sub_color_one');
     try {
-      const variant = await ensureFabricVariantForColor(client, companyId, cand.itemId, cand.colorId);
-      const dup = await client.query(`SELECT 1 FROM cartela_labels WHERE fabric_variant_id = $1`, [variant.id]);
-      if (dup.rows.length) throw new SiblingError('يوجد كارتيلة مرتبطة بهذا اللون مسبقاً', 'VALIDATION');
-      const serial = await allocateCartelaSerialNo(client, companyId);
-      const barcode = buildColorBarcodeCode(serial, variant.variant_code);
-      const ins = await client.query(
-        `INSERT INTO cartela_labels (
-           company_id, title, art_code, design_no, colour,
-           width_value, width_unit, width_tolerance_enabled, width_tolerance_percent,
-           weight_value, weight_unit, weight_tolerance_enabled, weight_tolerance_percent,
-           composition, composition_lines, care_symbols, serial_no, show_logo, font_size_pt,
-           fabric_item_id, fabric_variant_id, barcode_code, created_by_user_id, updated_by_user_id
-         )
-         SELECT company_id, title, art_code, design_no, $3,
-                width_value, width_unit, width_tolerance_enabled, width_tolerance_percent,
-                weight_value, weight_unit, weight_tolerance_enabled, weight_tolerance_percent,
-                composition, composition_lines, care_symbols, $4, show_logo, font_size_pt,
-                $5, $6, $7, $8, $8
-           FROM cartela_labels WHERE id = $1 AND company_id = $2
-         RETURNING id, serial_no`,
-        [cartelaId, companyId, cand.colorName || cand.colorCode || '', serial, cand.itemId, variant.id, barcode, userId],
+      const colorNo = await allocateNextColorNo(client, cartelaId);
+      let colorCode = normalizeColorCode(cand.colorCode ?? '');
+      if (validateColorCode(colorCode) || !colorCode) colorCode = `C-${String(colorNo).padStart(2, '0')}`;
+      const taken = await client.query(
+        `SELECT 1 FROM cartela_label_colors WHERE cartela_label_id = $1 AND color_code = $2`,
+        [cartelaId, colorCode],
       );
-      out.created.push({ id: ins.rows[0].id, serialNo: ins.rows[0].serial_no, colorCode: cand.colorCode, colorName: cand.colorName });
-      await client.query('RELEASE SAVEPOINT cartela_clone_one');
+      if (taken.rows.length) colorCode = `C-${String(colorNo).padStart(2, '0')}`;
+      const barcode = buildColorBarcodeCode(serialNo, colorCode);
+      const ins = await client.query(
+        `INSERT INTO cartela_label_colors (
+           company_id, cartela_label_id, color_no, color_code, barcode_code, name_ar, name_tr, fabric_color_id, sort_order
+         ) VALUES ($1,$2,$3,$4,$5,$6,'',$7,$3)
+         RETURNING id`,
+        [companyId, cartelaId, colorNo, colorCode, barcode, cand.colorName ?? '', cand.colorId],
+      );
+      out.created.push({ id: ins.rows[0].id, colorCode, colorName: cand.colorName, barcodeCode: barcode });
+      await client.query('RELEASE SAVEPOINT cartela_sub_color_one');
     } catch (e) {
-      await client.query('ROLLBACK TO SAVEPOINT cartela_clone_one');
-      out.failed.push({ colorCode: cand.colorCode, colorName: cand.colorName, message: e instanceof Error ? e.message : 'تعذّر الإنشاء' });
+      await client.query('ROLLBACK TO SAVEPOINT cartela_sub_color_one');
+      out.failed.push({ colorCode: cand.colorCode, colorName: cand.colorName, message: e instanceof Error ? e.message : 'تعذّرت الإضافة' });
     }
   }
   return out;

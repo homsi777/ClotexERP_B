@@ -77,5 +77,6 @@
   "hub.warehouses.title": "Depolar ve Düzen",
   "hub.warehouses.desc": "Depolar, koğuşlar, transferler, sevk irsaliyeleri ve zayiat",
   "hub.settings.title": "Ayarlar",
-  "hub.settings.desc": "Kumaş kategorileri, stok ayarları ve toplu fiyatlandırma"
+  "hub.settings.desc": "Kumaş kategorileri, stok ayarları ve toplu fiyatlandırma",
+  "cartelaMenu.colors": "Kartela renkleri"
 }
