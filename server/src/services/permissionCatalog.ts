@@ -54,10 +54,13 @@ export const PERMISSION_GROUPS: { code: string; name: string }[] = [
   { code: 'sales', name: 'المبيعات والعملاء' },
   { code: 'purchases', name: 'المشتريات والموردون' },
   { code: 'inventory', name: 'المخزون والمستودعات' },
+  { code: 'yarn', name: 'مخزن الخيط' },
+  { code: 'cartela', name: 'الكارتيلات' },
   { code: 'treasury', name: 'الخزينة والمالية' },
   { code: 'hr', name: 'الموارد البشرية' },
   { code: 'manufacturing', name: 'التصنيع' },
   { code: 'external', name: 'المصنعية الخارجية' },
+  { code: 'partners', name: 'الشركاء' },
   { code: 'system', name: 'النظام والإدارة' },
 ];
 
@@ -72,7 +75,8 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'sales.invoices', name: 'فواتير البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/sales-invoices'],
     needsView: ['customers', 'inventory.items', 'inventory.rolls'], legacy: { price: W('invoices.price') } },
   { code: 'sales.returns', name: 'مرتجعات البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/returns'], needsView: ['customers', 'sales.invoices'] },
-  { code: 'cartela', name: 'الكارتيلات', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela', '/api/cartela-custody'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'inventory.items'] },
+  { code: 'cartela', name: 'الكارتيلات (التوليد والمكتبة والألوان)', group: 'cartela', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'inventory.items'] },
+  { code: 'cartela.custody', name: 'عهدة وتسليم الكارتيلات', group: 'cartela', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela-custody'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'cartela'] },
 
   { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/suppliers'], openRoots: ['/api/suppliers'], legacyAny: ['suppliers.view', 'suppliers.manage'],
     legacy: { view: W('suppliers.view'), create: W('suppliers.manage'), edit: W('suppliers.manage'), delete: W('suppliers.manage') } },
@@ -85,7 +89,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage') } },
   { code: 'inventory.rolls', name: 'الأتواب (الرولات) والجرد', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/rolls', '/api/inventory/stock-import', '/api/labels', '/api/intake-operations', '/api/intake-dispatch-slips'], legacyAny: ['inventory.view', 'inventory.manage'],
     needsView: ['inventory.items', 'inventory.warehouses'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage') } },
-  { code: 'inventory.yarn', name: 'الخيوط', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/yarn-lots'], legacyAny: ['inventory.view', 'inventory.manage'],
+  { code: 'inventory.yarn', name: 'مخزن الخيط (الدفعات والحركات)', group: 'yarn', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/yarn-lots'], legacyAny: ['inventory.view', 'inventory.manage'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage'), costView: W('inventory.yarn.cost.view') } },
   { code: 'inventory.transfers', name: 'تحويلات المخزون', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/inventory/transfers'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['inventory.rolls', 'inventory.warehouses'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), approve: W('inventory.manage') } },
@@ -127,8 +131,10 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     legacy: { view: W('manufacturing.reports.view'), print: W('manufacturing.reports.print'), export: W('manufacturing.reports.export') } },
 
   { code: 'external.jobs', name: 'مهام المصنعية الخارجية', group: 'external', actions: ['view', 'create', 'edit', 'delete', 'approve', 'price', 'print'], prefixes: ['/api/external-jobs'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['suppliers', 'inventory.rolls'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage') } },
+  { code: 'external.entry', name: 'إدخال المصنعية الخارجية (المعالجة والاستلام)', group: 'external', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/external-jobs/processing', '/api/external-jobs/preparation-types', '/api/external-jobs/:id/processing', '/api/external-jobs/:id/void-processing', '/api/external-jobs/:id/receipt', '/api/external-jobs/:id/lines/:lineId/receive'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['external.jobs', 'suppliers', 'inventory.rolls'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage') } },
   { code: 'external.matching', name: 'تسوية إرساليات المصنعية', group: 'external', financial: true, actions: ['view', 'approve'], prefixes: ['/api/external-job-matching'] },
 
+  { code: 'partners', name: 'الشركاء', group: 'partners', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: [] },
   { code: 'system.settings', name: 'إعدادات النظام', group: 'system', actions: ['view', 'edit'], prefixes: [], legacy: { view: W('settings.view'), edit: W('settings.manage') } },
   { code: 'system.users', name: 'المستخدمون والصلاحيات', group: 'system', actions: ['view', 'create', 'edit', 'delete'], prefixes: [], legacy: { view: W('users.manage'), create: W('users.manage'), edit: W('users.manage'), delete: W('users.manage') } },
   { code: 'system.ai', name: 'المساعد الذكي', group: 'system', actions: ['view'], prefixes: ['/api/ai', '/api/v1/ai'] },

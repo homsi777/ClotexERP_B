@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ALL_MATRIX_CODES, PERMISSION_MODULES, effectiveCustomPermissions, expandImplied, legacyCodesFor, permissionCode, resolveRoutePolicy } from './permissionCatalog.js';
+import { ALL_MATRIX_CODES, PERMISSION_GROUPS, PERMISSION_MODULES, effectiveCustomPermissions, expandImplied, legacyCodesFor, permissionCode, resolveRoutePolicy } from './permissionCatalog.js';
 
 // 1) لا تكرار بأكواد الوحدات ولا ببادئات المسارات
 assert.equal(new Set(PERMISSION_MODULES.map((m) => m.code)).size, PERMISSION_MODULES.length, 'module codes unique');
@@ -23,6 +23,24 @@ assert.equal(p('/api/sales-invoices/search', 'POST').code, permissionCode('sales
 assert.equal(p('/api/manufacturing/costing/:id', 'GET').module.code, 'manufacturing.costing');
 assert.equal(p('/api/manufacturing/warping', 'GET').module.code, 'manufacturing.warping');
 assert.equal(p('/api/manufacturing/items', 'GET').module.code, 'manufacturing.reference');
+// تقسيم الأقسام: كارتيلات / عهدة الكارتيلات، مهام / إدخال المصنعية الخارجية، مخزن الخيط
+assert.equal(p('/api/cartela/colors-index', 'GET').module.code, 'cartela');
+assert.equal(p('/api/cartela-custody/vouchers', 'POST').module.code, 'cartela.custody');
+assert.equal(p('/api/external-jobs/processing', 'POST').module.code, 'external.entry');
+assert.equal(p('/api/external-jobs/:id/receipt', 'POST').module.code, 'external.entry');
+assert.equal(p('/api/external-jobs/:id/lines/:lineId/receive', 'POST').module.code, 'external.entry');
+assert.equal(p('/api/external-jobs/:id/pricing', 'POST').module.code, 'external.jobs', 'التسعير يبقى بمهام المصنعية');
+assert.equal(p('/api/external-jobs/:id/lifecycle/inventory-complete', 'POST').module.code, 'external.jobs');
+assert.equal(p('/api/inventory/yarn-lots', 'GET').module.code, 'inventory.yarn');
+for (const [mod, grp] of [['cartela', 'cartela'], ['cartela.custody', 'cartela'], ['inventory.yarn', 'yarn'], ['partners', 'partners'], ['external.entry', 'external']] as const) {
+  const m = PERMISSION_MODULES.find((x) => x.code === mod);
+  assert.ok(m, mod);
+  assert.equal(m!.group, grp);
+  assert.ok(PERMISSION_GROUPS.some((g) => g.code === grp), grp + ' group exists');
+}
+// إدخال المصنعية يستلزم عرض المهام ضمنياً
+assert.ok(expandImplied([permissionCode('external.entry', 'create')]).has('p:external.jobs.view'));
+
 // مسارات بلا وحدة غير مقيَّدة مركزياً
 assert.equal(resolveRoutePolicy('/api/auth/me', 'GET'), null);
 assert.equal(resolveRoutePolicy('/api/system/users', 'GET'), null);
