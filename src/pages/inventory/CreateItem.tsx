@@ -1,3 +1,5 @@
+import { fetchMe, type AuthUser } from '../../lib/api/authApi';
+import { canPriceUser } from '../../lib/priceAccess';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Save, FileText, ArrowRight, ScanLine, ImagePlus, Upload, X, Printer } from 'lucide-react';
@@ -287,6 +289,10 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
   const [widthUnit, setWidthUnit] = useState<'inch' | 'cm'>('cm');
   const [rollWidth, setRollWidth] = useState<number | ''>(150);
   
+  // أسعار التكلفة والبيع: للمحاسب/المدير أو من مُنح «عرض التكلفة»؛ غيرهم يُنشئون المادة بلا أسعار ويسعّرها المحاسب لاحقاً (التسعير الجماعي).
+  const [priceUser, setPriceUser] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setPriceUser).catch(() => setPriceUser(null)); }, []);
+  const showPrices = canPriceUser(priceUser, 'inventory.items') || (priceUser?.permMode === 'CUSTOM' && (priceUser.permMatrix ?? []).some((c) => c === 'p:inventory.items.costView' || c === 'p:inventory.rolls.costView'));
   const [costPrice, setCostPrice] = useState<number | ''>('');
   const [sellingPrice, setSellingPrice] = useState<number | ''>('');
   
@@ -1776,7 +1782,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                    />
                 </div>
 
-{!isReceipt && <div className="space-y-3">
+{!isReceipt && showPrices && <div className="space-y-3">
                    <label className="block text-sm font-bold text-slate-700">{t('form.costPriceLabel')}</label>
                    <div className="relative">
                      <input 
@@ -1794,7 +1800,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                    </div>
                  </div>}
 
-                 {!isReceipt && <div className="space-y-3">
+                 {!isReceipt && showPrices && <div className="space-y-3">
                    <label className="block text-sm font-bold text-slate-700">{t('form.sellingPriceLabel')}</label>
                    <div className="relative">
                      <input 

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { useTranslation } from 'react-i18next';
+import { fetchMe, type AuthUser } from '../lib/api/authApi';
+import { canPriceUser } from '../lib/priceAccess';
 import { Search, Filter, Plus, ArrowLeftRight, Loader2, Eye, Pencil, Ban, Printer, Share2 } from 'lucide-react';
 import {
   listReturns,
@@ -116,6 +118,10 @@ function mapReturnToPrintableInvoice(detail: ReturnInvoiceDetail): Invoice {
 export const ReturnInvoices = () => {
   const { t } = useTranslation('returns');
   const { showToast } = useToast();
+  const [me, setMe] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setMe).catch(() => setMe(null)); }, []);
+  // مبالغ المرتجعات مالية: لا تظهر لمن لا يملك التسعير/الاعتماد (محاسب أو مدير).
+  const showMoney = canPriceUser(me, 'sales.returns');
   const [rows, setRows] = useState<ReturnInvoice[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -720,7 +726,7 @@ export const ReturnInvoices = () => {
                 <th className="px-4 py-3">{t('table.colType')}</th>
                 <th className="px-4 py-3">{t('table.colOriginalInvoice')}</th>
                 <th className="px-4 py-3">{t('table.colCustomerSupplier')}</th>
-                <th className="px-4 py-3">{t('table.colTotal')}</th>
+                {showMoney && <th className="px-4 py-3">{t('table.colTotal')}</th>}
                 <th className="px-4 py-3">{t('table.colStatus')}</th>
                 <th className="px-4 py-3">{t('table.colActions')}</th>
               </tr>
@@ -728,14 +734,14 @@ export const ReturnInvoices = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={showMoney ? 8 : 7} className="px-6 py-12 text-center text-slate-500">
                     <Loader2 className="w-6 h-6 animate-spin inline mr-2" />
                     {t('table.loading')}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={showMoney ? 8 : 7} className="px-6 py-12 text-center text-slate-500">
                     {t('table.noReturns')}
                   </td>
                 </tr>
@@ -749,10 +755,10 @@ export const ReturnInvoices = () => {
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {invoice.customer_name || invoice.supplier_name || '—'}
                     </td>
-                    <td className="px-4 py-3 font-bold text-slate-900">
+                    {showMoney && <td className="px-4 py-3 font-bold text-slate-900">
                       {Number(invoice.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}{' '}
                       {invoice.currency_code}
-                    </td>
+                    </td>}
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 rounded text-xs font-bold bg-slate-100 text-slate-800">
                         {arDocumentStatus(invoice.status)}
