@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
-import { authenticateRequest } from '../middleware/auth.js';
+import { authenticateRequest, canSeeFinance, requireEditOrGrant } from '../middleware/auth.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import { sendError } from '../middleware/errorHandler.js';
@@ -294,6 +294,7 @@ export const customerRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/:id/statement', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canSeeFinance(req.user, 'customers')) return sendError(reply, 403, 'كشف الحساب والأمور المالية ليست ضمن صلاحياتك', 'FORBIDDEN');
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;
@@ -316,6 +317,7 @@ export const customerRoutes: FastifyPluginAsync = async (app) => {
    * دون جمعها ببعضها. تحويل أي رصيد للدولار يبقى اختياراً بالواجهة فقط عند
    * الطلب (بنفس آلية TASK 004) — هذا المسار يعيد القيم الأصلية الصحيحة أولاً. */
   app.get('/:id/statement-by-currency', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canSeeFinance(req.user, 'customers')) return sendError(reply, 403, 'كشف الحساب والأمور المالية ليست ضمن صلاحياتك', 'FORBIDDEN');
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;
@@ -745,6 +747,7 @@ export const customerRoutes: FastifyPluginAsync = async (app) => {
   app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
+    if (!(await requireEditOrGrant(req, reply, 'customers', id))) return reply;
     const parsed = customerBody.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 400, formatZodValidationMessage(parsed.error), 'VALIDATION');
@@ -787,6 +790,7 @@ export const customerRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/:id/toggle-status', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
+    if (!(await requireEditOrGrant(req, reply, 'customers', id))) return reply;
     const pool = getPool();
     const row = await pool.query(
       `UPDATE customers SET is_active = NOT is_active, updated_at=now()

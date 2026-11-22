@@ -8,6 +8,7 @@ import { touchActiveSession, isSessionRevoked } from '../services/activeSessions
 import { clientIp } from '../utils/clientIp.js';
 import { effectivePermissionsForUser } from '../services/userPermissionService.js';
 import { ACTION_LABELS, resolveRoutePolicy } from '../services/permissionCatalog.js';
+import { findApprovedGrant } from '../services/editRequestService.js';
 
 export type JwtPayload = {
   sub: string;
@@ -111,7 +112,18 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
       payload.matrix = eff.matrix;
       payload.customPerms = true;
       const policy = resolveRoutePolicy(request.routeOptions?.url ?? request.url.split('?')[0], request.method);
-      if (policy && !policy.open && !eff.matrix.includes(policy.code)) {
+      // استثناء واحد: إذن تعديل معتمد (x-edit-request) لهذا العنصر بالذات يسمح بمرة تعديل بلا صلاحية «تعديل» بالمصفوفة.
+      let grantOk = false;
+      const grantHeader = String(request.headers['x-edit-request'] ?? '').trim();
+      const m = request.method.toUpperCase();
+      if (policy && !policy.open && !eff.matrix.includes(policy.code) && grantHeader && (m === 'PUT' || m === 'PATCH')) {
+        const entityId = String((request.params as { id?: string } | undefined)?.id ?? '');
+        if (await findApprovedGrant(pool, payload.companyId, payload.sub, grantHeader, entityId)) {
+          grantOk = true;
+          request.editGrantId = grantHeader;
+        }
+      }
+      if (policy && !policy.open && !eff.matrix.includes(policy.code) && !grantOk) {
         return sendError(reply, 403, `ليست لديك صلاحية «${ACTION_LABELS[policy.action]}» في «${policy.module.name}»`, 'FORBIDDEN');
       }
     }
@@ -157,6 +169,38 @@ export function canPrice(user: JwtPayload | undefined, moduleCode: string): bool
   return user.role === 'accountant' || user.role === 'manager';
 }
 
+/** تعديل مباشر بلا إذن: المدير/المحاسب/المدير التشغيلي بالدور؛ وبالمصفوفة من مُنح «تعديل» للوحدة. */
+export function canEditDirect(user: JwtPayload | undefined, moduleCode: string): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.customPerms) return (user.matrix ?? []).includes(`p:${moduleCode}.edit`);
+  return user.role === 'accountant' || user.role === 'manager';
+}
+
+/** الاطلاع على الأمور المالية لطرف (كشف حساب/أرصدة): المدير؛ بالمصفوفة من مُنح «عرض المالية» (costView)؛ وبالدور المحاسب والمدير التشغيلي. */
+export function canSeeFinance(user: JwtPayload | undefined, moduleCode: string): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.customPerms) return (user.matrix ?? []).includes(`p:${moduleCode}.costView`);
+  return user.role === 'accountant' || user.role === 'manager';
+}
+
+/**
+ * حارس مسارات التعديل: مسموح لمن يملك التعديل المباشر، أو لمن معه إذن معتمد (ترويسة x-edit-request) لهذا العنصر.
+ * الإذن يُستهلك تلقائياً بعد نجاح الطلب (hook بالتطبيق). يرجع false بعد إرسال 403 برمز EDIT_APPROVAL_REQUIRED.
+ */
+export async function requireEditOrGrant(request: FastifyRequest, reply: FastifyReply, moduleCode: string, entityId: string): Promise<boolean> {
+  const user = request.user;
+  if (canEditDirect(user, moduleCode)) return true;
+  const grant = String(request.headers['x-edit-request'] ?? '').trim();
+  if (user && grant && (await findApprovedGrant(getPool(), user.companyId, user.sub, grant, entityId))) {
+    request.editGrantId = grant;
+    return true;
+  }
+  sendError(reply, 403, 'التعديل يحتاج إذن المسؤول — اطلب الإذن أولاً', 'EDIT_APPROVAL_REQUIRED');
+  return false;
+}
+
 export function requirePlatformAdmin(user: JwtPayload | undefined): boolean {
   return Boolean(user?.isPlatformAdmin);
 }
@@ -165,5 +209,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     user?: JwtPayload;
     authToken?: string;
+    /** إذن تعديل معتمد استُعمل بهذا الطلب (يُستهلك عند النجاح). */
+    editGrantId?: string;
   }
 }

@@ -38,7 +38,10 @@ import { exchangeRateRoutes } from './routes/exchangeRateRoutes.js';
 import { voucherRoutes } from './routes/voucherRoutes.js';
 import { checksRoutes } from './routes/checksRoutes.js';
 import { payrollRoutes } from './routes/payrollRoutes.js';
+import { getPool } from './db/pool.js';
 import { chatRoutes } from './routes/chatRoutes.js';
+import { editRequestRoutes } from './routes/editRequestRoutes.js';
+import { markGrantUsed } from './services/editRequestService.js';
 import { checkImagesRoutes } from './routes/checkImagesRoutes.js';
 import { attendanceRoutes } from './routes/attendanceRoutes.js';
 import { reportRoutes } from './routes/reportRoutes.js';
@@ -94,6 +97,13 @@ export async function buildApp() {
   });
 
   app.setErrorHandler(globalErrorHandler);
+
+  // إذن التعديل المعتمد يُستهلك مرة واحدة بعد نجاح الطلب الذي استعمله.
+  app.addHook('onResponse', async (request, reply) => {
+    if (request.editGrantId && reply.statusCode < 300 && request.user) {
+      await markGrantUsed(getPool(), request.user.companyId, request.editGrantId).catch(() => undefined);
+    }
+  });
 
   app.addHook('onRequest', async (request, reply) => {
     if (!getEnv().ACTIVATION_REQUIRE_ACTIVE) return;
@@ -173,6 +183,7 @@ export async function buildApp() {
   await app.register(checksRoutes, { prefix: '/api/checks' });
   await app.register(payrollRoutes, { prefix: '/api/payroll' });
   await app.register(chatRoutes, { prefix: '/api/chat' });
+  await app.register(editRequestRoutes, { prefix: '/api/edit-requests' });
   await app.register(checkImagesRoutes, { prefix: '/api/check-images' });
   await app.register(attendanceRoutes, { prefix: '/api/attendance' });
   await app.register(reportRoutes, { prefix: '/api/reports' });

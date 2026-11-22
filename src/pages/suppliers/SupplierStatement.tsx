@@ -1,3 +1,5 @@
+import { fetchMe, type AuthUser } from '../../lib/api/authApi';
+import { canSeeFinanceUser } from '../../lib/priceAccess';
 import React, { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
@@ -58,7 +60,7 @@ interface SupplierFabricItem {
   invoiceRef: string;
 }
 
-export const SupplierStatement = () => {
+const SupplierStatementInner = () => {
   const { t } = useTranslation('supplierStatement');
   const { t: tCustomerStmt } = useTranslation('customerStatement');
   const { showToast } = useToast();
@@ -1303,4 +1305,15 @@ export const SupplierStatement = () => {
       )}
     </div>
   );
+};
+
+/** كشف الحساب مالي: لا يُعرض لمن لا يملك «الأمور المالية» (الخادم يرفض أيضاً). */
+export const SupplierStatement = () => {
+  const [me, setMe] = React.useState<AuthUser | null | undefined>(undefined);
+  React.useEffect(() => { void fetchMe().then(setMe).catch(() => setMe(null)); }, []);
+  if (me === undefined) return null;
+  if (!canSeeFinanceUser(me, 'suppliers')) {
+    return <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center font-bold text-amber-900" dir="rtl">كشف الحساب والأمور المالية ليست ضمن صلاحيات حسابك.</div>;
+  }
+  return <SupplierStatementInner />;
 };

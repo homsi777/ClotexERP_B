@@ -61,14 +61,15 @@ export const RollCut: React.FC = () => {
   useEffect(() => {
     void (async () => {
       try {
-        const [cust, cb, rt] = await Promise.all([
+        // كل قائمة مستقلة: عدم صلاحية الصناديق/الأسعار لا يُسقط قائمة العملاء (حساب المخزن يحتاج العملاء فقط).
+        const [cust, cb, rt] = await Promise.allSettled([
           listCustomers({ status: 'active', pageSize: 500 }),
           listCashboxes({ active: true }),
           listExchangeRates(),
         ]);
-        setCustomers(cust.data ?? []);
-        setCashboxes(cb.data ?? []);
-        setRates(rt.data ?? []);
+        if (cust.status === 'fulfilled') setCustomers(cust.value.data ?? []);
+        if (cb.status === 'fulfilled') setCashboxes(cb.value.data ?? []);
+        if (rt.status === 'fulfilled') setRates(rt.value.data ?? []);
       } catch {
         /* القوائم اختيارية — لا تُعطِّل الشاشة */
       }

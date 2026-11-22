@@ -1,5 +1,6 @@
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
-import { canPriceUser } from '../../lib/priceAccess';
+import { canPriceUser, canEditDirectUser } from '../../lib/priceAccess';
+import { EditRequestBar } from '../../components/EditRequestBar';
 import React, { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
 import { createPortal, flushSync } from 'react-dom';
@@ -630,6 +631,7 @@ export const InvoiceForm = () => {
   const [importOrderBusy, setImportOrderBusy] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
   const [editBlocked, setEditBlocked] = useState(false);
+  const editGatedRef = useRef(false);
   const [salesConfirmedEdit, setSalesConfirmedEdit] = useState(false);
   const [purchaseConfirmedEdit, setPurchaseConfirmedEdit] = useState(false);
   const [salesEditBlockReason, setSalesEditBlockReason] = useState<string | null>(null);
@@ -2196,6 +2198,11 @@ export const InvoiceForm = () => {
   useEffect(() => { void fetchMe().then(setPermUser).catch(() => setPermUser(null)); }, []);
   // بيع وشراء: من لا يملك التسعير (محاسب/مدير أو «تسعير» بالمصفوفة) يحفظ مسودة بلا أسعار تظهر للمحاسب بإشعار.
   const canPostInvoice = canPriceUser(permUser, isSales ? 'sales.invoices' : 'purchases.invoices');
+  // تعديل فاتورة محفوظة: مباشر لمن يملكه، وإلا بإذن المسؤول (طلب عبر الدردشة، يُستهلك مرة واحدة).
+  const editDirect = canEditDirectUser(permUser, isSales ? 'sales.invoices' : 'purchases.invoices');
+  const [editGrantOk, setEditGrantOk] = useState(false);
+  const editGated = Boolean(editInvoiceId) && Boolean(permUser) && !editDirect && !editGrantOk;
+  editGatedRef.current = editGated;
   const activeItems = items.filter((item) => !isEmptyInvoiceItem(item));
   const hasHardValidationErrors = activeItems.some(
     (item) => getItemError(item, 'length') || getItemError(item, 'weight'),
@@ -2428,7 +2435,7 @@ export const InvoiceForm = () => {
   const finalTotalAmount = Math.max(0, totalAmount - headerDiscountTotal + headerTaxTotal);
 
   const handleSave = async (status: 'draft' | 'final') => {
-    if (editBlocked || draftLoading) return;
+    if (editBlocked || draftLoading || editGatedRef.current) return;
     if (!activeItems.length) return;
     // السعر مطلوب عند الترحيل فقط؛ المسودة (عميل + بضاعة) تُحفظ بلا سعر ليسعّرها المحاسب.
     if (status === 'final' && blockSalesSaveWithoutMeterPrice()) return;
@@ -3234,18 +3241,21 @@ export const InvoiceForm = () => {
             <span className="hidden sm:inline">{t('page.cancel')}</span>
           </button>
           {!salesConfirmedEdit && !purchaseConfirmedEdit ? (
-            <button onClick={() => handleSave('draft')} disabled={hasHardValidationErrors || draftLoading || editBlocked} className={canPostInvoice ? 'bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition shadow-sm font-medium disabled:opacity-50' : 'bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50'}>
+            <button onClick={() => handleSave('draft')} disabled={hasHardValidationErrors || draftLoading || editBlocked || editGated} className={canPostInvoice ? 'bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-100 transition shadow-sm font-medium disabled:opacity-50' : 'bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50'}>
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">{canPostInvoice ? t('page.saveDraft') : 'حفظ للتسعير (مسودة)'}</span>
             </button>
           ) : null}
-          {canPostInvoice && <button onClick={() => handleSave('final')} disabled={hasHardValidationErrors || draftLoading || editBlocked} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50">
+          {canPostInvoice && <button onClick={() => handleSave('final')} disabled={hasHardValidationErrors || draftLoading || editBlocked || editGated} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm font-medium disabled:opacity-50">
             <Save className="w-4 h-4" />
             <span className="hidden sm:inline">{salesConfirmedEdit || purchaseConfirmedEdit ? t('page.saveEdits') : t('page.saveFinal')}</span>
           </button>}
         </div>
       </div>
 
+      {editInvoiceId && permUser && (
+        <EditRequestBar entityType={isSales ? 'SALES_INVOICE' : 'PURCHASE_INVOICE'} entityId={editInvoiceId} direct={editDirect} onAllowed={setEditGrantOk} />
+      )}
       {!canPostInvoice && permUser && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">
           تُحفظ هذه الفاتورة كمسودة «بحاجة إلى تسعير»: أدخل الطرف والبضاعة والكميات فقط. يسعّرها ويرحّلها المحاسب أو المدير، وتصله إشعاراً.

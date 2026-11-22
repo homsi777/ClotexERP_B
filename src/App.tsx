@@ -222,6 +222,7 @@ import { Attendance } from './pages/hr/Attendance';
 import { MonthlyAttendanceReview } from './pages/hr/MonthlyAttendanceReview';
 import { HrHome } from './pages/hr/HrHome';
 import { InventoryHub } from './pages/inventory/InventoryHub';
+import { ApprovalSettings } from './pages/ApprovalSettings';
 import { Permissions } from './pages/Permissions';
 import { HrAnnualReports } from './pages/hr/HrAnnualReports';
 import { PayrollSalaryLog } from './pages/PayrollSalaryLog';
@@ -339,6 +340,7 @@ export default function App() {
             <Route path="hr" element={<HrHome />} />
             <Route path="inventory-hub" element={<InventoryHub />} />
             <Route path="permissions" element={<Permissions />} />
+            <Route path="approvals-center" element={<ApprovalSettings />} />
             <Route path="hr/annual-reports" element={<HrAnnualReports />} />
             <Route path="hr/employees" element={<Employees />} />
             <Route path="hr/attendance" element={<Attendance />} />

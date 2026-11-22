@@ -231,14 +231,14 @@ export const ReturnInvoices = () => {
     if (!modalOpen) return;
     void (async () => {
       try {
-        const [c, s, r] = await Promise.all([
+        const [c, s, r] = await Promise.allSettled([
           listCustomers({ pageSize: 500 }),
           listSuppliers({ pageSize: 500 }),
           listExchangeRates(),
         ]);
-        setCustomers(c.data);
-        setSuppliers(s.data);
-        setExchangeRates(r.data);
+        if (c.status === 'fulfilled') setCustomers(c.value.data);
+        if (s.status === 'fulfilled') setSuppliers(s.value.data);
+        if (r.status === 'fulfilled') setExchangeRates(r.value.data);
       } catch {
         /* ignore */
       }

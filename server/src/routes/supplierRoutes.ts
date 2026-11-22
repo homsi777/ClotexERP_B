@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
-import { authenticateRequest } from '../middleware/auth.js';
+import { authenticateRequest, canSeeFinance, requireEditOrGrant } from '../middleware/auth.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { insertPartyActivityLog } from '../services/partyActivityLogService.js';
@@ -70,6 +70,7 @@ export const supplierRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/:id/statement', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canSeeFinance(req.user, 'suppliers')) return sendError(reply, 403, 'كشف الحساب والأمور المالية ليست ضمن صلاحياتك', 'FORBIDDEN');
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;
@@ -90,6 +91,7 @@ export const supplierRoutes: FastifyPluginAsync = async (app) => {
 
   /** سياسة العملات (بشير) — البند 2، بنفس منطق مسار العميل المقابل. */
   app.get('/:id/statement-by-currency', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canSeeFinance(req.user, 'suppliers')) return sendError(reply, 403, 'كشف الحساب والأمور المالية ليست ضمن صلاحياتك', 'FORBIDDEN');
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;
@@ -163,6 +165,7 @@ export const supplierRoutes: FastifyPluginAsync = async (app) => {
   app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
+    if (!(await requireEditOrGrant(req, reply, 'suppliers', id))) return reply;
     const parsed = supplierBody.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 400, formatZodValidationMessage(parsed.error), 'VALIDATION');

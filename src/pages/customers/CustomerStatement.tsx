@@ -1,3 +1,5 @@
+import { fetchMe, type AuthUser } from '../../lib/api/authApi';
+import { canSeeFinanceUser } from '../../lib/priceAccess';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n/config';
@@ -57,7 +59,7 @@ function displayDebitCredit(value: 'مدين' | 'دائن'): string {
   return value === 'مدين' ? i18n.t('customerStatement:labels.debit') : i18n.t('customerStatement:labels.credit');
 }
 
-export const CustomerStatement = () => {
+const CustomerStatementInner = () => {
   const { t } = useTranslation('customerStatement');
   const tLegacy = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns: 'customerLegacyStatement', ...options });
   const { showToast } = useToast();
@@ -2166,4 +2168,15 @@ export const CustomerStatement = () => {
       )}
     </div>
   );
+};
+
+/** كشف الحساب مالي: لا يُعرض لمن لا يملك «الأمور المالية» (الخادم يرفض أيضاً). */
+export const CustomerStatement = () => {
+  const [me, setMe] = React.useState<AuthUser | null | undefined>(undefined);
+  React.useEffect(() => { void fetchMe().then(setMe).catch(() => setMe(null)); }, []);
+  if (me === undefined) return null;
+  if (!canSeeFinanceUser(me, 'customers')) {
+    return <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center font-bold text-amber-900" dir="rtl">كشف الحساب والأمور المالية ليست ضمن صلاحيات حسابك.</div>;
+  }
+  return <CustomerStatementInner />;
 };

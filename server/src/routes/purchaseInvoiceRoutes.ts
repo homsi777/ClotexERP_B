@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getPool } from '../db/pool.js';
-import { authenticateRequest, canPrice } from '../middleware/auth.js';
+import { authenticateRequest, canPrice, requireEditOrGrant } from '../middleware/auth.js';
 import { listPricingQueue, maskMoneyRow, unpricedInvoiceBody } from '../services/pricingQueueService.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
@@ -138,6 +138,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
   app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
+    if (!(await requireEditOrGrant(req, reply, 'purchases.invoices', id))) return reply;
     const pool = getPool();
     const client = await pool.connect();
     try {

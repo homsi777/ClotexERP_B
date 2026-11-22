@@ -78,5 +78,6 @@
   "hub.warehouses.desc": "المستودعات والعنابر والمناقلات وإرساليات المخزون والإهلاك",
   "hub.settings.title": "الإعدادات",
   "hub.settings.desc": "تصنيفات الأقمشة وإعدادات المخزون والتسعير الجماعي",
-  "cartelaMenu.colors": "ألوان الكارتيلات"
+  "cartelaMenu.colors": "ألوان الكارتيلات",
+  "approvalsCenter": "مركز الإعدادات (المسؤولون)"
 }

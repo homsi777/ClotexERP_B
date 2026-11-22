@@ -18,7 +18,7 @@ export const ACTION_LABELS: Record<ActionKey, string> = {
   print: 'طباعة',
   export: 'تصدير',
   price: 'تسعير',
-  costView: 'رؤية التكلفة',
+  costView: 'رؤية التكلفة / الأمور المالية',
   disburse: 'صرف',
 };
 
@@ -65,7 +65,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'dashboard', name: 'لوحة التحكم', group: 'general', actions: ['view'], prefixes: [], legacy: { view: W('dashboard.view') } },
   { code: 'reports', name: 'التقارير', group: 'general', financial: true, actions: ['view', 'print', 'export'], prefixes: ['/api/reports'], legacy: { view: W('reports.view') } },
 
-  { code: 'customers', name: 'العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/customers', '/api/customer-discounts', '/api/party-logs'], openRoots: ['/api/customers'], legacyAny: ['customers.view', 'customers.manage'],
+  { code: 'customers', name: 'العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/customers', '/api/customer-discounts', '/api/party-logs'], openRoots: ['/api/customers'], legacyAny: ['customers.view', 'customers.manage'],
     legacy: { view: W('customers.view'), create: W('customers.manage'), edit: W('customers.manage'), delete: W('customers.manage') } },
   { code: 'orders', name: 'أوردرات العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/customer-orders'],
     needsView: ['customers', 'inventory.items'], legacy: { price: W('orders.price') } },
@@ -74,7 +74,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'sales.returns', name: 'مرتجعات البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/returns'], needsView: ['customers', 'sales.invoices'] },
   { code: 'cartela', name: 'الكارتيلات', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela', '/api/cartela-custody'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'inventory.items'] },
 
-  { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export'], prefixes: ['/api/suppliers'], openRoots: ['/api/suppliers'], legacyAny: ['suppliers.view', 'suppliers.manage'],
+  { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/suppliers'], openRoots: ['/api/suppliers'], legacyAny: ['suppliers.view', 'suppliers.manage'],
     legacy: { view: W('suppliers.view'), create: W('suppliers.manage'), edit: W('suppliers.manage'), delete: W('suppliers.manage') } },
   { code: 'purchases.invoices', name: 'فواتير الشراء', group: 'purchases', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/purchase-invoices'], legacyAny: ['purchases.view', 'purchases.manage'],
     needsView: ['suppliers', 'inventory.items'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), edit: W('purchases.manage'), delete: W('purchases.manage'), approve: W('purchases.manage') } },

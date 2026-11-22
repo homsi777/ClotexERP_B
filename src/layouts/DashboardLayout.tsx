@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChatWidget } from '../components/ChatWidget';
 import { AiAssistantLauncher } from '../components/ai/AiAssistantLauncher';
@@ -47,7 +47,8 @@ import { fetchMe, type AuthUser } from '../lib/api/authApi';
 import { canSeePath } from '../lib/permissionNav';
 import { getCheckDueSummary, type CheckDueItem } from '../lib/api/checksApi';
 import { fetchPricingQueue, type PricingQueueItem } from '../lib/api/pricingQueueApi';
-import { canPriceUser } from '../lib/priceAccess';
+import { pendingEditRequests, decideEditRequestApi, ENTITY_AR, type EditRequestDto } from '../lib/api/editRequestsApi';
+import { canPriceUser, canSeeFinanceUser } from '../lib/priceAccess';
 import { applyCompanyDefaultLanguage } from '../i18n/applyCompanyLanguage';
 
 /** أيام حتى موعد التوريد المتوقع (تاريخ محلي) */
@@ -134,7 +135,26 @@ const Topbar = () => {
     return () => { active = false; window.clearInterval(id); };
   }, [mayPrice, location.pathname]);
   const pricingCount = pricingQueue.length;
-  const hasAlerts = pickupAlerts.length > 0 || checkAlertCount > 0 || pricingCount > 0;
+  // طلبات إذن التعديل الموجّهة لي كمسؤول (أو لكل مدير/محاسب إن لم يُعيَّن مسؤول).
+  const [approvals, setApprovals] = useState<EditRequestDto[]>([]);
+  const loadApprovals = useCallback(() => pendingEditRequests().then(setApprovals).catch(() => undefined), []);
+  useEffect(() => {
+    void loadApprovals();
+    const id = window.setInterval(() => void loadApprovals(), 30 * 1000);
+    return () => window.clearInterval(id);
+  }, [loadApprovals, location.pathname]);
+  const decide = async (id: string, approve: boolean) => {
+    let note: string | undefined;
+    if (!approve) note = window.prompt('سبب الرفض (اختياري)') ?? undefined;
+    try {
+      await decideEditRequestApi(id, approve, note);
+      await loadApprovals();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'تعذّر تنفيذ القرار');
+    }
+  };
+  const approvalCount = approvals.length;
+  const hasAlerts = pickupAlerts.length > 0 || checkAlertCount > 0 || pricingCount > 0 || approvalCount > 0;
 
   useEffect(() => {
     if (!notifyOpen) return;
@@ -226,11 +246,17 @@ const Topbar = () => {
     { labelKey: 'manufacturing', to: '/manufacturing', icon: Factory },
     { labelKey: 'partners', to: '/partners', icon: Handshake },
     ...(navUser && (navUser.role === 'admin' || navUser.permissions.includes('users.manage')) ? [{ labelKey: 'permissions', to: '/permissions', icon: ShieldCheck } as NavItem] : []),
+    ...(navUser && (navUser.role === 'admin' || navUser.permissions.includes('users.manage')) ? [{ labelKey: 'approvalsCenter', to: '/approvals-center', icon: ShieldCheck } as NavItem] : []),
     { labelKey: 'settings', to: '/settings', icon: Settings },
   ];
   const navItems: NavItem[] = navItemsAll.flatMap((item): NavItem[] => {
     if ('subItems' in item && item.subItems) {
-      const subItems = item.subItems.filter((sub) => canSeePath(navUser, sub.to));
+      const subItems = item.subItems.filter((sub) => {
+        // كشوف الحساب مالية: لا تظهر لمن لا يملك «الأمور المالية» للعملاء/الموردين.
+        if (sub.to === '/customers/statement' && !canSeeFinanceUser(navUser, 'customers')) return false;
+        if (sub.to === '/suppliers/statement' && !canSeeFinanceUser(navUser, 'suppliers')) return false;
+        return canSeePath(navUser, sub.to);
+      });
       return subItems.length ? [{ ...item, subItems }] : [];
     }
     return canSeePath(navUser, (item as { to: string }).to) ? [item] : [];
@@ -327,7 +353,7 @@ const Topbar = () => {
         <Bell className={`w-5 h-5 ${hasAlerts ? 'text-amber-600' : ''}`} strokeWidth={2} />
         {hasAlerts && (
           <span className="notify-badge-pulse absolute -top-0.5 -start-0.5 min-w-[18px] h-[18px] px-0.5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-[9px] font-bold text-white flex items-center justify-center shadow-md ring-2 ring-white md:min-w-[20px] md:h-5 md:px-1 md:text-[10px]">
-            {pickupAlerts.length + checkAlertCount + pricingCount > 99 ? '99+' : pickupAlerts.length + checkAlertCount + pricingCount}
+            {pickupAlerts.length + checkAlertCount + pricingCount + approvalCount > 99 ? '99+' : pickupAlerts.length + checkAlertCount + pricingCount + approvalCount}
           </span>
         )}
       </button>
@@ -352,6 +378,23 @@ const Topbar = () => {
             </p>
           </div>
           <OrderNotificationInbox/>
+          {approvalCount > 0 && (
+            <div className="border-b border-violet-100 bg-violet-50/60 px-3 py-2">
+              <p className="mb-1 text-xs font-black text-violet-900">طلبات إذن تعديل ({approvalCount})</p>
+              <ul className="space-y-1.5">
+                {approvals.slice(0, 8).map((r) => (
+                  <li key={r.id} className="rounded-lg bg-white/70 px-2 py-1.5 text-xs">
+                    <div className="font-bold">{r.requestedByName} يطلب تعديل {ENTITY_AR[r.entityType]} «{r.entityLabel}»</div>
+                    <div className="text-slate-600">{r.reason}</div>
+                    <div className="mt-1 flex gap-1.5">
+                      <button type="button" onClick={() => void decide(r.id, true)} className="rounded bg-emerald-600 px-2 py-0.5 font-bold text-white hover:bg-emerald-700">موافقة</button>
+                      <button type="button" onClick={() => void decide(r.id, false)} className="rounded bg-rose-600 px-2 py-0.5 font-bold text-white hover:bg-rose-700">رفض</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {pricingCount > 0 && (
             <div className="border-b border-orange-100 bg-orange-50/60 px-3 py-2">
               <p className="mb-1 text-xs font-black text-orange-900">فواتير بحاجة إلى تسعير ({pricingCount})</p>

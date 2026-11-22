@@ -97,14 +97,18 @@ export function CustomerOrdersPage() {
     setLoading(true);
     setError('');
     try {
-      const [customerRes, templateRes, metadataRes] = await Promise.all([
+      // كل طلب مستقل: فشل واحد لا يُخفي العملاء ولا القوالب.
+      const [customerRes, templateRes, metadataRes] = await Promise.allSettled([
         listCustomers({ status: 'active', pageSize: 1000 }),
         listOrderTemplatesApi(),
         listOrderMetadataOptions(),
       ]);
-      setCustomers(customerRes.data.map(mapApiCustomer));
-      setMetadataOptions(metadataRes);
-      setOrderTemplates(templateRes);
+      if (customerRes.status === 'fulfilled') setCustomers(customerRes.value.data.map(mapApiCustomer));
+      if (metadataRes.status === 'fulfilled') setMetadataOptions(metadataRes.value);
+      if (templateRes.status === 'fulfilled') setOrderTemplates(templateRes.value);
+      if (customerRes.status === 'rejected' && templateRes.status === 'rejected' && metadataRes.status === 'rejected') {
+        throw customerRes.reason;
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load customer orders');
     } finally {

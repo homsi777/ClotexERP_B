@@ -21,6 +21,9 @@ import { useToast } from '../components/NonBlockingToast';
 import { focusNextFormControl } from '../lib/forms/enterNavigation';
 import { useNavigate } from 'react-router-dom';
 import { getCustomerStatement } from '../lib/api/partyStatementsApi';
+import { fetchMe, type AuthUser } from '../lib/api/authApi';
+import { canEditDirectUser, canSeeFinanceUser } from '../lib/priceAccess';
+import { EditRequestBar } from '../components/EditRequestBar';
 import { exportPdfFromHtmlString } from '../lib/pdfExport';
 import { buildTelegramCustomerAccountStatementHtml } from '../lib/printing/telegramDocumentHtml';
 import { DUES_REPORT_TABLE_HEAD_CSS, sanitizePartyNotesForExport } from '../lib/printing/sanitizeExportNotes';
@@ -56,6 +59,12 @@ export const Customers = () => {
   const [isTelegramExportOpen, setIsTelegramExportOpen] = useState(false);
   const [telegramSelectionMode, setTelegramSelectionMode] = useState(false);
   const [editTarget, setEditTarget] = useState<ApiCustomer | null>(null);
+  // الحساب بلا صلاحية مالية لا يرى كشف الحساب ولا الأرصدة؛ وبلا تعديل مباشر يحتاج إذن المسؤول للتعديل.
+  const [me, setMe] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setMe).catch(() => setMe(null)); }, []);
+  const showFinance = canSeeFinanceUser(me, 'customers');
+  const editDirect = canEditDirectUser(me, 'customers');
+  const [editAllowed, setEditAllowed] = useState(false);
   const [form, setForm] = useState<CustomerPayload>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -98,7 +107,7 @@ export const Customers = () => {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const ids = customers.map((c) => c.id);
+    const ids = showFinance ? customers.map((c) => c.id) : [];
     if (!ids.length) {
       setSummaryByCustomerId({});
       return;
@@ -130,6 +139,7 @@ export const Customers = () => {
 
   const openAdd = () => { setEditTarget(null); setForm(emptyForm()); setSaveError(null); setIsModalOpen(true); };
   const openEdit = (c: ApiCustomer) => {
+    setEditAllowed(false);
     setEditTarget(c);
     setForm({
       name: c.name,
@@ -145,7 +155,7 @@ export const Customers = () => {
     setSaveError(null);
     setIsModalOpen(true);
   };
-  const closeModal = () => { setIsModalOpen(false); setEditTarget(null); };
+  const closeModal = () => { setIsModalOpen(false); setEditTarget(null); setEditAllowed(false); };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -699,11 +709,11 @@ export const Customers = () => {
                 {telegramSelectionMode && <th className="px-4 py-3">{t('table.colSelect')}</th>}
                 <th className="px-4 py-3">{t('table.colCode')}</th>
                 <th className="px-4 py-3">{t('table.colName')}</th>
-                <th className="px-4 py-3">{t('table.colTotal')}</th>
-                <th className="px-4 py-3">{t('table.colCredit')}</th>
-                <th className="px-4 py-3">{t('table.colDebit')}</th>
-                <th className="px-4 py-3">{t('table.colRemaining')}</th>
-                <th className="px-4 py-3">{t('table.colCurrency')}</th>
+                {showFinance && <th className="px-4 py-3">{t('table.colTotal')}</th>}
+                {showFinance && <th className="px-4 py-3">{t('table.colCredit')}</th>}
+                {showFinance && <th className="px-4 py-3">{t('table.colDebit')}</th>}
+                {showFinance && <th className="px-4 py-3">{t('table.colRemaining')}</th>}
+                {showFinance && <th className="px-4 py-3">{t('table.colCurrency')}</th>}
                 <th className="px-4 py-3">{t('table.colNotes')}</th>
                 <th className="px-4 py-3">{t('table.colActions')}</th>
               </tr>
@@ -733,25 +743,25 @@ export const Customers = () => {
                         )}
                         <td className="px-4 py-3 font-mono text-xs text-slate-500">{c.code}</td>
                         <td className="px-4 py-3 font-semibold text-slate-900">{c.name}</td>
-                        <td className="px-4 py-3 text-slate-800 font-semibold">{formatMoney(s.total)}</td>
-                        <td className="px-4 py-3 text-emerald-700 font-semibold">{formatMoney(s.credit)}</td>
-                        <td className="px-4 py-3 text-blue-700 font-semibold">{formatMoney(s.debit)}</td>
-                        <td className="px-4 py-3 text-rose-700 font-semibold">{formatMoney(s.remaining)}</td>
-                        <td className="px-4 py-3 text-slate-600 font-mono">{s.currency}</td>
+                        {showFinance && <td className="px-4 py-3 text-slate-800 font-semibold">{formatMoney(s.total)}</td>}
+                        {showFinance && <td className="px-4 py-3 text-emerald-700 font-semibold">{formatMoney(s.credit)}</td>}
+                        {showFinance && <td className="px-4 py-3 text-blue-700 font-semibold">{formatMoney(s.debit)}</td>}
+                        {showFinance && <td className="px-4 py-3 text-rose-700 font-semibold">{formatMoney(s.remaining)}</td>}
+                        {showFinance && <td className="px-4 py-3 text-slate-600 font-mono">{s.currency}</td>}
                         <td className="px-4 py-3 text-slate-600 max-w-[220px] truncate" title={c.notes || ''}>{c.notes || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
-                            <button
+                            {showFinance && <button
                               onClick={() => navigate(`/customers/statement?customerId=${encodeURIComponent(c.id)}`)}
                               title={t('table.statementActionTitle')}
                               className="px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition"
                             >
                               {t('table.statementAction')}
-                            </button>
+                            </button>}
                             <button onClick={() => openEdit(c)} title={t('table.editActionTitle')} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button
+                            {editDirect && <button
                               onClick={() => void handleToggle(c.id)}
                               title={c.is_active ? t('table.disableAccountTitle') : t('table.enableAccountTitle')}
                               className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
@@ -761,8 +771,8 @@ export const Customers = () => {
                               }`}
                             >
                               {c.is_active ? t('table.disable') : t('table.enable')}
-                            </button>
-                            <button
+                            </button>}
+                            {editDirect && <button
                               type="button"
                               onClick={() => void openDeleteModal(c)}
                               title={t('table.deleteActionTitle')}
@@ -770,7 +780,7 @@ export const Customers = () => {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               {t('table.delete')}
-                            </button>
+                            </button>}
                           </div>
                         </td>
                       </>
@@ -805,6 +815,7 @@ export const Customers = () => {
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-4">
               {saveError && <p className="text-sm text-rose-600 bg-rose-50 p-2 rounded-lg">{saveError}</p>}
+              {editTarget && <EditRequestBar entityType="CUSTOMER" entityId={editTarget.id} direct={editDirect} onAllowed={setEditAllowed} />}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('modal.nameLabel')}</label>
@@ -876,7 +887,7 @@ export const Customers = () => {
               </div>
               <div className="pt-2 flex justify-end gap-3">
                 <button type="button" onClick={closeModal} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm">{t('modal.cancel')}</button>
-                <button type="submit" disabled={saving} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center gap-2 disabled:opacity-60">
+                <button type="submit" disabled={saving || (Boolean(editTarget) && !editDirect && !editAllowed)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center gap-2 disabled:opacity-60">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   {editTarget ? t('modal.saveEdit') : t('modal.saveAdd')}
                 </button>

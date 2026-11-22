@@ -215,6 +215,14 @@ export class ApiRequestError extends Error {
   }
 }
 
+/** أذونات تعديل معتمدة بالذاكرة: entityId → requestId. تُرفَق تلقائياً بطلبات PUT/PATCH التي يحوي مسارها معرّف العنصر. */
+const editGrants = new Map<string, string>();
+export function setEditGrant(entityId: string, requestId: string | null): void {
+  if (requestId) editGrants.set(entityId, requestId);
+  else editGrants.delete(entityId);
+}
+const UUID_IN_PATH = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {},
@@ -244,6 +252,12 @@ export async function apiFetch<T>(
   }
 
   headers.set('X-Client-Platform', detectClientPlatform());
+  const method = String(options.method ?? 'GET').toUpperCase();
+  if ((method === 'PUT' || method === 'PATCH') && editGrants.size) {
+    const id = path.match(UUID_IN_PATH)?.[0]?.toLowerCase();
+    const grant = id ? editGrants.get(id) : undefined;
+    if (grant) headers.set('X-Edit-Request', grant);
+  }
 
   const url = path.startsWith('http') ? path : `${base}${path.startsWith('/') ? '' : '/'}${path}`;
 

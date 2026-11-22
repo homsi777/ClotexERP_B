@@ -78,5 +78,6 @@
   "hub.warehouses.desc": "Depolar, koğuşlar, transferler, sevk irsaliyeleri ve zayiat",
   "hub.settings.title": "Ayarlar",
   "hub.settings.desc": "Kumaş kategorileri, stok ayarları ve toplu fiyatlandırma",
-  "cartelaMenu.colors": "Kartela renkleri"
+  "cartelaMenu.colors": "Kartela renkleri",
+  "approvalsCenter": "Onay merkezi"
 }
