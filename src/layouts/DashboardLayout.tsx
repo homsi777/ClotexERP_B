@@ -109,6 +109,7 @@ const Topbar = () => {
   const [navUser, setNavUser] = useState<AuthUser | null>(null);
   useEffect(() => { void fetchMe().then(setNavUser).catch(() => setNavUser(null)); }, []);
   const notifyRef = useRef<HTMLDivElement>(null);
+  const notifyPanelRef = useRef<HTMLDivElement>(null);
 
   const customerOrders = useStore((s) => s.customerOrders);
   const customers = useStore((s) => s.customers);
@@ -172,7 +173,10 @@ const Topbar = () => {
   useEffect(() => {
     if (!notifyOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (notifyRef.current && !notifyRef.current.contains(e.target as Node)) setNotifyOpen(false);
+      const target = e.target as Node;
+      // اللوحة تُرسم في portal خارج notifyRef: يجب استثناؤها وإلا يُغلقها mousedown قبل وصول النقر للرابط.
+      if (notifyRef.current?.contains(target) || notifyPanelRef.current?.contains(target)) return;
+      setNotifyOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -373,6 +377,7 @@ const Topbar = () => {
       </button>
       {notifyOpen && notifyPanelStyle && createPortal(
         <div
+          ref={notifyPanelRef}
           style={notifyPanelStyle}
           className={`rounded-2xl border border-amber-200/80 bg-[var(--surface-header)] overflow-hidden ${hasAlerts ? 'notify-panel-glow' : 'shadow-2xl ring-1 ring-black/5'}`}
           role="dialog"
