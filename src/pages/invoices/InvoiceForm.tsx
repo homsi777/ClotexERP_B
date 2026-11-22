@@ -587,6 +587,8 @@ export const InvoiceForm = () => {
   const [warehousesLoading, setWarehousesLoading] = useState(true);
   // العملة الافتراضية للفرع (مصر=الجنيه) فقط كقيمة ابتدائية؛ يغيّرها المستخدم متى شاء.
   const [currency, setCurrency] = useCurrencyWithBranchDefault();
+  // سعر الصرف اختياري: مطفأ افتراضياً (يُستعمل السعر المسجّل للعملة)، ويُفعَّل يدوياً لفاتورة بعينها.
+  const [manualRate, setManualRate] = useState(false);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRateDto[]>([]);
   const [exchangeRateToUsd, setExchangeRateToUsd] = useState('1');
   const [items, setItems] = useState<InvoiceFormItem[]>([emptyItem()]);
@@ -3420,17 +3422,27 @@ export const InvoiceForm = () => {
         {String(currency || 'USD').trim().toUpperCase() !== 'USD' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
             <div className="space-y-1.5">
-              <label className="text-xs sm:text-sm font-bold text-slate-600">{t('meta.exchangeRateLabel')}</label>
-              <input
-                type="number"
-                step="0.000001"
-                value={exchangeRateToUsd}
-                onChange={(e) => setExchangeRateToUsd(e.target.value)}
-                onKeyDown={focusNextFormControl}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 font-mono text-left"
-                dir="ltr"
-              />
-              <p className="text-[11px] text-slate-500">{t('meta.exchangeRateHelper')}</p>
+              <label className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600">
+                <input type="checkbox" checked={manualRate} onChange={(e) => setManualRate(e.target.checked)} className="accent-indigo-600" />
+                تحديد سعر صرف يدوي لهذه الفاتورة (اختياري)
+              </label>
+              {manualRate ? (
+                <>
+                  <label className="text-xs sm:text-sm font-bold text-slate-600">{t('meta.exchangeRateLabel')}</label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={exchangeRateToUsd}
+                    onChange={(e) => setExchangeRateToUsd(e.target.value)}
+                    onKeyDown={focusNextFormControl}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 font-mono text-left"
+                    dir="ltr"
+                  />
+                  <p className="text-[11px] text-slate-500">{t('meta.exchangeRateHelper')}</p>
+                </>
+              ) : (
+                <p className="text-[11px] text-slate-500">يُستعمل تلقائياً السعر المسجّل للعملة في «أسعار الصرف»: <b className="font-mono" dir="ltr">{exchangeRateToUsd}</b></p>
+              )}
             </div>
           </div>
         ) : null}
