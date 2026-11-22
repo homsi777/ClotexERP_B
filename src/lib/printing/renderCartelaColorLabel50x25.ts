@@ -16,7 +16,7 @@ const esc = (v: unknown) =>
 
 function labelHtml(cell: CartelaColorLabelCell): string {
   const bc = cell.barcodeCode.trim();
-  const svg = bc ? buildCode128Svg(bc, 40) : '';
+  const svg = bc ? buildCode128Svg(bc, 40, true) : '';
   return `<div class="label">
     <div class="mat" dir="ltr">${esc(cell.materialCode)}</div>
     <div class="col" dir="ltr">${esc(cell.colorCode)}</div>
