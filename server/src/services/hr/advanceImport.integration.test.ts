@@ -31,7 +31,8 @@ test('استيراد السلف: مطابقة بالكود والاسم، إنش
        ($1,'EMP-187','هويدا طه إبراهيم','187',9000,'EGP'),
        ($1,'EMP-232','سعيد احمد سعيد مصطفى','232',10500,'EGP'),
        ($1,'EMP-301','محمد احمد سعيد مصطفى سليم','301',6500,'EGP'),
-       ($1,'EMP-103','أحمد ربيع عيد مصطفى','103',12000,'EGP')`,
+       ($1,'EMP-103','أحمد ربيع عيد مصطفى','103',12000,'EGP'),
+       ($1,'EMP-302','محمد علي حسن','302',7000,'EGP')`,
       [company],
     );
 
@@ -51,7 +52,7 @@ test('استيراد السلف: مطابقة بالكود والاسم، إنش
     const dry = await importAdvancesFromExcel(client, { ...base, dryRun: true, rows });
     assert.equal(dry.advancesCreated, 4);
     assert.equal((await q('SELECT count(*)::int n FROM payroll_employee_advances'))[0].n, 0);
-    assert.equal((await q('SELECT count(*)::int n FROM payroll_employees'))[0].n, 4, 'المعاينة لا تنشئ موظفين');
+    assert.equal((await q('SELECT count(*)::int n FROM payroll_employees'))[0].n, 5, 'المعاينة لا تنشئ موظفين');
 
     const res = await importAdvancesFromExcel(client, { ...base, dryRun: false, rows });
     const by = Object.fromEntries(res.rows.map((r) => [r.rowKey, r]));
