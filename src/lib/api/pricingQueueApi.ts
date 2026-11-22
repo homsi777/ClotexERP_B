@@ -1,7 +1,7 @@
 import { apiFetch } from './client';
 
 export interface PricingQueueItem {
-  kind: 'SALES' | 'PURCHASE';
+  kind: 'SALES' | 'PURCHASE' | 'EXTERNAL';
   id: string;
   invoiceNo: string;
   invoiceDate: string;

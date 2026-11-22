@@ -32,7 +32,7 @@ export function maskMoneyRow<T extends Record<string, unknown>>(row: T, kind: 'h
 }
 
 export interface PricingQueueItem {
-  kind: 'SALES' | 'PURCHASE';
+  kind: 'SALES' | 'PURCHASE' | 'EXTERNAL';
   id: string;
   invoiceNo: string;
   invoiceDate: string;
@@ -55,7 +55,16 @@ export async function listPricingQueue(db: Db, companyId: string): Promise<{ tot
       ORDER BY pi.invoice_date DESC, pi.created_at DESC LIMIT 50`,
     [companyId],
   );
+  // مصنعية خارجية انتهت مخزونياً (استُلمت وأُقفل جردها) وبانتظار تسعير المحاسب.
+  const external = await db.query(
+    `SELECT ej.id, ej.job_no, ej.created_at::date::text AS invoice_date, s.name AS party
+       FROM external_jobs ej JOIN suppliers s ON s.id = ej.supplier_id AND s.company_id = ej.company_id
+      WHERE ej.company_id = $1 AND ej.document_status = 'CONFIRMED' AND ej.inventory_completed_at IS NOT NULL AND ej.fee_posted_at IS NULL
+      ORDER BY ej.inventory_completed_at DESC LIMIT 50`,
+    [companyId],
+  );
   const items: PricingQueueItem[] = [
+    ...external.rows.map((r) => ({ kind: 'EXTERNAL' as const, id: r.id, invoiceNo: r.job_no, invoiceDate: r.invoice_date, partyName: r.party })),
     ...sales.rows.map((r) => ({ kind: 'SALES' as const, id: r.id, invoiceNo: r.invoice_no, invoiceDate: r.invoice_date, partyName: r.party })),
     ...purchases.rows.map((r) => ({ kind: 'PURCHASE' as const, id: r.id, invoiceNo: r.invoice_no, invoiceDate: r.invoice_date, partyName: r.party })),
   ];

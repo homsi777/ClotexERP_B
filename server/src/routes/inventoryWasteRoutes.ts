@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest, canApprove } from '../middleware/auth.js';
+import { getSupervisorId } from '../services/editRequestService.js';
+import { sendMessage } from '../services/chatService.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
@@ -188,6 +190,13 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
       );
 
       const waste = ins.rows[0];
+      // مسودة من غير المعتمِد: تصل المسؤول رسالة دردشة مرتبطة بالعملية (الاعتماد من الجرس/صفحة الإهلاك).
+      if (!canApprove(req.user, 'inventory.waste')) {
+        const supervisorId = await getSupervisorId(client, companyId, userId);
+        if (supervisorId) {
+          await sendMessage(client, companyId, userId, supervisorId, `🔔 إهلاك مادي ${wasteNo} بانتظار اعتمادك — افتح: /inventory/depreciation`);
+        }
+      }
 
       for (const line of d.lines) {
         if (line.quantity !== 1) {

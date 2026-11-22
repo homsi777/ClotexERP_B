@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
-import { authenticateRequest } from '../middleware/auth.js';
+import { authenticateRequest, canPrice } from '../middleware/auth.js';
+import { maskMoneyRow } from '../services/pricingQueueService.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
@@ -150,7 +151,8 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
          WHERE ${where}`, params),
     ]);
 
-    return reply.send({ ok: true, data: rows.rows, total: countRow.rows[0].total, page, pageSize });
+    const listRows = canPrice(req.user, 'sales.returns') ? rows.rows : rows.rows.map((r: Record<string, unknown>) => maskMoneyRow(r, 'header'));
+    return reply.send({ ok: true, data: listRows, total: countRow.rows[0].total, page, pageSize });
   });
 
   app.get('/eligible-sales-invoices', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -255,11 +257,12 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
       [companyId, id],
     );
 
+    const moneyOk = canPrice(req.user, 'sales.returns');
     return reply.send({
       ok: true,
       data: {
-        ...head.rows[0],
-        lines: lines.rows,
+        ...(moneyOk ? head.rows[0] : maskMoneyRow(head.rows[0], 'header')),
+        lines: moneyOk ? lines.rows : lines.rows.map((l: Record<string, unknown>) => maskMoneyRow(l, 'line')),
         gl_journal: je.rows[0] ?? null,
       },
     });

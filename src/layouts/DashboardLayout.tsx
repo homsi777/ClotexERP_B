@@ -430,9 +430,9 @@ const Topbar = () => {
               <ul className="space-y-1">
                 {pricingQueue.slice(0, 8).map((q) => (
                   <li key={`${q.kind}:${q.id}`}>
-                    <Link to={q.kind === 'SALES' ? `/invoices/sales/${q.id}/edit` : `/invoices/purchases/${q.id}/edit`} onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-orange-100/70">
+                    <Link to={q.kind === 'SALES' ? `/invoices/sales/${q.id}/edit` : q.kind === 'EXTERNAL' ? `/purchases/external-jobs/${q.id}?tab=pricing` : `/invoices/purchases/${q.id}/edit`} onClick={() => setNotifyOpen(false)} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-orange-100/70">
                       <span className="truncate font-mono font-bold">{q.invoiceNo} · {q.partyName}</span>
-                      <span className="shrink-0 font-bold text-orange-800">{q.kind === 'SALES' ? 'بيع' : 'شراء'}</span>
+                      <span className="shrink-0 font-bold text-orange-800">{q.kind === 'SALES' ? 'بيع' : q.kind === 'EXTERNAL' ? 'مصنعية' : 'شراء'}</span>
                     </Link>
                   </li>
                 ))}
