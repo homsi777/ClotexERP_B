@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useEffect, useMemo, useState } from 'react';
 import { previewWageSplit } from '../../lib/hr/wageSplitPreview';
 import {
@@ -336,11 +337,11 @@ export function Employees() {
           </label>
           <label className="block text-xs font-bold text-slate-600">
             {t('filters.hiredFrom')}
-            <input type="date" value={filters.hiredFrom ?? ''} onChange={(e) => setFilters((f) => ({ ...f, hiredFrom: e.target.value }))} className={`mt-1 ${inputCls}`} />
+            <DateInput value={filters.hiredFrom ?? ''} onChange={(e) => setFilters((f) => ({ ...f, hiredFrom: e.target.value }))} className={`mt-1 ${inputCls}`} />
           </label>
           <label className="block text-xs font-bold text-slate-600">
             {t('filters.hiredTo')}
-            <input type="date" value={filters.hiredTo ?? ''} onChange={(e) => setFilters((f) => ({ ...f, hiredTo: e.target.value }))} className={`mt-1 ${inputCls}`} />
+            <DateInput value={filters.hiredTo ?? ''} onChange={(e) => setFilters((f) => ({ ...f, hiredTo: e.target.value }))} className={`mt-1 ${inputCls}`} />
           </label>
         </div>
         <div className="flex items-center justify-between text-xs text-slate-500">
@@ -464,7 +465,7 @@ export function Employees() {
                   <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label={t('modal.fields.hireDate')}>
-                  <input type="date" value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} className={inputCls} />
+                  <DateInput value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label={t('modal.fields.gender', { defaultValue: 'النوع' })}>
                   <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as '' | 'MALE' | 'FEMALE' })} className={inputCls}>
@@ -474,10 +475,10 @@ export function Employees() {
                   </select>
                 </Field>
                 <Field label={t('modal.fields.birthDate')}>
-                  <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className={inputCls} />
+                  <DateInput value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label={t('modal.fields.insuranceStartDate')}>
-                  <input type="date" value={form.insuranceStartDate} onChange={(e) => setForm({ ...form, insuranceStartDate: e.target.value })} className={inputCls} />
+                  <DateInput value={form.insuranceStartDate} onChange={(e) => setForm({ ...form, insuranceStartDate: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label={t('modal.fields.baseSharePercent')}>
                   <input type="number" min={1} max={100} step={0.5} value={form.baseSharePercent} onChange={(e) => setForm({ ...form, baseSharePercent: e.target.value })} className={inputCls} dir="ltr" placeholder="75 / 80" />
@@ -496,7 +497,7 @@ export function Employees() {
                   <input type="number" min={1} max={24} step={0.5} value={form.workdayHours} onChange={(e) => setForm({ ...form, workdayHours: e.target.value })} className={inputCls} dir="ltr" placeholder="8 / 9" />
                 </Field>
                 <Field label={t('modal.fields.terminationDate')}>
-                  <input type="date" value={form.terminationDate} onChange={(e) => setForm({ ...form, terminationDate: e.target.value })} className={inputCls} />
+                  <DateInput value={form.terminationDate} onChange={(e) => setForm({ ...form, terminationDate: e.target.value })} className={inputCls} />
                 </Field>
                 <Field label={t('modal.fields.status')}>
                   <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EmployeeFormState['status'] })} className={`${inputCls} bg-white`}>

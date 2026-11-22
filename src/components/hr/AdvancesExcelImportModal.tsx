@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import React, { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
 import { parseAdvancesFile, type ParsedAdvancesFile } from '../../lib/hrAdvancesExcelParser';
@@ -177,7 +178,7 @@ export function AdvancesExcelImportModal({ open, onClose, onImported }: Props) {
             {kind === 'OCT' ? (
               <label className="text-xs font-bold text-slate-600 sm:col-span-2">
                 تاريخ السلف (الملف لا يذكر اليوم)
-                <input type="date" className={`${inputCls} mt-1 w-full`} value={advanceDate} onChange={(e) => setAdvanceDate(e.target.value)} />
+                <DateInput className={`${inputCls} mt-1 w-full`} value={advanceDate} onChange={(e) => setAdvanceDate(e.target.value)} />
               </label>
             ) : (
               <div className="sm:col-span-2">

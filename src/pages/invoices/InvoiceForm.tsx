@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
 import { canPriceUser, canEditDirectUser } from '../../lib/priceAccess';
 import { EditRequestBar } from '../../components/EditRequestBar';
@@ -3369,8 +3370,7 @@ export const InvoiceForm = () => {
           </div>
           <div className="space-y-1.5">
             <label className="text-xs sm:text-sm font-bold text-slate-700">{t('meta.dateLabel')}</label>
-            <input
-              type="date"
+            <DateInput
               value={date}
               onChange={(e) => setDate(e.target.value)}
               onKeyDown={focusNextFormControl}

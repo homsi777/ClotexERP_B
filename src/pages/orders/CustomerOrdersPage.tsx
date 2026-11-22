@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import { listOrderMetadataOptions, type OrderMetadataOptions } from '../../lib/api/customerOrdersApi';
 import { sampleStatusLabels } from '../../lib/customerOrderMetadata';
 import {OrderNotificationRouting} from '../../components/orders/OrderNotificationRouting';
@@ -373,7 +374,7 @@ export function CustomerOrdersPage() {
        {Object.entries({receivedOfficeId:'المكتب المستلم',takenByEmployeeId:'آخذ الطلب',followUpEmployeeId:'موظف المتابعة',followUpUserId:'مستخدم المتابعة',status:'الحالة',sampleStatus:'حالة العينة'}).map(([key,label])=><label key={key} className="text-xs">{label}<select className="block border rounded-lg p-2" value={metadataFilters[key] || ''} onChange={e=>setMetadataFilters({...metadataFilters,[key]:e.target.value})}>
         <option value="">الكل</option>{filterDirectories[key].map(option=><option key={option.id} value={option.id}>{option.name}</option>)}
        </select></label>)}
-       {Object.entries({expectedFrom:'موعد التسليم من',expectedTo:'موعد التسليم إلى',material:'الخامة',color:'اللون'}).map(([key,label])=><label key={key} className="text-xs">{label}<input className="block border rounded-lg p-2" type={key.startsWith('expected')?'date':'text'} value={metadataFilters[key] || ''} onChange={e=>setMetadataFilters({...metadataFilters,[key]:e.target.value})}/></label>)}
+       {Object.entries({expectedFrom:'موعد التسليم من',expectedTo:'موعد التسليم إلى',material:'الخامة',color:'اللون'}).map(([key,label])=><label key={key} className="text-xs">{label}{key.startsWith('expected') ? <DateInput className="block border rounded-lg p-2" value={metadataFilters[key] || ''} onChange={e=>setMetadataFilters({...metadataFilters,[key]:e.target.value})}/> : <input className="block border rounded-lg p-2" type="text" value={metadataFilters[key] || ''} onChange={e=>setMetadataFilters({...metadataFilters,[key]:e.target.value})}/>}</label>)}
        <label className="text-xs">الترتيب<select className="block border rounded-lg p-2" value={metadataFilters.sort || ''} onChange={e=>setMetadataFilters({...metadataFilters,sort:e.target.value})}><option value="">الأحدث</option><option value="expectedDate">موعد التسليم الأقرب</option></select></label>
        <button type="button" className="border rounded-lg px-3 text-xs" onClick={()=>{setMetadataFilters({});setSearch('');}}>مسح الفلاتر</button>
       </div>}

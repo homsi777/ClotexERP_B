@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import React, { useEffect, useState } from 'react';
 import type { CustomerOrderMetadata } from '../../types';
 import { createOrderOffice, listOrderMetadataOptions, type OrderMetadataOptions } from '../../lib/api/customerOrdersApi';
@@ -44,7 +45,7 @@ export function OrderMetadataFields({value,onChange}:{value:CustomerOrderMetadat
      {directory.filter(o=>o.isActive || o.id===value[field]).map(o=><option key={o.id} value={o.id}>{o.name}{o.isActive?'':' (غير فعال)'}</option>)}
     </select> : field==='sampleStatus' ? <select className="block w-full border rounded-lg p-2" value={value.sampleStatus || ''} onChange={e=>onChange({...value,sampleStatus:(e.target.value || null) as CustomerOrderMetadata['sampleStatus']})}>
      <option value="">—</option>{Object.entries(sampleStatusLabels).map(([id,name])=><option key={id} value={id}>{name}</option>)}
-    </select> : <input className="block w-full border rounded-lg p-2" type={field.endsWith('Date')?'date':'text'} maxLength={120} value={value[field] || ''} onChange={e=>onChange({...value,[field]:e.target.value || null})}/>}
+    </select> : field.endsWith('Date') ? <DateInput className="block w-full border rounded-lg p-2" value={value[field] || ''} onChange={e=>onChange({...value,[field]:e.target.value || null})}/> : <input className="block w-full border rounded-lg p-2" type="text" maxLength={120} value={value[field] || ''} onChange={e=>onChange({...value,[field]:e.target.value || null})}/>}
    </label>;
   })}
   <details className="col-span-full text-xs"><summary className="cursor-pointer">إضافة مكتب / فرع إلى الدليل</summary>

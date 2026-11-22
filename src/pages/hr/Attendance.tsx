@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AttendanceStatusPanel } from '../../components/hr/AttendanceStatusPanel';
 import { attendanceStatusLabel } from '../../lib/hr/attendanceStatusLabels';
@@ -575,11 +576,11 @@ export function Attendance() {
         </div>
         <div>
           <label className="block text-xs font-bold text-slate-600">{t('filters.dateFrom')}</label>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={`mt-1 ${inputCls}`} />
+          <DateInput value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={`mt-1 ${inputCls}`} />
         </div>
         <div>
           <label className="block text-xs font-bold text-slate-600">{t('filters.dateTo')}</label>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={`mt-1 ${inputCls}`} />
+          <DateInput value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={`mt-1 ${inputCls}`} />
         </div>
       </div>
 

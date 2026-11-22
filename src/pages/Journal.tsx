@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Filter, Plus, RefreshCw, X, Trash2 } from 'lucide-react';
@@ -247,15 +248,13 @@ export const Journal = () => {
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="date"
+            <DateInput
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
               title={t('filters.dateFromTitle')}
             />
-            <input
-              type="date"
+            <DateInput
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
@@ -366,8 +365,7 @@ export const Journal = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-slate-700">{t('modal.entryDateLabel')}</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={entryDate}
                     onChange={(e) => setEntryDate(e.target.value)}
                     className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"

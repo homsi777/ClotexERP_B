@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import { OrderMetadataFields } from './OrderMetadataFields';
 import type { CustomerOrderMetadata } from '../../types';
 import React, { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -821,8 +822,7 @@ export function OrderFormModal({
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700">{t('form.dateLabel')}</label>
-              <input
-                type="date"
+              <DateInput
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
@@ -831,8 +831,7 @@ export function OrderFormModal({
             <OrderMetadataFields value={metadata} onChange={setMetadata} />
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700">{t('form.expectedDateLabel')}</label>
-              <input
-                type="date"
+              <DateInput
                 value={expectedDate}
                 onChange={(e) => setExpectedDate(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"

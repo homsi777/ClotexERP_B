@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -96,7 +97,7 @@ export const HrHome: React.FC = () => {
           <h2 className="font-bold text-slate-900">{t('alerts.title')}</h2>
           <div className="flex items-center gap-2">
             <label className="text-xs font-bold text-slate-600">{t('alerts.date')}</label>
-            <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)}
+            <DateInput value={date} onChange={(e) => e.target.value && setDate(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" dir="ltr" />
             {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
           </div>

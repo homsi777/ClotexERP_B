@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -238,8 +239,7 @@ export const InventoryMovementsLog: React.FC = () => {
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-600">{t('filterDateFrom')}</label>
-          <input
-            type="date"
+          <DateInput
             value={dateFrom}
             onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -247,8 +247,7 @@ export const InventoryMovementsLog: React.FC = () => {
         </div>
         <div className="space-y-1">
           <label className="text-xs font-bold text-slate-600">{t('filterDateTo')}</label>
-          <input
-            type="date"
+          <DateInput
             value={dateTo}
             onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"

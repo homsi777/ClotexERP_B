@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FileText,
@@ -576,8 +577,7 @@ export const ReportsCenter = () => {
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-3 mb-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-8 gap-2 shrink-0 items-end">
             <div className="space-y-0.5 xl:col-span-1">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('filters.dateFrom')}</label>
-              <input
-                type="date"
+              <DateInput
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
                 className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
@@ -585,8 +585,7 @@ export const ReportsCenter = () => {
             </div>
             <div className="space-y-0.5 xl:col-span-1">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('filters.dateTo')}</label>
-              <input
-                type="date"
+              <DateInput
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
                 className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"

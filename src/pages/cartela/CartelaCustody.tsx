@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -166,9 +167,9 @@ export const CartelaCustody: React.FC = () => {
               <option value="HELD">{t('status.HELD')}</option><option value="LATE">{t('status.LATE')}</option><option value="RETURNED">{t('status.RETURNED')}</option>
             </select></label>
           <label className="block"><span className="text-xs font-bold text-slate-600">{t('filters.from')}</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" dir="ltr" /></label>
+            <DateInput value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" dir="ltr" /></label>
           <label className="block"><span className="text-xs font-bold text-slate-600">{t('filters.to')}</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" dir="ltr" /></label>
+            <DateInput value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" dir="ltr" /></label>
         </div>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-500" />}
       </section>
@@ -187,7 +188,7 @@ export const CartelaCustody: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <input value={retScan} onChange={(e) => setRetScan(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addReturn()} placeholder={t('return.scanPlaceholder')}
               className="flex-1 min-w-[14rem] rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono" dir="ltr" />
-            <input type="date" value={retDate} onChange={(e) => setRetDate(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm" dir="ltr" />
+            <DateInput value={retDate} onChange={(e) => setRetDate(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-2 text-sm" dir="ltr" />
             <button type="button" onClick={addReturn} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">{t('return.add')}</button>
           </div>
           {retList.length > 0 && (
@@ -241,7 +242,7 @@ export const CartelaCustody: React.FC = () => {
                   <td className={td}>
                     {r.status !== 'RETURNED' && (extId === r.lineId ? (
                       <span className="inline-flex items-center gap-1">
-                        <input type="date" value={extDate} onChange={(e) => setExtDate(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" dir="ltr" />
+                        <DateInput value={extDate} onChange={(e) => setExtDate(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs" dir="ltr" />
                         <button type="button" onClick={() => void saveExtend(r)} className="rounded-lg bg-emerald-600 px-2 py-1 text-xs font-bold text-white">{t('extend.save')}</button>
                       </span>
                     ) : (

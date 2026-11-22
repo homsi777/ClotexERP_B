@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -565,11 +566,11 @@ export const ChecksVault: React.FC = () => {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('form.receivedDate')}</label>
-                <input type="date" value={form.receivedDate} onChange={(e) => setForm((f) => ({ ...f, receivedDate: e.target.value }))} className="w-full min-w-0 max-w-full border rounded-lg px-3 py-2" />
+                <DateInput value={form.receivedDate} onChange={(e) => setForm((f) => ({ ...f, receivedDate: e.target.value }))} className="w-full min-w-0 max-w-full border rounded-lg px-3 py-2" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('form.dueDate')}</label>
-                <input type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full min-w-0 max-w-full border rounded-lg px-3 py-2" />
+                <DateInput value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full min-w-0 max-w-full border rounded-lg px-3 py-2" />
               </div>
             </div>
             <CheckImageInput value={formImage} onChange={setFormImage} />

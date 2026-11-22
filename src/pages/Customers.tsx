@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useState } from 'react';
 /** يبقى آخر نص بحث حياً عبر الملاحة (عند الرجوع من كشف حساب عميل) بدون إعادة كتابته. */
 let lastCustomersSearchTerm = '';
@@ -468,8 +469,7 @@ export const Customers = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-            <input
-              type="date"
+            <DateInput
               value={reminderDate}
               onChange={(e) => setReminderDate(e.target.value)}
               className="pr-9 pl-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -526,15 +526,13 @@ export const Customers = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
+              <DateInput
                 value={telegramFromDate}
                 onChange={(e) => setTelegramFromDate(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                 title={t('telegramBar.fromDateTitle')}
               />
-              <input
-                type="date"
+              <DateInput
                 value={telegramToDate}
                 onChange={(e) => setTelegramToDate(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -593,15 +591,13 @@ export const Customers = () => {
                   className="w-full rounded-xl border border-slate-200 bg-white py-2 pr-9 pl-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
-              <input
-                type="date"
+              <DateInput
                 value={telegramFromDate}
                 onChange={(e) => setTelegramFromDate(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                 title={t('telegramBar.fromDateTitle')}
               />
-              <input
-                type="date"
+              <DateInput
                 value={telegramToDate}
                 onChange={(e) => setTelegramToDate(e.target.value)}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"

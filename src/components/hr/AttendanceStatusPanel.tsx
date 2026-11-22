@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
@@ -116,7 +117,7 @@ export const AttendanceStatusPanel: React.FC<Props> = ({ onChanged }) => {
         </label>
         <label className="block text-xs font-bold text-slate-600">
           {t('table.date')}
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          <DateInput value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
         </label>
         <label className="block text-xs font-bold text-slate-600">
           {t('status.dayStatus')}

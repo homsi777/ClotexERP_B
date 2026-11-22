@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckSquare, Download, Loader2, Plus, Send, Trash2, X } from 'lucide-react';
 import type { Customer, Invoice, Supplier } from '../../types';
@@ -465,16 +466,14 @@ export function BatchStatementExportModal({
                     </select>
                   </td>
                   <td className="px-4 py-3">
-                    <input
-                      type="date"
+                    <DateInput
                       value={item.fromDate}
                       onChange={(event) => updateRow(item.id, { fromDate: event.target.value })}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <input
-                      type="date"
+                    <DateInput
                       value={item.toDate}
                       onChange={(event) => updateRow(item.id, { toDate: event.target.value })}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"

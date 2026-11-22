@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Filter, ArrowUpRight, ArrowDownRight, Loader2, Printer, X } from 'lucide-react';
@@ -202,8 +203,7 @@ export const BondRecords = () => {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-600">{t('filters.dateFrom')}</label>
-              <input
-                type="date"
+              <DateInput
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-sm"
@@ -211,8 +211,7 @@ export const BondRecords = () => {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-600">{t('filters.dateTo')}</label>
-              <input
-                type="date"
+              <DateInput
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-sm"

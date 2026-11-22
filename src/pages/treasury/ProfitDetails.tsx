@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Loader2, Printer, RefreshCw, RotateCcw, TrendingUp } from 'lucide-react';
@@ -313,8 +314,7 @@ export const ProfitDetails = () => {
             </label>
             <label className="text-xs font-bold text-slate-500">
               {t('filters.fromDate')}
-              <input
-                type="date"
+              <DateInput
                 value={fromDate}
                 onChange={(event) => {
                   setFromDate(event.target.value);
@@ -325,8 +325,7 @@ export const ProfitDetails = () => {
             </label>
             <label className="text-xs font-bold text-slate-500">
               {t('filters.toDate')}
-              <input
-                type="date"
+              <DateInput
                 value={toDate}
                 onChange={(event) => {
                   setToDate(event.target.value);

@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import {useEffect,useRef,useState} from 'react';
 import {apiFetch} from '../../lib/api/client';
 type Rate={id:string;machine_id:string;unit:string;kind:string;amount:string;currency_code:string;status:string;asset_reference:string|null};
@@ -10,7 +11,7 @@ const inputClass='rounded border px-2 py-1';
 function AssetDate({asset,busy,save}:{asset:Asset;busy:boolean;save:(a:Asset,date:string)=>Promise<void>}) {
  const [date,setDate]=useState(asset.acquisition_date?.slice(0,10)??'');
  useEffect(()=>setDate(asset.acquisition_date?.slice(0,10)??''),[asset.acquisition_date,asset.version]);
- return <div className="flex gap-2"><input className={inputClass} aria-label={`تاريخ اقتناء ${asset.name}`} type="date" value={date} onChange={e=>setDate(e.target.value)}/><button disabled={busy||date===(asset.acquisition_date?.slice(0,10)??'')} onClick={()=>void save(asset,date)}>حفظ التاريخ</button></div>;
+ return <div className="flex gap-2"><DateInput className={inputClass} aria-label={`تاريخ اقتناء ${asset.name}`} value={date} onChange={e=>setDate(e.target.value)}/><button disabled={busy||date===(asset.acquisition_date?.slice(0,10)??'')} onClick={()=>void save(asset,date)}>حفظ التاريخ</button></div>;
 }
 export function ManufacturingFinancialSources({order,refresh,frozen=false}:{order:string;refresh:()=>Promise<void>;frozen?:boolean}) {
  const [data,setData]=useState<Sources|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);

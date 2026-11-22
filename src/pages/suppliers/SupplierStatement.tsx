@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
 import { canSeeFinanceUser } from '../../lib/priceAccess';
 import React, { useMemo, useState, useEffect } from 'react';
@@ -919,8 +920,7 @@ const SupplierStatementInner = () => {
             <label className="block text-xs font-bold text-slate-600">{t('filters.fromDateLabel')}</label>
             <div className="relative">
               <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-              <input
-                type="date"
+              <DateInput
                 value={fromDate}
                 onChange={(event) => {
                   setDateAutoRange(false);
@@ -934,8 +934,7 @@ const SupplierStatementInner = () => {
             <label className="block text-xs font-bold text-slate-600">{t('filters.toDateLabel')}</label>
             <div className="relative">
               <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-              <input
-                type="date"
+              <DateInput
                 value={toDate}
                 onChange={(event) => {
                   setDateAutoRange(false);
@@ -1233,8 +1232,7 @@ const SupplierStatementInner = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-slate-700">{t('paymentModal.entryDateLabel')}</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={payOutDate}
                     onChange={(e) => setPayOutDate(e.target.value)}
                     className="w-full rounded-lg border border-rose-200 bg-white/90 px-3 py-2.5 shadow-sm focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400/40"

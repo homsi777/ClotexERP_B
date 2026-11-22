@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Search, Wallet, ArrowUpRight, ArrowDownRight, Loader2, ArrowLeftRight } from 'lucide-react';
@@ -334,7 +335,7 @@ export const Safes = () => {
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('transferModal.dateLabel')}</label>
-                <input type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+                <DateInput value={transferDate} onChange={(e) => setTransferDate(e.target.value)} className="w-full border rounded-lg px-3 py-2" />
               </div>
               <div className="space-y-1">
                 <label className="text-sm text-slate-700">{t('transferModal.amountLabel')}</label>

@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { useTranslation } from 'react-i18next';
@@ -690,8 +691,7 @@ export const ReturnInvoices = () => {
             <option value="CONFIRMED">{t('filters.statusConfirmed')}</option>
             <option value="CANCELLED">{t('filters.statusCancelled')}</option>
           </select>
-          <input
-            type="date"
+          <DateInput
             value={listDateFrom}
             onChange={(e) => {
               setListPage(1);
@@ -699,8 +699,7 @@ export const ReturnInvoices = () => {
             }}
             className="border border-slate-200 rounded-lg px-2 py-2 bg-white text-sm"
           />
-          <input
-            type="date"
+          <DateInput
             value={listDateTo}
             onChange={(e) => {
               setListPage(1);

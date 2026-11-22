@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -109,8 +110,7 @@ export const PayrollSalaryLog = () => {
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">{t('dateFromLabel')}</label>
-            <input
-              type="date"
+            <DateInput
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
@@ -118,8 +118,7 @@ export const PayrollSalaryLog = () => {
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">{t('dateToLabel')}</label>
-            <input
-              type="date"
+            <DateInput
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"

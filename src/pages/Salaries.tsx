@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -1060,7 +1061,7 @@ export const Salaries = () => {
                 ) : null}
               </Field>
               <Field label={t('payModal.dateLabel')}>
-                <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} disabled={payModalLoading} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+                <DateInput value={payDate} onChange={(e) => setPayDate(e.target.value)} disabled={payModalLoading} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
               </Field>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={closePayModal} disabled={payModalLoading} className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50">{t('payModal.cancel')}</button>

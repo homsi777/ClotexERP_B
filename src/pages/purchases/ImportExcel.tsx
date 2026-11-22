@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -485,7 +486,7 @@ export const ImportExcel = () => {
 
             <div className="space-y-1.5">
               <label className="text-sm font-bold text-slate-700">{t('step1.invoiceDateLabel')} <span className="text-rose-500">*</span></label>
-              <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className={inputCls} dir="ltr" />
+              <DateInput value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className={inputCls} dir="ltr" />
             </div>
 
             <div className="space-y-1.5">

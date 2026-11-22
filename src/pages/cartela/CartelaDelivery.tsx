@@ -1,3 +1,4 @@
+import { DateInput } from '../../components/common/DateInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -170,7 +171,7 @@ export const CartelaDelivery: React.FC = () => {
           </label>
           <label className="block">
             <span className="text-xs font-bold text-slate-600">{t('delivery.date')}</span>
-            <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" dir="ltr" />
+            <DateInput value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" dir="ltr" />
           </label>
           <label className="block">
             <span className="text-xs font-bold text-slate-600">{t('delivery.notes')}</span>
@@ -213,7 +214,7 @@ export const CartelaDelivery: React.FC = () => {
                     ) : <span>1</span>}
                   </td>
                   <td className="p-2.5"><input type="number" min={1} value={l.days} onChange={(e) => setDays(i, e.target.value)} className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm" dir="ltr" /></td>
-                  <td className="p-2.5"><input type="date" value={l.dueDate} onChange={(e) => setDue(i, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-sm" dir="ltr" /></td>
+                  <td className="p-2.5"><DateInput value={l.dueDate} onChange={(e) => setDue(i, e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1 text-sm" dir="ltr" /></td>
                   <td className="p-2.5"><button type="button" onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))} className="text-rose-600"><Trash2 className="h-4 w-4" /></button></td>
                 </tr>
               ))}

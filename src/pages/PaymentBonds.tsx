@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { useTranslation } from 'react-i18next';
@@ -469,8 +470,7 @@ export const PaymentBonds = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-slate-700">{t('fields.date')}</label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={voucherDate}
                     onChange={(e) => setVoucherDate(e.target.value)}
                     onKeyDown={focusNextFormControl}
@@ -582,8 +582,7 @@ export const PaymentBonds = () => {
                               placeholder={t('split.transactionRefPlaceholder')}
                               className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm"
                             />
-                            <input
-                              type="date"
+                            <DateInput
                               value={line.transactionDate}
                               onChange={(e) => updateSplitLine(line.localId, { transactionDate: e.target.value })}
                               className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm"

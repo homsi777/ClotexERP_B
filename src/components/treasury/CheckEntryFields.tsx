@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ImagePlus, Trash2 } from 'lucide-react';
@@ -113,7 +114,7 @@ export const CheckEntryFields: React.FC<{ value: CheckDraft; onChange: (v: Check
         </div>
         <div className="space-y-1">
           <label className="text-sm text-slate-700">{t('form.dueDate')}</label>
-          <input type="date" value={value.dueDate} onChange={(e) => onChange({ ...value, dueDate: e.target.value })} className={input} dir="ltr" />
+          <DateInput value={value.dueDate} onChange={(e) => onChange({ ...value, dueDate: e.target.value })} className={input} dir="ltr" />
         </div>
       </div>
       <CheckImageInput value={value.imageData} onChange={(imageData) => onChange({ ...value, imageData })} />

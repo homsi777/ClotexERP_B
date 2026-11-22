@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCurrencyWithBranchDefault } from '../hooks/useDefaultCurrency';
 import { Plus, Search, Loader2, CreditCard, Ban } from 'lucide-react';
@@ -237,11 +238,11 @@ export const Expenses = () => {
           </button>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             {t('filterFrom')}
-            <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg" />
+            <DateInput value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg" />
           </label>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             {t('filterTo')}
-            <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg" />
+            <DateInput value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg" />
           </label>
           {(filterFrom || filterTo) && (
             <button
@@ -353,9 +354,8 @@ export const Expenses = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('dateLabel')}</label>
-                  <input
+                  <DateInput
                     required
-                    type="date"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                     value={expenseDate}
                     onChange={(e) => setExpenseDate(e.target.value)}

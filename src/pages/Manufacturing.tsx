@@ -1,3 +1,4 @@
+import { DateInput } from '../components/common/DateInput';
 import {ExecutionTrackingLauncher} from '../components/manufacturing/ExecutionTrackingLauncher';
 import {ManufacturingItemSpecificationMapping} from '../components/manufacturing/ManufacturingItemSpecificationMapping';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -402,11 +403,11 @@ function WorkOrdersPanel({ t, canManage, canRelease }: { t: any; canManage: bool
           </label>
           <label className="space-y-1">
             <span className="text-xs font-bold">{t("workOrders.startDate")}</span>
-            <input type="date" className={input} value={form.plannedStartDate} onChange={(e) => setForm({ ...form, plannedStartDate: e.target.value })} />
+            <DateInput className={input} value={form.plannedStartDate} onChange={(e) => setForm({ ...form, plannedStartDate: e.target.value })} />
           </label>
           <label className="space-y-1">
             <span className="text-xs font-bold">{t("workOrders.endDate")}</span>
-            <input type="date" className={input} value={form.plannedEndDate} onChange={(e) => setForm({ ...form, plannedEndDate: e.target.value })} />
+            <DateInput className={input} value={form.plannedEndDate} onChange={(e) => setForm({ ...form, plannedEndDate: e.target.value })} />
           </label>
           <label className="space-y-1">
             <span className="text-xs font-bold">{t("workOrders.notes")}</span>

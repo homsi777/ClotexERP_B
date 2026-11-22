@@ -1,3 +1,4 @@
+import { DateInput } from '../common/DateInput';
 import {useEffect,useRef,useState} from 'react';
 import {getExecutionTracking,saveExecutionTracking,type ExecutionStage,type ExecutionData,type ExecutionOption} from '../../lib/api/manufacturingExecutionApi';
 
@@ -23,7 +24,7 @@ export function ExecutionTrackingPanel({stage,subjectId,canManage,onChanged}:Pro
   try{await saveExecutionTracking(stage,subjectId,{...body,requestId:request.current.id});request.current=null;setData(await getExecutionTracking(stage,subjectId));setNotes('');await onChanged?.();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}
  };
  const select=(label:string,value:string,change:(v:string)=>void,options:ExecutionOption[])=><label className="grid gap-1 text-sm">{label}<select aria-label={label} value={value} onChange={e=>change(e.target.value)} className="rounded border p-2"><option value="">اختر</option>{options.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>;
- const input=(label:string,value:string,change:(v:string)=>void,type='text')=><label className="grid gap-1 text-sm">{label}<input aria-label={label} type={type} value={value} onChange={e=>change(e.target.value)} className="rounded border p-2"/></label>;
+ const input=(label:string,value:string,change:(v:string)=>void,type='text')=><label className="grid gap-1 text-sm">{label}{type==='date' ? <DateInput aria-label={label} value={value} onChange={e=>change(e.target.value)} className="rounded border p-2"/> : <input aria-label={label} type={type} value={value} onChange={e=>change(e.target.value)} className="rounded border p-2"/>}</label>;
  return <section dir="rtl" className="space-y-3 rounded-xl border bg-white p-4" aria-busy={busy}><h3 className="font-bold">تتبع التنفيذ التشغيلي</h3>{error&&<p role="alert" className="text-red-700">{error}</p>}{!data?<p>جار تحميل بيانات التشغيل…</p>:<>
  <p>الحالة: {data.subject.status} / الإصدار: {data.subject.version}</p>
  {canManage&&<fieldset disabled={busy} className="space-y-3">
