@@ -33,6 +33,7 @@ type EmployeeFormState = {
   paymentMethod: string;
   hireDate: string;
   birthDate: string;
+  gender: '' | 'MALE' | 'FEMALE';
   insuranceStartDate: string;
   baseSharePercent: string;
   workdayHours: string;
@@ -64,6 +65,7 @@ function emptyForm(): EmployeeFormState {
     paymentMethod: '',
     hireDate: '',
     birthDate: '',
+    gender: '',
     insuranceStartDate: '',
     baseSharePercent: '',
     workdayHours: '',
@@ -92,6 +94,7 @@ function formFromEmployee(emp: PayrollEmployeeDto): EmployeeFormState {
     paymentMethod: emp.payment_method || '',
     hireDate: emp.hire_date ? emp.hire_date.slice(0, 10) : '',
     birthDate: emp.birth_date ? emp.birth_date.slice(0, 10) : '',
+    gender: emp.gender ?? '',
     insuranceStartDate: emp.insurance_start_date ? emp.insurance_start_date.slice(0, 10) : '',
     baseSharePercent: emp.base_share_percent != null ? String(Number(emp.base_share_percent)) : '',
     workdayHours: emp.workday_hours != null ? String(Number(emp.workday_hours)) : '',
@@ -212,6 +215,7 @@ export function Employees() {
       paymentMethod: form.paymentMethod.trim() || null,
       hireDate: form.hireDate || null,
       birthDate: form.birthDate || null,
+      gender: form.gender || null,
       insuranceStartDate: form.insuranceStartDate || null,
       baseSharePercent: form.baseSharePercent ? Number(form.baseSharePercent) : null,
       workdayHours: form.workdayHours ? Number(form.workdayHours) : null,
@@ -461,6 +465,13 @@ export function Employees() {
                 </Field>
                 <Field label={t('modal.fields.hireDate')}>
                   <input type="date" value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} className={inputCls} />
+                </Field>
+                <Field label={t('modal.fields.gender', { defaultValue: 'النوع' })}>
+                  <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as '' | 'MALE' | 'FEMALE' })} className={inputCls}>
+                    <option value="">—</option>
+                    <option value="MALE">ذكر</option>
+                    <option value="FEMALE">أنثى</option>
+                  </select>
                 </Field>
                 <Field label={t('modal.fields.birthDate')}>
                   <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className={inputCls} />

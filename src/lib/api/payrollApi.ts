@@ -84,6 +84,7 @@ export interface PayrollEmployeeUpsertPayload {
   salaryPeriod?: 'weekly' | 'monthly';
   hireDate?: string | null;
   birthDate?: string | null;
+  gender?: 'MALE' | 'FEMALE' | null;
   insuranceStartDate?: string | null;
   baseSharePercent?: number | null;
   workdayHours?: number | null;

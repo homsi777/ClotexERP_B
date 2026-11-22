@@ -34,6 +34,7 @@ const employeeBody = z.object({
   // TASK 015: تُحفظ فقط إن أُرسلت (undefined = لا تغيير عند التحديث).
   birthDate: z.string().optional().nullable(),
   insuranceStartDate: z.string().optional().nullable(),
+  gender: z.enum(['MALE', 'FEMALE']).optional().nullable(),
   // TASK 016: بنية الأجر من ملفات المرتبات (صالة 75/8، إدارة 80/9). تُحفظ فقط إن أُرسلت.
   baseSharePercent: z.coerce.number().gt(0).max(100).optional().nullable(),
   workdayHours: z.coerce.number().min(1).max(24).optional().nullable(),
@@ -285,8 +286,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
            company_id, employee_code, full_name, address, job_title, department, phone,
            base_salary, currency_code, salary_period, hire_date, notes,
            fingerprint_code, factory, category, payment_method, termination_date, status, shift_type_id,
-           birth_date, insurance_start_date, base_share_percent, workday_hours
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17::date,$18,$19,$20::date,$21::date,$22,$23)
+           birth_date, insurance_start_date, base_share_percent, workday_hours, gender
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17::date,$18,$19,$20::date,$21::date,$22,$23,$24)
          RETURNING *`,
         [
           companyId,
@@ -312,6 +313,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
           d.insuranceStartDate || null,
           d.baseSharePercent ?? null,
           d.workdayHours ?? null,
+          d.gender ?? null,
         ],
       );
       await client.query(
@@ -363,6 +365,7 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
            insurance_start_date = CASE WHEN $24 THEN $23::date ELSE insurance_start_date END,
            base_share_percent = CASE WHEN $26 THEN $25::numeric ELSE base_share_percent END,
            workday_hours = CASE WHEN $28 THEN $27::numeric ELSE workday_hours END,
+           gender = CASE WHEN $30 THEN $29 ELSE gender END,
            updated_at=now()
          WHERE id=$1 AND company_id=$2
          RETURNING *`,
@@ -395,6 +398,8 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
           d.baseSharePercent !== undefined,
           d.workdayHours ?? null,
           d.workdayHours !== undefined,
+          d.gender ?? null,
+          d.gender !== undefined,
         ],
       );
       if (baseSalaryChanged) {
