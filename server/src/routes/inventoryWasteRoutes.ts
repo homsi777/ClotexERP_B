@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
-import { authenticateRequest } from '../middleware/auth.js';
+import { authenticateRequest, canApprove } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { generateDocumentNo } from '../utils/documentNumbers.js';
@@ -346,6 +346,10 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/:id/confirm', { preHandler: authenticateRequest }, async (req, reply) => {
+    // الإهلاك المادي يخصم من المخزون: يُحفظ مسودة لدى أي مستخدم، ولا يُعتمد إلا من الطرف المناسب (مدير/محاسب أو من مُنح «اعتماد»).
+    if (!canApprove(req.user, 'inventory.waste')) {
+      return sendError(reply, 403, 'اعتماد الإهلاك المادي من صلاحية المدير أو المحاسب — يبقى مسودة حتى يعتمده', 'APPROVAL_REQUIRED');
+    }
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();

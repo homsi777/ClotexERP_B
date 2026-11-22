@@ -169,6 +169,17 @@ export function canPrice(user: JwtPayload | undefined, moduleCode: string): bool
   return user.role === 'accountant' || user.role === 'manager';
 }
 
+/**
+ * اعتماد عملية تمسّ المخزون/المال (مثل الإهلاك المادي): المدير؛ بوضع «مخصّص» من مُنح «اعتماد» للوحدة؛ وبالدور المحاسب والمدير التشغيلي.
+ * غيرهم يحفظون مسودة فقط وتنتظر اعتماد الطرف المناسب.
+ */
+export function canApprove(user: JwtPayload | undefined, moduleCode: string): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.customPerms) return (user.matrix ?? []).includes(`p:${moduleCode}.approve`);
+  return user.role === 'accountant' || user.role === 'manager';
+}
+
 /** تعديل مباشر بلا إذن: المدير/المحاسب/المدير التشغيلي بالدور؛ وبالمصفوفة من مُنح «تعديل» للوحدة. */
 export function canEditDirect(user: JwtPayload | undefined, moduleCode: string): boolean {
   if (!user) return false;

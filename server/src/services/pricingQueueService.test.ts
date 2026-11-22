@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canPrice, type JwtPayload } from '../middleware/auth.js';
+import { canApprove, canPrice, type JwtPayload } from '../middleware/auth.js';
 import { maskMoneyRow, unpricedInvoiceBody } from './pricingQueueService.js';
 
 const user = (over: Partial<JwtPayload>): JwtPayload => ({ sub: 'u', companyId: 'c', role: 'viewer', permissions: [], ...over }) as JwtPayload;
@@ -45,4 +45,16 @@ test('unpricedInvoiceBody يصفّر الأسعار والإجماليات وي�
   assert.equal(b.totalAmount, 0);
   assert.equal(b.paidAmount, 0);
   assert.deepEqual(b.lines[0], { description: 'قماش', quantity: 5, unitPrice: 0, unitPriceUsd: 0, lineDiscount: 0, lineTax: 0, lineTotal: 0, lineDiscountUsd: 0, lineTaxUsd: 0, lineTotalUsd: 0 });
+});
+
+test('canApprove (الإهلاك المادي): المدير والمحاسب والمدير التشغيلي بالدور؛ بالمصفوفة «اعتماد» للوحدة فقط', () => {
+  assert.equal(canApprove(user({ role: 'admin' }), 'inventory.waste'), true);
+  assert.equal(canApprove(user({ role: 'accountant' }), 'inventory.waste'), true);
+  assert.equal(canApprove(user({ role: 'manager' }), 'inventory.waste'), true);
+  assert.equal(canApprove(user({ role: 'inventory' }), 'inventory.waste'), false, 'المخزن يحفظ مسودة فقط');
+  assert.equal(canApprove(user({ role: 'viewer' }), 'inventory.waste'), false);
+  const custom = { role: 'inventory', customPerms: true } as Partial<JwtPayload>;
+  assert.equal(canApprove(user({ ...custom, matrix: ['p:inventory.waste.create', 'p:inventory.waste.view'] }), 'inventory.waste'), false);
+  assert.equal(canApprove(user({ ...custom, matrix: ['p:inventory.waste.approve'] }), 'inventory.waste'), true);
+  assert.equal(canApprove(user({ ...custom, matrix: ['p:inventory.waste.approve'] }), 'sales.invoices'), false, 'لا تنتقل بين الوحدات');
 });

@@ -12,6 +12,8 @@ import {
   type WasteType,
 } from '../../lib/api/inventoryWasteApi';
 import { ApiRequestError } from '../../lib/api/client';
+import { fetchMe, type AuthUser } from '../../lib/api/authApi';
+import { canApproveUser } from '../../lib/priceAccess';
 
 const STATUS_CLASS: Record<string, string> = {
   DRAFT: 'bg-amber-100 text-amber-800',
@@ -55,6 +57,10 @@ export const Depreciation = () => {
   const [draftTotal, setDraftTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  // اعتماد الإهلاك (الخصم من المخزون) للمدير/المحاسب أو من مُنح «اعتماد»؛ غيرهم يحفظون مسودة تنتظر الاعتماد.
+  const [me, setMe] = useState<AuthUser | null>(null);
+  useEffect(() => { void fetchMe().then(setMe).catch(() => setMe(null)); }, []);
+  const canApproveWaste = canApproveUser(me, 'inventory.waste');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [bus, setBus] = useState({ list: false, create: false, act: null as string | null });
   const [err, setErr] = useState<string | null>(null);
@@ -504,14 +510,18 @@ export const Depreciation = () => {
                     <td className="px-6 py-4">
                       {record.status === 'DRAFT' ? (
                         <div className="flex flex-wrap gap-2 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => void handleConfirm(record.id)}
-                            disabled={bus.act === record.id}
-                            className="text-xs px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
-                          >
-                            {t('confirm')}
-                          </button>
+                          {canApproveWaste ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleConfirm(record.id)}
+                              disabled={bus.act === record.id}
+                              className="text-xs px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+                            >
+                              {t('confirm')}
+                            </button>
+                          ) : (
+                            <span className="text-[11px] font-bold text-orange-700">بانتظار اعتماد المدير/المحاسب</span>
+                          )}
                           <button
                             type="button"
                             onClick={() => void handleCancel(record.id)}
