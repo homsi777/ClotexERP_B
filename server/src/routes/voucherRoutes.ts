@@ -66,6 +66,8 @@ const createBody = z.object({
   amount: z.coerce.number().positive(),
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().optional(),
+  /** false (مع عملة غير الدولار) = تسجيل بالعملة فقط بلا معادل دولار. الافتراضي true للتوافق. */
+  convertToUsd: z.boolean().optional(),
   amountUsd: z.coerce.number().optional(),
   /** تحويل اختياري للعرض: مكافئ المبلغ بعملة أخرى بسعر محدد (لا يغيّر الأرصدة). */
   convertToCurrencyCode: z.string().trim().min(1).max(10).optional().nullable(),
@@ -91,6 +93,25 @@ function conversionOf(d: { amount: number; currencyCode?: string; convertToCurre
   const rate = d.convertRate ?? null;
   if (!code || !rate || code === (d.currencyCode ?? '').toUpperCase()) return { code: null, rate: null, amount: null };
   return { code, rate, amount: round2(d.amount * rate) };
+}
+
+/** يحدد سعر الصرف وهل يُحوَّل للدولار: بلا تحويل = تسجيل بالعملة فقط ولا يُفترض سعر 1. */
+async function resolveVoucherRate(
+  client: import('pg').PoolClient,
+  companyId: string,
+  currencyCode: string,
+  d: { exchangeRateToUsd?: number; convertToUsd?: boolean },
+): Promise<{ rate: number; usdConverted: boolean }> {
+  if (currencyCode !== 'USD' && d.convertToUsd === false) return { rate: 1, usdConverted: false };
+  let rate = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : NaN;
+  if (!Number.isFinite(rate) || rate <= 0) {
+    if (currencyCode === 'USD') rate = 1;
+    else rate = (await getExchangeRateToUsdTx(client, companyId, currencyCode)) ?? NaN;
+  }
+  if (!Number.isFinite(rate) || rate <= 0) {
+    throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
+  }
+  return { rate: currencyCode === 'USD' ? 1 : rate, usdConverted: true };
 }
 
 function computeUsd(amountOriginal: number, exchangeRateToUsd: number): number {
@@ -155,12 +176,13 @@ async function replaceVoucherLines(
   headerExchangeRateToUsd: number,
   voucherType: 'RECEIPT' | 'PAYMENT',
   userId: string | null = null,
+  usdConverted = true,
 ): Promise<void> {
   await client.query(`DELETE FROM voucher_lines WHERE company_id=$1 AND voucher_id=$2`, [companyId, voucherId]);
   let sortOrder = 0;
   const seenNewChecks = new Set<string>();
   for (const line of lines) {
-    const amountUsd = computeUsd(line.amount, headerExchangeRateToUsd);
+    const amountUsd = usdConverted ? computeUsd(line.amount, headerExchangeRateToUsd) : 0;
 
     let lineCashboxId = line.cashboxId ?? null;
     if (!lineCashboxId) {
@@ -391,21 +413,9 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         d.voucherType === 'RECEIPT' ? 'RECEIPT_VOUCHER' : 'PAYMENT_VOUCHER',
       );
       const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
-      let exchangeRateToUsd = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : NaN;
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        if (currencyCode === 'USD') {
-          exchangeRateToUsd = 1;
-        } else {
-          const fromDb = await getExchangeRateToUsdTx(client, companyId, currencyCode);
-          exchangeRateToUsd = fromDb ?? NaN;
-        }
-      }
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-      }
-      if (currencyCode === 'USD') exchangeRateToUsd = 1;
+      const { rate: exchangeRateToUsd, usdConverted } = await resolveVoucherRate(client, companyId, currencyCode, d);
 
-      const amountUsd = computeUsd(d.amount, exchangeRateToUsd);
+      const amountUsd = usdConverted ? computeUsd(d.amount, exchangeRateToUsd) : 0;
       const purpose: VoucherPurpose = d.purpose ?? 'INVOICE_PAYMENT';
       const description = mergeVoucherDescription(purpose, d.description);
       const ins = await client.query(
@@ -414,8 +424,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
            amount, currency_code, exchange_rate_to_usd, amount_usd,
            payment_method, status, purpose, description, notes,
            reference_document_type, reference_document_no,
-           created_by_user_id, convert_to_currency_code, convert_rate, converted_amount
-         ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,'DRAFT',$14,$15,$16,$17,$18,$19,$20,$21,$22)
+           created_by_user_id, convert_to_currency_code, convert_rate, converted_amount, usd_converted
+         ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,'DRAFT',$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
          RETURNING id, voucher_no, voucher_type, voucher_date, cashbox_id, party_type, party_id, party_name,
                    amount, currency_code, exchange_rate_to_usd, amount_usd, payment_method, status, purpose,
                    description, notes, reference_document_type, reference_document_no, created_at`,
@@ -440,11 +450,12 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
           d.referenceDocumentNo?.trim() || null,
           userId,
           ...(() => { const c = conversionOf({ amount: d.amount, currencyCode, convertToCurrencyCode: d.convertToCurrencyCode, convertRate: d.convertRate }); return [c.code, c.rate, c.amount]; })(),
+          usdConverted,
         ],
       );
 
       if (d.lines && d.lines.length > 0) {
-        await replaceVoucherLines(client, companyId, ins.rows[0].id, d.lines, currencyCode, exchangeRateToUsd, d.voucherType, userId);
+        await replaceVoucherLines(client, companyId, ins.rows[0].id, d.lines, currencyCode, exchangeRateToUsd, d.voucherType, userId, usdConverted);
       }
 
       await client.query('COMMIT');
@@ -495,20 +506,8 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
       const vd = d.voucherDate ? d.voucherDate : todayYmd();
       const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
 
-      let exchangeRateToUsd = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : NaN;
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        if (currencyCode === 'USD') {
-          exchangeRateToUsd = 1;
-        } else {
-          const fromDb = await getExchangeRateToUsdTx(client, companyId, currencyCode);
-          exchangeRateToUsd = fromDb ?? NaN;
-        }
-      }
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-      }
-      if (currencyCode === 'USD') exchangeRateToUsd = 1;
-      const amountUsd = computeUsd(d.amount, exchangeRateToUsd);
+      const { rate: exchangeRateToUsd, usdConverted } = await resolveVoucherRate(client, companyId, currencyCode, d);
+      const amountUsd = usdConverted ? computeUsd(d.amount, exchangeRateToUsd) : 0;
       const purpose: VoucherPurpose = d.purpose ?? 'INVOICE_PAYMENT';
       const description = mergeVoucherDescription(purpose, d.description);
 
@@ -519,7 +518,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
            payment_method=$13, purpose=$14, description=$15, notes=$16,
            reference_document_type=$17, reference_document_no=$18,
            updated_at=now(), created_by_user_id=$19,
-           convert_to_currency_code=$20, convert_rate=$21, converted_amount=$22
+           convert_to_currency_code=$20, convert_rate=$21, converted_amount=$22, usd_converted=$23
          WHERE id=$1 AND company_id=$2
          RETURNING id, voucher_no, status, purpose, updated_at`,
         [
@@ -543,12 +542,13 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
           d.referenceDocumentNo?.trim() || null,
           userId,
           ...(() => { const c = conversionOf({ amount: d.amount, currencyCode, convertToCurrencyCode: d.convertToCurrencyCode, convertRate: d.convertRate }); return [c.code, c.rate, c.amount]; })(),
+          usdConverted,
         ],
       );
 
       // استبدال كامل للبنود دائماً عند التعديل (حتى لو أُرسلت فارغة — يعني
       // رجوعاً لسند أحادي الخزينة) — السند لا يزال DRAFT هنا فقط، لا أثر مالي بعد.
-      await replaceVoucherLines(client, companyId, id, d.lines ?? [], currencyCode, exchangeRateToUsd, d.voucherType, userId);
+      await replaceVoucherLines(client, companyId, id, d.lines ?? [], currencyCode, exchangeRateToUsd, d.voucherType, userId, usdConverted);
 
       await client.query('COMMIT');
       return reply.send({ ok: true, data: row.rows[0] });
@@ -613,6 +613,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         partyId: row.party_id,
         currencyCode: voucherCurrencyCode,
         exchangeRateToUsd: voucherExchangeRateToUsd,
+        usdConverted: row.usd_converted !== false,
       });
       await validatePurchaseInvoicePaymentVoucher(client, companyId, {
         voucherType: row.voucher_type,
@@ -623,6 +624,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         partyId: row.party_id,
         currencyCode: voucherCurrencyCode,
         exchangeRateToUsd: voucherExchangeRateToUsd,
+        usdConverted: row.usd_converted !== false,
       });
 
       await applyVoucherConfirmation(client, {
@@ -637,7 +639,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         amount: Number(row.amount),
         currencyCode: String(row.currency_code || 'USD').trim().toUpperCase(),
         exchangeRateToUsd: Number(row.exchange_rate_to_usd ?? 1) > 0 ? Number(row.exchange_rate_to_usd ?? 1) : 1,
-        amountUsd: Number(row.amount_usd ?? 0) || computeUsd(Number(row.amount), Number(row.exchange_rate_to_usd ?? 1) || 1),
+        amountUsd: row.usd_converted === false ? 0 : Number(row.amount_usd ?? 0) || computeUsd(Number(row.amount), Number(row.exchange_rate_to_usd ?? 1) || 1),
         cashboxId: row.cashbox_id,
         partyType: row.party_type,
         partyId: row.party_id,
@@ -718,6 +720,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         partyId: row.party_id,
         currencyCode: voucherCurrencyCode,
         exchangeRateToUsd: voucherExchangeRateToUsd,
+        usdConverted: row.usd_converted !== false,
       });
       await applyPurchaseInvoicePaymentOnVoucherConfirm(client, companyId, userId, {
         voucherId: id,
@@ -729,6 +732,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         partyId: row.party_id,
         currencyCode: voucherCurrencyCode,
         exchangeRateToUsd: voucherExchangeRateToUsd,
+        usdConverted: row.usd_converted !== false,
       });
 
       await client.query('COMMIT');
@@ -805,7 +809,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
           amount: Number(row.amount),
           currencyCode: String(row.currency_code || 'USD').trim().toUpperCase(),
           exchangeRateToUsd: Number(row.exchange_rate_to_usd ?? 1) > 0 ? Number(row.exchange_rate_to_usd ?? 1) : 1,
-          amountUsd: Number(row.amount_usd ?? 0) || computeUsd(Number(row.amount), Number(row.exchange_rate_to_usd ?? 1) || 1),
+          amountUsd: row.usd_converted === false ? 0 : Number(row.amount_usd ?? 0) || computeUsd(Number(row.amount), Number(row.exchange_rate_to_usd ?? 1) || 1),
           cashboxId: row.cashbox_id,
           userId,
           lines: cancellationLines,

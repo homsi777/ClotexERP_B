@@ -113,6 +113,8 @@ export async function createVoucher(payload: {
   amount: number;
   currencyCode?: string;
   exchangeRateToUsd?: number;
+  /** false = تسجيل بالعملة فقط بلا معادل دولار (سعر الصرف مطفأ). */
+  convertToUsd?: boolean;
   amountUsd?: number;
   convertToCurrencyCode?: string | null;
   convertRate?: number | null;
@@ -138,6 +140,7 @@ export async function createVoucher(payload: {
       amount: payload.amount,
       currencyCode: payload.currencyCode ?? 'USD',
       exchangeRateToUsd: payload.exchangeRateToUsd,
+      convertToUsd: payload.convertToUsd,
       amountUsd: payload.amountUsd,
       convertToCurrencyCode: payload.convertToCurrencyCode ?? null,
       convertRate: payload.convertRate ?? null,

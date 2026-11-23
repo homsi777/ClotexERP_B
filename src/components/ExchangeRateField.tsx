@@ -28,7 +28,9 @@ export const ExchangeRateField: React.FC<{
   onValueChange: (value: string) => void;
   inputClassName?: string;
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
-}> = ({ currencyCode, storedRate, manual, onManualChange, value, onValueChange, inputClassName, onKeyDown }) => {
+  /** سندات القبض/الدفع: عند الإطفاء يُسجَّل المبلغ بعملته بلا معادل دولار. */
+  noConversionWhenOff?: boolean;
+}> = ({ currencyCode, storedRate, manual, onManualChange, value, onValueChange, inputClassName, onKeyDown, noConversionWhenOff }) => {
   const { t } = useTranslation('common');
   if (currencyCode === 'USD') return null;
   return (
@@ -54,6 +56,8 @@ export const ExchangeRateField: React.FC<{
           className={inputClassName ?? 'w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-left'}
           dir="ltr"
         />
+      ) : noConversionWhenOff ? (
+        <p className="text-xs text-slate-500">{t('rate.noConversionHint')}</p>
       ) : storedRate !== null ? (
         <p className="text-xs text-slate-500">
           {t('rate.autoHint', { code: currencyCode, rate: storedRate })}

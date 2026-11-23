@@ -30,9 +30,11 @@ export async function loadVoucherConfirmationLines(
     exchange_rate_to_usd: string | null;
     amount_usd: string | null;
     check_id: string | null;
+    usd_converted: boolean;
   }>(
-    `SELECT id, cashbox_id, amount, currency_code, exchange_rate_to_usd, amount_usd, check_id
-     FROM voucher_lines WHERE company_id=$1 AND voucher_id=$2 ORDER BY sort_order ASC, created_at ASC`,
+    `SELECT l.id, l.cashbox_id, l.amount, l.currency_code, l.exchange_rate_to_usd, l.amount_usd, l.check_id, v.usd_converted
+     FROM voucher_lines l JOIN vouchers v ON v.id = l.voucher_id AND v.company_id = l.company_id
+     WHERE l.company_id=$1 AND l.voucher_id=$2 ORDER BY l.sort_order ASC, l.created_at ASC`,
     [companyId, voucherId],
   );
   return rows.rows.map((r) => ({
@@ -41,7 +43,7 @@ export async function loadVoucherConfirmationLines(
     amount: Number(r.amount),
     currencyCode: String(r.currency_code || 'USD').trim().toUpperCase(),
     exchangeRateToUsd: Number(r.exchange_rate_to_usd ?? 1) > 0 ? Number(r.exchange_rate_to_usd ?? 1) : 1,
-    amountUsd: Number(r.amount_usd ?? 0) || computeUsd(Number(r.amount), Number(r.exchange_rate_to_usd ?? 1) || 1),
+    amountUsd: r.usd_converted === false ? 0 : Number(r.amount_usd ?? 0) || computeUsd(Number(r.amount), Number(r.exchange_rate_to_usd ?? 1) || 1),
     checkId: r.check_id,
   }));
 }
@@ -400,7 +402,7 @@ export async function cancelConfirmedVoucher(
       currencyCode: String(row.currency_code || 'USD').trim().toUpperCase(),
       exchangeRateToUsd: Number(row.exchange_rate_to_usd ?? 1) > 0 ? Number(row.exchange_rate_to_usd ?? 1) : 1,
       amountUsd:
-        Number(row.amount_usd ?? 0) ||
+        row.usd_converted === false ? 0 : Number(row.amount_usd ?? 0) ||
         computeUsd(Number(row.amount), Number(row.exchange_rate_to_usd ?? 1) || 1),
       cashboxId: row.cashbox_id,
       userId: input.userId,

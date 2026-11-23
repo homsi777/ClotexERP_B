@@ -1838,6 +1838,8 @@ type VoucherReceiptRef = {
    * الفاتورة قبل أي مقارنة بالمتبقي (لا مقارنة رقمية مباشرة بين عملتين). */
   currencyCode?: string;
   exchangeRateToUsd?: number;
+  /** false = سند بلا سعر صرف: يجب أن تطابق عملته عملة الفاتورة. */
+  usdConverted?: boolean;
 };
 
 export async function validateSaleInvoiceReceiptVoucher(
@@ -1880,6 +1882,9 @@ export async function validateSaleInvoiceReceiptVoucher(
   }
   // سياسة العملات: تحويل مبلغ السند لعملة الفاتورة أولاً — لا مقارنة رقمية
   // مباشرة بين عملتين مختلفتين (كانت هذه الثغرة موجودة سابقاً).
+  if (voucher.usdConverted === false && String(voucher.currencyCode || 'USD').toUpperCase() !== String(row.currency_code).toUpperCase()) {
+    throw Object.assign(new Error('السند مسجَّل بلا سعر صرف؛ يجب أن تطابق عملته عملة الفاتورة أو فعّل سعر الصرف'), { code: 'VALIDATION' });
+  }
   const amt = convertAmountToInvoiceCurrency({
     amount: Number(voucher.amount),
     fromCurrency: voucher.currencyCode || 'USD',

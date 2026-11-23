@@ -14,6 +14,7 @@
   "customerFallback": "Müşteri",
   "expectedSupplyDate": "Beklenen Teslim: {{date}}",
   "rate.manualToggle": "Döviz kurunu elle gir",
+  "rate.noConversionHint": "Tutar yalnızca kendi para biriminde kaydedilir, USD karşılığı olmadan. Kur girmek için seçeneği açın.",
   "rate.autoHint": "Son onaylı kur kullanılacak: 1 USD = {{rate}} {{code}}",
   "rate.noStored": "{{code}} için onaylı kur yok — elle girişi açın veya kuru Döviz Kurları ekranından ekleyin",
   "convert.toggle": "Kur ile dönüştür (isteğe bağlı)",

@@ -238,13 +238,13 @@ export const CollectionBonds = () => {
         }
       }
       const party = resolveParty();
-      const rate = resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
+      const rate = (currencyCode !== 'USD' && !manualRate ? 1 : resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate }));
       if (!rate) {
         showToast({ type: 'error', message: t('errors.invalidExchangeRate') });
         return;
       }
       const amountOriginal = Number(amount) || 0;
-      const amountUsd = round2(convertToUsd(amountOriginal, rate));
+      const amountUsd = currencyCode !== 'USD' && !manualRate ? 0 : round2(convertToUsd(amountOriginal, rate));
       const checkPayload = (d: CheckDraft) => ({
         checkNo: d.checkNo.trim(),
         bankName: d.bankName.trim(),
@@ -278,6 +278,7 @@ export const CollectionBonds = () => {
         amount: amountOriginal,
         currencyCode,
         exchangeRateToUsd: rate,
+        convertToUsd: currencyCode === 'USD' || manualRate,
         amountUsd,
         ...conversionPayload(conversion),
         purpose,
@@ -394,6 +395,7 @@ export const CollectionBonds = () => {
                       currencyCode={currencyCode}
                       storedRate={storedRate}
                       manual={manualRate}
+                      noConversionWhenOff
                       onManualChange={setManualRate}
                       value={exchangeRateToUsd}
                       onValueChange={setExchangeRateToUsd}

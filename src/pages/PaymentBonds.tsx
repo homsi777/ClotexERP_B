@@ -247,9 +247,9 @@ export const PaymentBonds = () => {
 
   const buildPayload = () => {
     const party = resolveParty();
-    const rate = resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
+    const rate = (currencyCode !== 'USD' && !manualRate ? 1 : resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate }));
     const amountOriginal = Number(amount) || 0;
-    const amountUsd = round2(convertToUsd(amountOriginal, rate || 1));
+    const amountUsd = currencyCode !== 'USD' && !manualRate ? 0 : round2(convertToUsd(amountOriginal, rate || 1));
     return { party, rate, amountOriginal, amountUsd };
   };
 
@@ -284,6 +284,7 @@ export const PaymentBonds = () => {
         amount: amountOriginal,
         currencyCode,
         exchangeRateToUsd: rate,
+        convertToUsd: currencyCode === 'USD' || manualRate,
         amountUsd,
         ...conversionPayload(conversion),
         purpose,
@@ -343,6 +344,7 @@ export const PaymentBonds = () => {
         amount: amountOriginal,
         currencyCode,
         exchangeRateToUsd: rate,
+        convertToUsd: currencyCode === 'USD' || manualRate,
         amountUsd,
         ...conversionPayload(conversion),
         purpose,
@@ -460,6 +462,7 @@ export const PaymentBonds = () => {
                       currencyCode={currencyCode}
                       storedRate={storedRate}
                       manual={manualRate}
+                      noConversionWhenOff
                       onManualChange={setManualRate}
                       value={exchangeRateToUsd}
                       onValueChange={setExchangeRateToUsd}
