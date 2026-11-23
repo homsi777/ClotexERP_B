@@ -6,6 +6,7 @@ import { authenticateRequest } from '../middleware/auth.js';
 import { globalErrorHandler, sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { requireInventoryTransferAccess } from '../services/inventoryTransferAccess.js';
+import { warehouseAllowed, WAREHOUSE_FORBIDDEN_MSG } from '../services/warehouseAccess.js';
 import { cancelTransfer, confirmTransfer, saveTransfer, transferTransaction, TransferError } from '../services/inventoryTransferService.js';
 
 
@@ -22,6 +23,7 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
     }).safeParse(req.query);
     if (!parsed.success) return sendError(reply, 400, 'بيانات البحث عن رولات المناقلة غير صالحة', 'VALIDATION');
     const q = parsed.data;
+    if (!warehouseAllowed(req.user!.warehouseIds, q.warehouseId)) return sendError(reply, 403, WAREHOUSE_FORBIDDEN_MSG, 'FORBIDDEN');
     const params: unknown[] = [req.user!.companyId, q.warehouseId];
     const conds = ["fr.company_id=$1", "fr.warehouse_id=$2", "fr.status='AVAILABLE'", 'fr.length_m>0', 'wh.is_active=true'];
     if (q.locationId) { params.push(q.locationId); conds.push(`fr.location_id=$${params.length}`); }
@@ -63,6 +65,12 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
     const conditions: string[] = ['t.company_id = $1'];
     const params: unknown[] = [companyId];
     let p = 2;
+    // N-0034: يرى المقيَّد المناقلات التي يكون أحد طرفيها مستودعاً مسموحاً له.
+    if (req.user!.warehouseIds) {
+      conditions.push(`(t.from_warehouse_id = ANY($${p}::uuid[]) OR t.to_warehouse_id = ANY($${p}::uuid[]))`);
+      params.push(req.user!.warehouseIds);
+      p++;
+    }
 
     if (search) {
       conditions.push(`(t.transfer_no ILIKE $${p} OR t.notes ILIKE $${p})`);
@@ -165,6 +173,23 @@ export const inventoryTransferRoutes: FastifyPluginAsync = async (app) => {
       const id = (req.params as { id?: string } | undefined)?.id;
       if (action !== 'create' && !z.string().uuid().safeParse(id).success) {
         return sendError(reply, 400, 'معرّف المناقلة غير صالح', 'VALIDATION');
+      }
+      // N-0034: لا حركة على مستودع خارج المسموح (الطرفان معاً).
+      const scope = req.user!.warehouseIds;
+      if (scope) {
+        if (action === 'confirm' || action === 'cancel') {
+          const t = await getPool().query<{ from_warehouse_id: string; to_warehouse_id: string }>(
+            'SELECT from_warehouse_id, to_warehouse_id FROM inventory_transfers WHERE id=$1 AND company_id=$2', [id, companyId]);
+          const row = t.rows[0];
+          if (row && (!warehouseAllowed(scope, row.from_warehouse_id) || !warehouseAllowed(scope, row.to_warehouse_id))) {
+            return sendError(reply, 403, WAREHOUSE_FORBIDDEN_MSG, 'FORBIDDEN');
+          }
+        } else {
+          const b = (req.body ?? {}) as { fromWarehouseId?: string; toWarehouseId?: string };
+          if (!warehouseAllowed(scope, b.fromWarehouseId) || !warehouseAllowed(scope, b.toWarehouseId)) {
+            return sendError(reply, 403, WAREHOUSE_FORBIDDEN_MSG, 'FORBIDDEN');
+          }
+        }
       }
       const parsed = action === 'create' || action === 'update' ? transferBodySchema.safeParse(req.body) : null;
       if (parsed && !parsed.success) return sendError(reply, 400, parsed.error.issues[0]?.message ?? ArabicErrors.validation, 'VALIDATION');

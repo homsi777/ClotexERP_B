@@ -4,6 +4,7 @@ import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from '../middleware/errorHandler.js';
+import { warehouseAllowed } from '../services/warehouseAccess.js';
 
 const warehouseBody = z.object({
   code: z.string().min(1, 'الكود مطلوب'),
@@ -31,6 +32,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (app) => {
     const params: unknown[] = [companyId];
     let p = 2;
     if (search) { conditions.push(`(name ILIKE $${p} OR code ILIKE $${p})`); params.push(`%${search}%`); p++; }
+    if (req.user!.warehouseIds) { conditions.push(`id = ANY($${p}::uuid[])`); params.push(req.user!.warehouseIds); p++; }
     if (status === 'active') conditions.push('is_active=true');
     else if (status === 'inactive') conditions.push('is_active=false');
 
@@ -52,7 +54,7 @@ export const warehouseRoutes: FastifyPluginAsync = async (app) => {
        FROM warehouses WHERE id=$1 AND company_id=$2`,
       [id, companyId],
     );
-    if (!row.rows.length) return sendError(reply, 404, 'المستودع غير موجود', 'NOT_FOUND');
+    if (!row.rows.length || !warehouseAllowed(req.user!.warehouseIds, id)) return sendError(reply, 404, 'المستودع غير موجود', 'NOT_FOUND');
     return reply.send({ ok: true, data: row.rows[0] });
   });
 

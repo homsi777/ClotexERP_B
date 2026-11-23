@@ -11,7 +11,10 @@ import {
   type PermissionTemplateDto,
   type PermissionCatalog,
   type UserPermissionsDto,
+  getUserWarehouses,
+  saveUserWarehouses,
 } from '../../lib/api/settingsApi';
+import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 
 const ACTION_ORDER = ['view', 'create', 'edit', 'delete', 'approve', 'disburse', 'price', 'costView', 'print', 'export'] as const;
 
@@ -24,6 +27,7 @@ const TEXT = {
     financial: 'مالي', search: 'بحث عن وحدة…', save: 'حفظ الصلاحيات', cancel: 'إغلاق', saving: 'جارٍ الحفظ…', saved: 'تم حفظ الصلاحيات',
     selected: 'المظلَّل', history: 'آخر التغييرات', by: 'بواسطة', added: 'أُضيف', removed: 'أُزيل', loadFailed: 'تعذر تحميل الصلاحيات',
     module: 'الوحدة', rowAll: 'الكل', adminNote: 'مدير النظام لا يُقيَّد.', financialCount: 'وحدات مالية ممنوحة',
+    whTitle: 'المستودعات المسموحة', whHint: 'لا يرى المستخدم ولا ينفّذ حركات إلا على المستودعات المحدّدة هنا. صلاحياته (بيع، تسعير…) تبقى حسب دوره. بلا اختيار = كل مستودعات الفرع.', whSave: 'حفظ المستودعات', whSaved: 'تم حفظ المستودعات', whAll: 'غير مقيَّد: كل المستودعات', whRestricted: 'مقيَّد بعدد مستودعات',
     tplTitle: 'قوالب مسمّاة', tplPick: 'اختر قالباً…', tplApply: 'تطبيق', tplSave: 'حفظ الحالي كقالب', tplDelete: 'حذف القالب', tplName: 'اسم القالب', tplSaved: 'حُفظ القالب', tplNone: 'لا قوالب بعد',
     draftNote: 'فاتورة البيع: إن مُنح «إضافة» دون «تسعير/اعتماد» يحفظ الموظف مسودة (عميل + بضاعة) ويسعّرها المحاسب ويرحّلها.',
   },
@@ -35,6 +39,7 @@ const TEXT = {
     financial: 'mali', search: 'Modül ara…', save: 'Yetkileri kaydet', cancel: 'Kapat', saving: 'Kaydediliyor…', saved: 'Yetkiler kaydedildi',
     selected: 'Seçili', history: 'Son değişiklikler', by: 'yapan', added: 'eklenen', removed: 'kaldırılan', loadFailed: 'Yetkiler yüklenemedi',
     module: 'Modül', rowAll: 'Hepsi', adminNote: 'Sistem yöneticisi kısıtlanamaz.', financialCount: 'verilen mali modül',
+    whTitle: 'İzinli depolar', whHint: 'Kullanıcı yalnızca burada seçilen depoları görür ve işlem yapar. Yetkileri (satış, fiyatlandırma…) rolüne göre kalır. Seçim yoksa şubenin tüm depoları.', whSave: 'Depoları kaydet', whSaved: 'Depolar kaydedildi', whAll: 'Kısıtlama yok: tüm depolar', whRestricted: 'Kısıtlı depo sayısı',
     tplTitle: 'Adlandırılmış şablonlar', tplPick: 'Şablon seç…', tplApply: 'Uygula', tplSave: 'Mevcudu şablon olarak kaydet', tplDelete: 'Şablonu sil', tplName: 'Şablon adı', tplSaved: 'Şablon kaydedildi', tplNone: 'Henüz şablon yok',
     draftNote: 'Satış faturası: «Ekle» var ama «Fiyat/Onay» yoksa çalışan taslak (müşteri + mal) kaydeder; muhasebe fiyatlar ve işler.',
   },
@@ -56,6 +61,24 @@ export const PermissionMatrixEditor: React.FC<{ user: PermUser; onSaved: (mode: 
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const isAdmin = user.role === 'admin';
+  const [allWarehouses, setAllWarehouses] = useState<ApiWarehouse[]>([]);
+  const [whIds, setWhIds] = useState<Set<string>>(new Set());
+  const [whSaving, setWhSaving] = useState(false);
+  const [whMessage, setWhMessage] = useState('');
+  useEffect(() => {
+    let active = true;
+    setWhMessage('');
+    Promise.all([listWarehouses({ status: 'active' }), getUserWarehouses(user.id)])
+      .then(([w, ids]) => { if (active) { setAllWarehouses(w); setWhIds(new Set(ids)); } })
+      .catch(() => { if (active) { setAllWarehouses([]); setWhIds(new Set()); } });
+    return () => { active = false; };
+  }, [user.id]);
+  const saveWarehouses = async () => {
+    setWhSaving(true); setWhMessage(''); setError('');
+    try { await saveUserWarehouses(user.id, [...whIds]); setWhMessage(L.whSaved); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setWhSaving(false); }
+  };
   const [templates, setTemplates] = useState<PermissionTemplateDto[]>([]);
   const [tplId, setTplId] = useState('');
   const reloadTemplates = () => listPermissionTemplates().then(setTemplates).catch(() => setTemplates([]));
@@ -220,6 +243,29 @@ export const PermissionMatrixEditor: React.FC<{ user: PermUser; onSaved: (mode: 
                 </div>
               </>
             )}
+
+            {/* N-0034: المستودعات المسموحة — لا اختيار = كل مستودعات الفرع */}
+            <div className="space-y-2 rounded-xl border border-slate-200 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <b className="text-sm">{L.whTitle}</b>
+                  <p className="text-xs text-slate-600">{L.whHint}</p>
+                </div>
+                <button type="button" disabled={busy || whSaving} onClick={() => void saveWarehouses()} className="rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{whSaving ? L.saving : L.whSave}</button>
+              </div>
+              {allWarehouses.length === 0 ? <p className="text-xs text-slate-500">—</p> : (
+                <div className="flex flex-wrap gap-2">
+                  {allWarehouses.map((w) => (
+                    <label key={w.id} className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${whIds.has(w.id) ? 'border-indigo-500 bg-indigo-50 font-bold' : 'border-slate-200'}`}>
+                      <input type="checkbox" checked={whIds.has(w.id)} onChange={(e) => setWhIds((prev) => { const n = new Set(prev); if (e.target.checked) n.add(w.id); else n.delete(w.id); return n; })} />
+                      {w.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs font-bold text-slate-700">{whIds.size === 0 ? L.whAll : `${L.whRestricted}: ${whIds.size}`}</p>
+              {whMessage && <p role="status" className="text-xs font-bold text-emerald-700">{whMessage}</p>}
+            </div>
 
             {data && data.audit.length > 0 && (
               <details className="rounded-lg border p-3 text-xs">

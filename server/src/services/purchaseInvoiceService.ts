@@ -415,6 +415,8 @@ export async function listPurchaseInvoices(
     documentStatus?: string;
     page?: number;
     pageSize?: number;
+    /** N-0034: مستودعات المستخدم المسموحة (null/غير مُمرَّر = بلا تقييد). */
+    warehouseScope?: string[] | null;
   },
 ): Promise<{ rows: unknown[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, opts.page ?? 1);
@@ -424,6 +426,11 @@ export async function listPurchaseInvoices(
   const conds: string[] = ['pi.company_id = $1'];
   const params: unknown[] = [companyId];
   let p = 2;
+  if (opts.warehouseScope) {
+    conds.push(`pi.warehouse_id = ANY($${p}::uuid[])`);
+    params.push(opts.warehouseScope);
+    p++;
+  }
 
   if (opts.search?.trim()) {
     conds.push(`(pi.invoice_no ILIKE $${p} OR s.name ILIKE $${p} OR COALESCE(s.code, '') ILIKE $${p})`);

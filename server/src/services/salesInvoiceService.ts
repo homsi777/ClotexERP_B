@@ -696,6 +696,8 @@ export async function listSalesInvoices(
     documentStatus?: string;
     page?: number;
     pageSize?: number;
+    /** N-0034: مستودعات المستخدم المسموحة (null/غير مُمرَّر = بلا تقييد). */
+    warehouseScope?: string[] | null;
   },
 ): Promise<{ rows: unknown[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, opts.page ?? 1);
@@ -705,6 +707,11 @@ export async function listSalesInvoices(
   const conds: string[] = ['si.company_id = $1'];
   const params: unknown[] = [companyId];
   let p = 2;
+  if (opts.warehouseScope) {
+    conds.push(`si.warehouse_id = ANY($${p}::uuid[])`);
+    params.push(opts.warehouseScope);
+    p++;
+  }
 
   if (opts.search?.trim()) {
     conds.push(`(si.invoice_no ILIKE $${p} OR c.name ILIKE $${p})`);

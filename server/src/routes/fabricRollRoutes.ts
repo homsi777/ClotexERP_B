@@ -1,3 +1,4 @@
+import { rollParamScopeGuard, bodyWarehouseGuard } from '../middleware/warehouseScopeGuard.js';
 import { requireInventoryTransferAccess } from '../services/inventoryTransferAccess.js';
 import { transferTransaction, validateTransferWarehouses, lockTransferRolls, TransferError } from '../services/inventoryTransferService.js';
 import type { FastifyPluginAsync } from 'fastify';
@@ -198,7 +199,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     const client = await getPool().connect();
     try {
       await client.query('BEGIN');
-      const result = await cutAndSellRoll(client, companyId, userId, req.body, { canPrice: canPriceInvoices(req) });
+      const result = await cutAndSellRoll(client, companyId, userId, req.body, { canPrice: canPriceInvoices(req), warehouseScope: req.user!.warehouseIds });
       await client.query('COMMIT');
       return reply.status(201).send({ ok: true, data: result });
     } catch (e: unknown) {
@@ -288,6 +289,8 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     const conds: string[] = ['fr.company_id = $1'];
     const params: unknown[] = [companyId];
     let p = 2;
+    // N-0034: مستخدم مقيَّد بمستودعات لا يرى أتواب غيرها.
+    if (req.user!.warehouseIds) { conds.push(`fr.warehouse_id = ANY($${p}::uuid[])`); params.push(req.user!.warehouseIds); p++; }
 
     if (search) {
       conds.push(
@@ -1052,7 +1055,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/:id', { preHandler: [authenticateRequest, rollParamScopeGuard] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();
@@ -1088,7 +1091,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── B2. Patch missing physical fields (invoice-safe completion) ───────────
-  app.patch('/:id/missing-fields', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.patch('/:id/missing-fields', { preHandler: [authenticateRequest, rollParamScopeGuard] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     if (!z.string().uuid().safeParse(id).success) {
@@ -1197,7 +1200,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── C. Create roll ───────────────────────────────────────────────────────
-  app.post('/', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.post('/', { preHandler: [authenticateRequest, bodyWarehouseGuard('warehouseId')] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const parsed = createRollSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
@@ -1349,7 +1352,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── D. Update roll metadata ───────────────────────────────────────────────
-  app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.put('/:id', { preHandler: [authenticateRequest, rollParamScopeGuard] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = updateRollSchema.safeParse(req.body);
@@ -1497,7 +1500,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── E. Update status ─────────────────────────────────────────────────────
-  app.patch('/:id/status', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.patch('/:id/status', { preHandler: [authenticateRequest, rollParamScopeGuard] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = statusSchema.safeParse(req.body);
@@ -1540,7 +1543,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── F. Move roll ─────────────────────────────────────────────────────────
-  app.post('/:id/move', { preHandler: [authenticateRequest, requireInventoryTransferAccess] }, async (req, reply) => {
+  app.post('/:id/move', { preHandler: [authenticateRequest, rollParamScopeGuard, bodyWarehouseGuard('toWarehouseId'), requireInventoryTransferAccess] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = moveSchema.safeParse(req.body);
@@ -1580,7 +1583,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     }
   });
   // ── G. Get movement history ────────────────────────────────────────────────
-  app.get('/:id/movements', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/:id/movements', { preHandler: [authenticateRequest, rollParamScopeGuard] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();

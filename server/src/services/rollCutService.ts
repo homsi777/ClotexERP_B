@@ -111,7 +111,7 @@ export async function cutAndSellRoll(
   companyId: string,
   userId: string | null,
   rawInput: unknown,
-  opts: { canPrice?: boolean } = {},
+  opts: { canPrice?: boolean; warehouseScope?: string[] | null } = {},
 ): Promise<RollCutResult> {
   const canPrice = opts.canPrice !== false;
   const parsed = rollCutInputSchema.safeParse(rawInput);
@@ -138,6 +138,9 @@ export async function cutAndSellRoll(
   );
   if (!rollRes.rows.length) throw err('التوب غير موجود', 'NOT_FOUND');
   const roll = rollRes.rows[0];
+  if (opts.warehouseScope && !opts.warehouseScope.includes(String(roll.warehouse_id).toLowerCase())) {
+    throw err('هذا المستودع غير مخصّص لحسابك', 'VALIDATION');
+  }
 
   const check = validateRollCut({
     currentLengthM: Number(roll.length_m),

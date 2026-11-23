@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest, canApprove } from '../middleware/auth.js';
+import { invoiceBodyScopeGuard } from '../middleware/warehouseScopeGuard.js';
 import { getSupervisorId } from '../services/editRequestService.js';
 import { sendMessage } from '../services/chatService.js';
 import { sendError } from '../middleware/errorHandler.js';
@@ -57,6 +58,7 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
     const conditions: string[] = ['w.company_id = $1'];
     const params: unknown[] = [companyId];
     let p = 2;
+    if (req.user!.warehouseIds) { conditions.push(`w.warehouse_id = ANY($${p}::uuid[])`); params.push(req.user!.warehouseIds); p++; }
 
     if (search) {
       conditions.push(`(w.waste_no ILIKE $${p} OR w.reason ILIKE $${p} OR w.notes ILIKE $${p})`);
@@ -140,7 +142,7 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: { ...head.rows[0], lines: lines.rows } });
   });
 
-  app.post('/', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.post('/', { preHandler: [authenticateRequest, invoiceBodyScopeGuard] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const parsed = createBody.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
@@ -242,7 +244,7 @@ export const inventoryWasteRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.put('/:id', { preHandler: [authenticateRequest, invoiceBodyScopeGuard] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const parsed = updateBody.safeParse(req.body);

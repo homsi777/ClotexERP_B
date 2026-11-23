@@ -1,4 +1,5 @@
 import { ACTION_LABELS, PERMISSION_GROUPS, PERMISSION_MODULES } from '../services/permissionCatalog.js';
+import { listUserWarehouses, saveUserWarehouses } from '../services/warehouseAccess.js';
 import { canGrantPermissions, deletePermissionTemplate, grantedMatrixCodes, listPermissionTemplates, savePermissionTemplate, saveUserPermissions } from '../services/userPermissionService.js';
 import bcrypt from 'bcryptjs';
 import type { FastifyPluginAsync } from 'fastify';
@@ -461,6 +462,36 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
       const res = await saveUserPermissions(client, { companyId: req.user!.companyId, targetUserId: id, changedBy: req.user!.sub, mode: parsed.data.mode, codes: parsed.data.codes });
       await client.query('COMMIT');
       return reply.send({ ok: true, data: res });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      const err = e as { code?: string; message?: string };
+      if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message ?? 'غير موجود', 'NOT_FOUND');
+      if (err.code === 'VALIDATION') return sendError(reply, 400, err.message ?? ArabicErrors.validation, 'VALIDATION');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
+  // N-0034: مستودعات المستخدم المسموحة (لا صفوف = بلا تقييد). المدير والمحاسب فقط.
+  app.get('/users/:id/warehouses', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const { id } = req.params as { id: string };
+    const u = await getPool().query<{ company_id: string }>('SELECT company_id FROM users WHERE id=$1', [id]);
+    if (!u.rows[0] || u.rows[0].company_id !== req.user!.companyId) return sendError(reply, 404, 'المستخدم غير موجود', 'NOT_FOUND');
+    return reply.send({ ok: true, data: { warehouseIds: await listUserWarehouses(getPool(), id) } });
+  });
+  app.put('/users/:id/warehouses', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const parsed = z.object({ warehouseIds: z.array(z.string().uuid()).max(200) }).safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    const { id } = req.params as { id: string };
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const ids = await saveUserWarehouses(client, { companyId: req.user!.companyId, userId: id, warehouseIds: parsed.data.warehouseIds, changedBy: req.user!.sub });
+      await client.query('COMMIT');
+      return reply.send({ ok: true, data: { warehouseIds: ids } });
     } catch (e) {
       await client.query('ROLLBACK');
       const err = e as { code?: string; message?: string };

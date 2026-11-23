@@ -8,6 +8,7 @@ import { touchActiveSession, isSessionRevoked } from '../services/activeSessions
 import { clientIp } from '../utils/clientIp.js';
 import { effectivePermissionsForUser } from '../services/userPermissionService.js';
 import { ACTION_LABELS, resolveRoutePolicy } from '../services/permissionCatalog.js';
+import { loadUserWarehouseScope } from '../services/warehouseAccess.js';
 import { findApprovedGrant } from '../services/editRequestService.js';
 
 export type JwtPayload = {
@@ -21,6 +22,8 @@ export type JwtPayload = {
   /** يُملأ بالحارس فقط (غير موقَّع بالتوكن): صلاحيات المصفوفة الفعلية لمن بوضع «مخصّص». */
   matrix?: string[];
   customPerms?: boolean;
+  /** يُملأ بالحارس: المستودعات المسموحة للمستخدم (null = بلا تقييد). */
+  warehouseIds?: string[] | null;
 };
 
 export function signAuthToken(payload: JwtPayload): string {
@@ -127,6 +130,10 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
         return sendError(reply, 403, `ليست لديك صلاحية «${ACTION_LABELS[policy.action]}» في «${policy.module.name}»`, 'FORBIDDEN');
       }
     }
+
+    payload.warehouseIds = payload.companyId === userCheck.rows[0].company_id
+      ? await loadUserWarehouseScope(pool, payload.sub, userCheck.rows[0].role)
+      : null;
 
     request.user = payload;
     request.authToken = token;

@@ -256,3 +256,11 @@ export async function savePermissionTemplate(body: { name: string; codes: string
 export async function deletePermissionTemplate(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/system/permission-templates/${id}`, { method: 'DELETE' });
 }
+
+/** N-0034: مستودعات المستخدم المسموحة (فارغة = بلا تقييد). */
+export async function getUserWarehouses(userId: string) {
+  return (await apiFetch<{ ok: boolean; data: { warehouseIds: string[] } }>(`/api/system/users/${userId}/warehouses`)).data.warehouseIds;
+}
+export async function saveUserWarehouses(userId: string, warehouseIds: string[]) {
+  return (await apiFetch<{ ok: boolean; data: { warehouseIds: string[] } }>(`/api/system/users/${userId}/warehouses`, { method: 'PUT', body: JSON.stringify({ warehouseIds }) })).data.warehouseIds;
+}

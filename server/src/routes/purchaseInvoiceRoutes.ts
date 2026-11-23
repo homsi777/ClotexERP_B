@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest, canPrice, requireEditOrGrant } from '../middleware/auth.js';
+import { invoiceBodyScopeGuard, invoiceParamScopeGuard } from '../middleware/warehouseScopeGuard.js';
 import { listPricingQueue, maskMoneyRow, unpricedInvoiceBody } from '../services/pricingQueueService.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
@@ -29,6 +30,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
       dateTo: q.dateTo,
       supplierId: q.supplierId,
       documentStatus: q.documentStatus,
+      warehouseScope: req.user!.warehouseIds,
       page: q.page ? parseInt(q.page, 10) : undefined,
       pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
     });
@@ -64,7 +66,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/:id', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();
@@ -74,7 +76,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data });
   });
 
-  app.post('/', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.post('/', { preHandler: [authenticateRequest, invoiceBodyScopeGuard] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const pool = getPool();
     const client = await pool.connect();
@@ -98,7 +100,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get('/:id/edit-eligibility', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/:id/edit-eligibility', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();
@@ -111,7 +113,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.put('/:id/confirmed', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.put('/:id/confirmed', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices'), invoiceBodyScopeGuard] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     if (!canPrice(req.user, 'purchases.invoices')) return sendError(reply, 403, 'تعديل فاتورة مرحّلة يتطلب صلاحية التسعير', 'FORBIDDEN');
     const { id } = req.params as { id: string };
@@ -135,7 +137,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.put('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.put('/:id', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices'), invoiceBodyScopeGuard] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     if (!(await requireEditOrGrant(req, reply, 'purchases.invoices', id))) return reply;
@@ -188,7 +190,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.delete('/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.delete('/:id', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices')] }, async (req, reply) => {
     const { companyId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();
@@ -209,7 +211,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post('/:id/confirm', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.post('/:id/confirm', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices')] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     if (!canPrice(req.user, 'purchases.invoices')) return sendError(reply, 403, 'ترحيل فاتورة الشراء من صلاحية المحاسب أو المدير', 'FORBIDDEN');
     const { id } = req.params as { id: string };
@@ -237,7 +239,7 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post('/:id/void', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.post('/:id/void', { preHandler: [authenticateRequest, invoiceParamScopeGuard('purchase_invoices')] }, async (req, reply) => {
     const { companyId, sub: userId } = req.user!;
     const { id } = req.params as { id: string };
     const pool = getPool();
