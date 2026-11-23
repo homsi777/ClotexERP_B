@@ -151,7 +151,22 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
   });
 
   const [savedDefaultFontSizePt, setSavedDefaultFontSizePt] = useState(loadDefaultCartelaFontSizePt);
-  const [items, setItems] = useState<CartelaLabelListItem[]>([]);
+  const [allItems, setItems] = useState<CartelaLabelListItem[]>([]);
+  // ملاحظة بشير: فلترة المكتبة حسب الخامة وحسب كود الخامة (الدسان) — تسري على الشجرة والجدول معاً.
+  const [fabricFilter, setFabricFilter] = useState('');
+  const [codeFilter, setCodeFilter] = useState('');
+  const fabricOptions = useMemo(
+    () => [...new Set(allItems.map((i) => (i.title ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar')),
+    [allItems],
+  );
+  const codeOptions = useMemo(
+    () => [...new Set(allItems.filter((i) => !fabricFilter || (i.title ?? '').trim() === fabricFilter).map((i) => (i.art_code ?? '').trim()).filter(Boolean))].sort(),
+    [allItems, fabricFilter],
+  );
+  const items = useMemo(
+    () => allItems.filter((i) => (!fabricFilter || (i.title ?? '').trim() === fabricFilter) && (!codeFilter || (i.art_code ?? '').trim() === codeFilter)),
+    [allItems, fabricFilter, codeFilter],
+  );
   // TASK 010 (بشير): الشجرة (خامة ← دسان ← ألوان) هي العرض الافتراضي؛ الجدول المسطح يبقى للتحديد الجماعي.
   const [registryView, setRegistryView] = useState<'tree' | 'table'>('tree');
   const [listLoading, setListLoading] = useState(true);
@@ -871,6 +886,25 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
                 placeholder={t('registry.searchPlaceholder')}
                 className={`${inputCls} max-w-xs`}
               />
+              <select
+                value={fabricFilter}
+                onChange={(e) => { setFabricFilter(e.target.value); setCodeFilter(''); }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                aria-label="تصفية حسب الخامة"
+              >
+                <option value="">كل الخامات</option>
+                {fabricOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <select
+                value={codeFilter}
+                onChange={(e) => setCodeFilter(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                aria-label="تصفية حسب كود الخامة"
+                dir="ltr"
+              >
+                <option value="">كل أكواد الخامة</option>
+                {codeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
               <button
                 type="button"
                 onClick={() => setRegistryView((v) => (v === 'tree' ? 'table' : 'tree'))}
@@ -903,7 +937,7 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
             ) : (
               <CartelaRegistryTree
                 items={items}
-                searchActive={search.trim().length > 0}
+                searchActive={search.trim().length > 0 || fabricFilter !== '' || codeFilter !== ''}
                 printingId={registryPrintingId}
                 onEdit={(id) => openForEdit(id)}
                 onPrintCartela={(id) => void handleRegistryPrint(id)}
