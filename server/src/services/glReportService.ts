@@ -12,7 +12,10 @@ export interface ChartAccountRow {
   parentId: string | null;
   name: string;
   type: CoaAccountType;
+  /** رصيد الدولار فقط (قيود العملة الأخرى لا تُجمع هنا). */
   balance: number;
+  /** أرصدة العملات الأخرى (مستندات بعملتها بلا تحويل) — لكل عملة على حدة. */
+  byCurrency: Record<string, number>;
   currency_code: string | null;
   source_note: string | null;
   isPosting: boolean;
@@ -59,6 +62,8 @@ function rollupBalances(rows: ChartAccountRow[]): ChartAccountRow[] {
     const c = mutable.get(r.id);
     if (p && c) {
       p.balance += c.balance;
+      p.byCurrency = { ...p.byCurrency };
+      for (const [k, v] of Object.entries(c.byCurrency)) p.byCurrency[k] = (p.byCurrency[k] ?? 0) + v;
     }
   }
 
@@ -83,16 +88,23 @@ export async function getGlChartOfAccounts(companyId: string): Promise<ChartAcco
     client.release();
   }
 
-  const bal = await pool.query<{ id: string; d: string; c: string }>(
+  const bal = await pool.query<{ id: string; ccy: string; d: string; c: string }>(
     `SELECT jl.gl_account_id AS id,
+            COALESCE(NULLIF(jl.currency_code, ''), 'USD') AS ccy,
             COALESCE(SUM(jl.debit),0)::text AS d,
             COALESCE(SUM(jl.credit),0)::text AS c
      FROM journal_lines jl
      WHERE jl.company_id = $1
-     GROUP BY jl.gl_account_id`,
+     GROUP BY jl.gl_account_id, COALESCE(NULLIF(jl.currency_code, ''), 'USD')`,
     [companyId],
   );
-  const balMap = new Map(bal.rows.map((r) => [r.id, Number(r.d) - Number(r.c)]));
+  const balMap = new Map<string, number>();
+  const ccyMap = new Map<string, Record<string, number>>();
+  for (const r of bal.rows) {
+    const net = Number(r.d) - Number(r.c);
+    if (r.ccy === 'USD') balMap.set(r.id, (balMap.get(r.id) ?? 0) + net);
+    else ccyMap.set(r.id, { ...(ccyMap.get(r.id) ?? {}), [r.ccy]: net });
+  }
 
   const acc = await pool.query<{
     id: string;
@@ -114,6 +126,7 @@ export async function getGlChartOfAccounts(companyId: string): Promise<ChartAcco
     name: r.name,
     type: mapType(r.account_type),
     balance: balMap.get(r.id) ?? 0,
+    byCurrency: ccyMap.get(r.id) ?? {},
     currency_code: null,
     source_note: !r.is_posting ? 'حساب تجميعي' : null,
     isPosting: r.is_posting,

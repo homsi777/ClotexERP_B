@@ -2725,17 +2725,20 @@ export const InvoiceForm = () => {
     }
 
     const currencyCode = String(currency || 'USD').trim().toUpperCase();
-    const rate = currencyCode === 'USD' ? 1 : normalizeExchangeRate(exchangeRateToUsd);
+    // سعر الصرف مطفأ (غير الدولار): تُسجَّل الفاتورة بعملتها فقط بلا أي معادل بالدولار.
+    const noConversion = currencyCode !== 'USD' && !manualRate;
+    const rate = currencyCode === 'USD' || noConversion ? 1 : normalizeExchangeRate(exchangeRateToUsd);
     if (!rate) {
       showToast({ type: 'warning', message: t('validation.exchangeRateRequired') });
       return;
     }
-    const subtotalUsd = round2(convertToUsd(persistedSubtotal, rate));
-    const discountUsd = round2(convertToUsd(persistedDiscountTotal, rate));
-    const taxUsd = round2(convertToUsd(persistedTaxTotal, rate));
-    const totalUsd = round2(convertToUsd(persistedFinalTotal, rate));
-    const paidUsd = round2(convertToUsd(paidAmount, rate));
-    const remainingUsd = round2(convertToUsd(Math.max(0, persistedFinalTotal - paidAmount), rate));
+    const usdOf = (v: number) => (noConversion ? 0 : round2(convertToUsd(v, rate)));
+    const subtotalUsd = usdOf(persistedSubtotal);
+    const discountUsd = usdOf(persistedDiscountTotal);
+    const taxUsd = usdOf(persistedTaxTotal);
+    const totalUsd = usdOf(persistedFinalTotal);
+    const paidUsd = usdOf(paidAmount);
+    const remainingUsd = usdOf(Math.max(0, persistedFinalTotal - paidAmount));
 
     const invoicePayload = {
       date,
@@ -2794,6 +2797,7 @@ export const InvoiceForm = () => {
       warehouseLabel,
       currencyCode,
       exchangeRateToUsd: rate,
+      convertToUsd: !noConversion,
       notes: notesPayload,
       subtotal: persistedSubtotal,
       discountTotal: persistedDiscountTotal,
@@ -3424,7 +3428,7 @@ export const InvoiceForm = () => {
             <div className="space-y-1.5">
               <label className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600">
                 <input type="checkbox" checked={manualRate} onChange={(e) => setManualRate(e.target.checked)} className="accent-indigo-600" />
-                تحديد سعر صرف يدوي لهذه الفاتورة (اختياري)
+                تفعيل سعر الصرف لهذه الفاتورة (اختياري)
               </label>
               {manualRate ? (
                 <>
@@ -3441,7 +3445,7 @@ export const InvoiceForm = () => {
                   <p className="text-[11px] text-slate-500">{t('meta.exchangeRateHelper')}</p>
                 </>
               ) : (
-                <p className="text-[11px] text-slate-500">يُستعمل تلقائياً السعر المسجّل للعملة في «أسعار الصرف»: <b className="font-mono" dir="ltr">{exchangeRateToUsd}</b></p>
+                <p className="text-[11px] text-slate-500">تُسجَّل الفاتورة بعملتها فقط دون تحويل أو معادل بالدولار. فعّل الخيار لإدخال سعر صرف.</p>
               )}
             </div>
           </div>

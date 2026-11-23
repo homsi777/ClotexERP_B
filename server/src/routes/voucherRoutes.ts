@@ -640,6 +640,7 @@ export const voucherRoutes: FastifyPluginAsync = async (app) => {
         currencyCode: String(row.currency_code || 'USD').trim().toUpperCase(),
         exchangeRateToUsd: Number(row.exchange_rate_to_usd ?? 1) > 0 ? Number(row.exchange_rate_to_usd ?? 1) : 1,
         amountUsd: row.usd_converted === false ? 0 : Number(row.amount_usd ?? 0) || computeUsd(Number(row.amount), Number(row.exchange_rate_to_usd ?? 1) || 1),
+        usdConverted: row.usd_converted !== false,
         cashboxId: row.cashbox_id,
         partyType: row.party_type,
         partyId: row.party_id,

@@ -189,6 +189,14 @@ async function lockCheck(client: PoolClient, companyId: string, checkId: string)
   return row.rows[0];
 }
 
+/** شيك سند قبض بلا سعر صرف يُرحَّل قيده بعملة الشيك (وإلا السلوك القديم). */
+async function checkLedgerCurrency(client: PoolClient, companyId: string, checkId: string, currency: string): Promise<string | undefined> {
+  const r = await client.query<{ usd_converted: boolean }>(
+    `SELECT v.usd_converted FROM voucher_lines vl JOIN vouchers v ON v.id = vl.voucher_id AND v.company_id = vl.company_id
+      WHERE vl.check_id = $1 AND vl.company_id = $2 AND v.voucher_type = 'RECEIPT' LIMIT 1`, [checkId, companyId]);
+  return r.rows[0]?.usd_converted === false ? String(currency).trim().toUpperCase() : undefined;
+}
+
 /** إيداع شيك بالبنك — نقل رصيد من خزينة الشيكات لحساب البنك المودَع به +
  * ترحيل محاسبي مطابق (ليس قبضاً جديداً). */
 export async function depositCheck(
@@ -245,6 +253,7 @@ export async function depositCheck(
     checkNo: check.check_no,
     depositDate,
     amountUsd: amount,
+    ledgerCurrency: await checkLedgerCurrency(client, input.companyId, check.id, check.currency_code),
     bankCashboxId: bankBoxId,
     userId: input.userId,
   });
@@ -347,6 +356,7 @@ export async function returnCheck(
     checkNo: check.check_no,
     returnDate,
     amountUsd: amount,
+    ledgerCurrency: await checkLedgerCurrency(client, input.companyId, check.id, check.currency_code),
     partyType: check.party_type,
     partyId: check.party_id,
     userId: input.userId,

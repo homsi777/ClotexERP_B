@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { postPurchaseInvoiceToGl, reversePurchaseInvoiceGl } from './glPostingService.js';
 import { applyVoucherConfirmation, cancelConfirmedVoucher, insertDraftVoucher } from './voucherCashboxService.js';
-import { invoiceLineSchema, paymentStatuses, quantityToMeters } from './salesInvoiceService.js';
+import { invoiceLineSchema, paymentStatuses, quantityToMeters, resolveInvoiceRate } from './salesInvoiceService.js';
 import { getExchangeRateToUsdTx } from './exchangeRateService.js';
 import { calcWeight, generateBarcode, archiveFabricRollBarcode } from '../utils/rollHelpers.js';
 import { generateYarnLotBarcode } from '../routes/yarnLotRoutes.js';
@@ -291,6 +291,8 @@ const purchaseInvoiceCreateBaseSchema = z.object({
   warehouseLabel: z.string().optional().nullable(),
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().optional(),
+  /** false (مع عملة غير الدولار) = الفاتورة بعملتها فقط بلا معادل دولار. */
+  convertToUsd: z.boolean().optional(),
   notes: z.string().optional().nullable(),
   subtotal: z.coerce.number().nonnegative(),
   discountTotal: z.coerce.number().nonnegative().default(0),
@@ -369,7 +371,7 @@ async function insertPurchaseLines(
     const unitCostUsd = (ln as any).unitPriceUsd ?? computeUsd4(ln.unitPrice, exchangeRateToUsd);
     const lineDiscountUsd = (ln as any).lineDiscountUsd ?? computeUsd(ln.lineDiscount, exchangeRateToUsd);
     const lineTaxUsd = (ln as any).lineTaxUsd ?? computeUsd(ln.lineTax, exchangeRateToUsd);
-    const lineTotalUsd = (ln as any).lineTotalUsd ?? computeUsd(ln.lineTotal, exchangeRateToUsd);
+    const lineTotalUsd = (exchangeRateToUsd > 0 ? (ln as any).lineTotalUsd : 0) ?? computeUsd(ln.lineTotal, exchangeRateToUsd);
     await client.query(
       `INSERT INTO purchase_invoice_lines (
          company_id, invoice_id, line_no, fabric_roll_id, yarn_lot_id, fabric_item_id, variant_id, warehouse_id,
@@ -526,19 +528,9 @@ export async function createPurchaseInvoice(
   const d = parsed.data;
 
   const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
-  let exchangeRateToUsd = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : NaN;
-  if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-    if (currencyCode === 'USD') {
-      exchangeRateToUsd = 1;
-    } else {
-      const fromDb = await getExchangeRateToUsdTx(client, companyId, currencyCode);
-      exchangeRateToUsd = fromDb ?? NaN;
-    }
-  }
-  if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-    throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-  }
-  if (currencyCode === 'USD') exchangeRateToUsd = 1;
+  const { rate: storedRate, usdConverted } = await resolveInvoiceRate(client, companyId, currencyCode, d.exchangeRateToUsd, d.convertToUsd);
+  /** معدّل الحساب بالدولار: 0 = فاتورة بلا معادل دولار. */
+  const exchangeRateToUsd = usdConverted ? storedRate : 0;
 
   const invoiceNo = await generateSequentialDocumentNo(client, companyId, 'PURCHASE_INVOICE');
   const dup = await client.query(`SELECT id FROM purchase_invoices WHERE company_id=$1 AND invoice_no=$2`, [
@@ -564,8 +556,8 @@ export async function createPurchaseInvoice(
        paid_amount, remaining_amount, payment_status, document_status,
        exchange_rate_to_usd, subtotal_usd, discount_total_usd, tax_total_usd, total_amount_usd,
        paid_amount_usd, remaining_amount_usd,
-       created_by_user_id, updated_by_user_id
-     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17,$18,$19,$20,$21,$22,$23,$24,$24)
+       created_by_user_id, updated_by_user_id, usd_converted
+     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17,$18,$19,$20,$21,$22,$23,$24,$24,$25)
      RETURNING id`,
     [
       companyId,
@@ -584,7 +576,7 @@ export async function createPurchaseInvoice(
       d.paidAmount,
       pay.remaining,
       pay.paymentStatus,
-      exchangeRateToUsd,
+      storedRate,
       subtotalUsd,
       discountTotalUsd,
       taxTotalUsd,
@@ -592,6 +584,7 @@ export async function createPurchaseInvoice(
       paidAmountUsd,
       remainingUsd,
       userId,
+      usdConverted,
     ],
   );
 
@@ -628,6 +621,7 @@ export async function updatePurchaseInvoiceDraft(
     document_status: string;
     currency_code: string;
     exchange_rate_to_usd: string;
+    usd_converted: boolean;
     subtotal: string;
     discount_total: string;
     tax_total: string;
@@ -635,7 +629,7 @@ export async function updatePurchaseInvoiceDraft(
     paid_amount: string;
     remaining_amount: string;
   }>(
-    `SELECT document_status, currency_code, exchange_rate_to_usd, subtotal, discount_total, tax_total, total_amount, paid_amount, remaining_amount
+    `SELECT document_status, currency_code, exchange_rate_to_usd, usd_converted, subtotal, discount_total, tax_total, total_amount, paid_amount, remaining_amount
      FROM purchase_invoices
      WHERE id=$1 AND company_id=$2
      FOR UPDATE`,
@@ -666,19 +660,13 @@ export async function updatePurchaseInvoiceDraft(
   const nextPaid = d.paidAmount ?? Number(current.paid_amount);
   const pay = paymentStatuses(nextTotal, nextPaid);
 
-  let nextRate = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : Number(current.exchange_rate_to_usd);
-  if (!Number.isFinite(nextRate) || nextRate <= 0) {
-    if (nextCurrency === 'USD') {
-      nextRate = 1;
-    } else {
-      const fromDb = await getExchangeRateToUsdTx(client, companyId, nextCurrency);
-      nextRate = fromDb ?? NaN;
-    }
-  }
-  if (!Number.isFinite(nextRate) || nextRate <= 0) {
-    throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-  }
-  if (nextCurrency === 'USD') nextRate = 1;
+  const wasConverted = current.usd_converted !== false;
+  const { rate: nextStoredRate, usdConverted: nextUsdConverted } = await resolveInvoiceRate(
+    client, companyId, nextCurrency,
+    d.exchangeRateToUsd ?? (wasConverted ? Number(current.exchange_rate_to_usd) : undefined),
+    d.convertToUsd ?? wasConverted,
+  );
+  const nextRate = nextUsdConverted ? nextStoredRate : 0;
 
   const subtotalUsd = computeUsd(nextSubtotal, nextRate);
   const discountUsd = computeUsd(nextDiscount, nextRate);
@@ -710,6 +698,7 @@ export async function updatePurchaseInvoiceDraft(
        total_amount_usd = $22,
        paid_amount_usd = $23,
        remaining_amount_usd = $24,
+       usd_converted = $25,
        updated_by_user_id = $3,
        updated_at = now()
      WHERE id=$1 AND company_id=$2`,
@@ -723,7 +712,7 @@ export async function updatePurchaseInvoiceDraft(
       d.warehouseId ?? null,
       d.warehouseLabel?.trim() ?? null,
       nextCurrency,
-      nextRate,
+      nextStoredRate,
       d.notes?.trim() ?? null,
       d.subtotal ?? null,
       d.discountTotal ?? null,
@@ -738,6 +727,7 @@ export async function updatePurchaseInvoiceDraft(
       totalUsd,
       paidUsd,
       remainingUsd,
+      nextUsdConverted,
     ],
   );
 
@@ -1165,9 +1155,11 @@ export async function confirmPurchaseInvoice(
   const totalAmt = Number(inv.total_amount);
   const paidAmt = Number(inv.paid_amount);
   const ccy = String(inv.currency_code || 'USD');
+  const usdConverted = inv.usd_converted !== false;
   const rate = Number(inv.exchange_rate_to_usd) > 0 ? Number(inv.exchange_rate_to_usd) : (ccy.trim().toUpperCase() === 'USD' ? 1 : NaN);
-  const exchangeRateToUsd = ccy.trim().toUpperCase() === 'USD' ? 1 : rate;
-  if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
+  /** معدّل الحساب بالدولار: 0 = فاتورة بلا معادل دولار. */
+  const exchangeRateToUsd = !usdConverted ? 0 : ccy.trim().toUpperCase() === 'USD' ? 1 : rate;
+  if (usdConverted && (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0)) {
     throw Object.assign(new Error('لا يمكن تأكيد الفاتورة بدون سعر صرف'), { code: 'VALIDATION' });
   }
   const entryDate =
@@ -1182,8 +1174,9 @@ export async function confirmPurchaseInvoice(
       invoiceNo: String(inv.invoice_no),
       invoiceDate: entryDate,
       supplierId: String(inv.supplier_id),
-      totalAmountUsd: totalUsd,
+      totalAmountUsd: usdConverted ? totalUsd : totalAmt,
       currencyCode: ccy,
+      ledgerCurrency: usdConverted ? undefined : ccy.trim().toUpperCase(),
       userId,
     });
   }
@@ -1207,8 +1200,9 @@ export async function confirmPurchaseInvoice(
       partyName,
       amount: paidAmt,
       currencyCode: ccy,
-      exchangeRateToUsd,
+      exchangeRateToUsd: usdConverted ? exchangeRateToUsd : 1,
       amountUsd: paidUsd,
+      usdConverted,
       description: `صرف — فاتورة مشتريات ${inv.invoice_no}`,
       notes: `مرتبطة بفاتورة شراء ${invoiceId}`,
       referenceDocumentType: 'PURCHASE_INVOICE',
@@ -1223,8 +1217,9 @@ export async function confirmPurchaseInvoice(
       voucherType: 'PAYMENT',
       amount: paidAmt,
       currencyCode: ccy,
-      exchangeRateToUsd,
+      exchangeRateToUsd: usdConverted ? exchangeRateToUsd : 1,
       amountUsd: paidUsd,
+      usdConverted,
       cashboxId,
       partyType: 'SUPPLIER',
       partyId: String(inv.supplier_id),
@@ -1397,13 +1392,15 @@ async function repostPurchaseInvoiceGl(
   if (totalAmt <= 0) return;
 
   const ccy = String(inv.currency_code || 'USD');
-  const rate =
-    Number(inv.exchange_rate_to_usd) > 0
+  const usdConvertedRepost = inv.usd_converted !== false;
+  const rate = !usdConvertedRepost
+    ? 0
+    : Number(inv.exchange_rate_to_usd) > 0
       ? Number(inv.exchange_rate_to_usd)
       : ccy.trim().toUpperCase() === 'USD'
         ? 1
         : NaN;
-  if (!Number.isFinite(rate) || rate <= 0) {
+  if (usdConvertedRepost && (!Number.isFinite(rate) || rate <= 0)) {
     throw Object.assign(new Error('لا يمكن تحديث القيود بدون سعر صرف'), { code: 'VALIDATION' });
   }
   const entryDate =
@@ -1418,8 +1415,9 @@ async function repostPurchaseInvoiceGl(
     invoiceNo,
     invoiceDate: entryDate,
     supplierId: String(inv.supplier_id),
-    totalAmountUsd: totalUsd,
+    totalAmountUsd: usdConvertedRepost ? totalUsd : totalAmt,
     currencyCode: ccy,
+    ledgerCurrency: usdConvertedRepost ? undefined : ccy.trim().toUpperCase(),
     userId,
   });
 }
@@ -1673,14 +1671,13 @@ export async function updatePurchaseInvoiceConfirmed(
   const nextTotal = d.totalAmount ?? Number(inv.total_amount);
   const pay = paymentStatuses(nextTotal, currentPaid);
 
-  let nextRate = d.exchangeRateToUsd != null ? Number(d.exchangeRateToUsd) : Number(inv.exchange_rate_to_usd);
-  if (!Number.isFinite(nextRate) || nextRate <= 0) {
-    nextRate = nextCurrency === 'USD' ? 1 : (await getExchangeRateToUsdTx(client, companyId, nextCurrency)) ?? NaN;
-  }
-  if (!Number.isFinite(nextRate) || nextRate <= 0) {
-    throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-  }
-  if (nextCurrency === 'USD') nextRate = 1;
+  const wasConvertedC = inv.usd_converted !== false;
+  const { rate: nextStoredRate, usdConverted: nextUsdConverted } = await resolveInvoiceRate(
+    client, companyId, nextCurrency,
+    d.exchangeRateToUsd ?? (wasConvertedC ? Number(inv.exchange_rate_to_usd) : undefined),
+    d.convertToUsd ?? wasConvertedC,
+  );
+  const nextRate = nextUsdConverted ? nextStoredRate : 0;
 
   const targetWarehouseId = await resolveWarehouseForPurchaseInvoice(
     client,
@@ -1769,6 +1766,7 @@ export async function updatePurchaseInvoiceConfirmed(
        paid_amount_usd = $21,
        remaining_amount_usd = $22,
        updated_by_user_id = $23,
+       usd_converted = $24,
        updated_at = now()
      WHERE id=$1 AND company_id=$2`,
     [
@@ -1780,7 +1778,7 @@ export async function updatePurchaseInvoiceConfirmed(
       d.warehouseLabel?.trim() ?? null,
       d.supplierInvoiceNo?.trim() ?? null,
       nextCurrency,
-      nextRate,
+      nextStoredRate,
       d.notes?.trim() ?? null,
       nextSubtotal,
       nextDiscount,
@@ -1795,6 +1793,7 @@ export async function updatePurchaseInvoiceConfirmed(
       paidUsd,
       remainingUsd,
       userId,
+      nextUsdConverted,
     ],
   );
 
@@ -1807,7 +1806,7 @@ export async function updatePurchaseInvoiceConfirmed(
     const unitCostUsd = (ln as { unitPriceUsd?: number }).unitPriceUsd ?? computeUsd4(ln.unitPrice, nextRate);
     const lineDiscountUsd = (ln as { lineDiscountUsd?: number }).lineDiscountUsd ?? computeUsd(ln.lineDiscount, nextRate);
     const lineTaxUsd = (ln as { lineTaxUsd?: number }).lineTaxUsd ?? computeUsd(ln.lineTax, nextRate);
-    const lineTotalUsd = (ln as { lineTotalUsd?: number }).lineTotalUsd ?? computeUsd(ln.lineTotal, nextRate);
+    const lineTotalUsd = (nextRate > 0 ? (ln as { lineTotalUsd?: number }).lineTotalUsd : 0) ?? computeUsd(ln.lineTotal, nextRate);
     await client.query(
       `INSERT INTO purchase_invoice_lines (
          company_id, invoice_id, line_no, fabric_roll_id, fabric_item_id, variant_id, warehouse_id,
@@ -2029,8 +2028,9 @@ export async function validatePurchaseInvoicePaymentVoucher(
     supplier_id: string;
     currency_code: string;
     exchange_rate_to_usd: string;
+    usd_converted: boolean;
   }>(
-    `SELECT document_status, remaining_amount, supplier_id, currency_code, exchange_rate_to_usd
+    `SELECT document_status, remaining_amount, supplier_id, currency_code, exchange_rate_to_usd, usd_converted
      FROM purchase_invoices
      WHERE company_id=$1 AND invoice_no=$2
      FOR UPDATE`,
@@ -2052,8 +2052,8 @@ export async function validatePurchaseInvoicePaymentVoucher(
   }
   // سياسة العملات: تحويل مبلغ السند لعملة الفاتورة أولاً — لا مقارنة رقمية
   // مباشرة بين عملتين مختلفتين (كانت هذه الثغرة موجودة سابقاً).
-  if (voucher.usdConverted === false && String(voucher.currencyCode || 'USD').toUpperCase() !== String(row.currency_code).toUpperCase()) {
-    throw Object.assign(new Error('السند مسجَّل بلا سعر صرف؛ يجب أن تطابق عملته عملة الفاتورة أو فعّل سعر الصرف'), { code: 'VALIDATION' });
+  if ((voucher.usdConverted === false || row.usd_converted === false) && String(voucher.currencyCode || 'USD').toUpperCase() !== String(row.currency_code).toUpperCase()) {
+    throw Object.assign(new Error('السند أو الفاتورة بلا سعر صرف؛ يجب أن تتطابق عملتاهما أو فعّل سعر الصرف'), { code: 'VALIDATION' });
   }
   const amt = convertAmountToInvoiceCurrency({
     amount: Number(voucher.amount),
@@ -2085,8 +2085,9 @@ export async function applyPurchaseInvoicePaymentOnVoucherConfirm(
     remaining_amount: string;
     exchange_rate_to_usd: string;
     currency_code: string;
+    usd_converted: boolean;
   }>(
-    `SELECT id, total_amount, paid_amount, remaining_amount, exchange_rate_to_usd, currency_code
+    `SELECT id, total_amount, paid_amount, remaining_amount, exchange_rate_to_usd, currency_code, usd_converted
      FROM purchase_invoices
      WHERE company_id=$1 AND invoice_no=$2 AND document_status='CONFIRMED'
      FOR UPDATE`,
@@ -2113,7 +2114,7 @@ export async function applyPurchaseInvoicePaymentOnVoucherConfirm(
 
   // paid_amount/remaining_amount بعملة الفاتورة دائماً — سعر صرف الفاتورة
   // نفسه (لا سعر السند) هو الصحيح لتحويلهما لمعادل الدولار.
-  const rate = Number(row.exchange_rate_to_usd) > 0 ? Number(row.exchange_rate_to_usd) : 1;
+  const rate = row.usd_converted === false ? 0 : Number(row.exchange_rate_to_usd) > 0 ? Number(row.exchange_rate_to_usd) : 1;
   const newPaid = payment.newPaid;
   const pay = paymentStatuses(totalAmt, newPaid);
   const paidUsd = computeUsd(newPaid, rate);

@@ -80,6 +80,9 @@ const AccountRow = ({
           {account.currency_code ? (
             <span className="text-xs font-normal text-slate-400 mr-1">{account.currency_code}</span>
           ) : null}
+          {Object.entries(account.byCurrency ?? {}).filter(([, v]) => Math.abs(v) > 0.004).map(([c, v]) => (
+            <div key={c} className="text-xs font-normal text-slate-500" dir="ltr">{v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {c}</div>
+          ))}
         </td>
       </tr>
       {shouldExpand &&
@@ -210,6 +213,9 @@ export const Accounting = () => {
                       }`}
                     >
                       {acc.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {Object.entries(acc.byCurrency ?? {}).filter(([, v]) => Math.abs(v) > 0.004).map(([c, v]) => (
+            <div key={c} className="text-xs font-normal text-slate-500" dir="ltr">{v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {c}</div>
+          ))}
                     </td>
                   </tr>
                 ))

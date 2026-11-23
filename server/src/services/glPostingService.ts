@@ -21,6 +21,9 @@ export async function postVoucherToGl(
      * بالضبط). المجموع هو إجمالي السند؛ لا تحقّق هنا — يحدث بالـroute. */
     cashboxLines: Array<{ cashboxId: string; amountUsd: number }>;
     currencyCode: string;
+    /** عملة القيد: غير مُمرَّرة = USD (السلوك القديم). عند تمريرها (سند بلا سعر صرف)
+     * يحمل amountUsd مبلغ السند بعملته الأصلية ويُرحَّل القيد بها دون أي تحويل. */
+    ledgerCurrency?: string;
     partyType: string | null;
     partyId: string | null;
     description: string | null;
@@ -45,7 +48,7 @@ export async function postVoucherToGl(
 
   const pt = input.partyType;
   const pid = input.partyId;
-  const ccy = 'USD';
+  const ccy = input.ledgerCurrency || 'USD';
   const desc = input.description ?? `${input.voucherType === 'RECEIPT' ? 'قبض' : 'صرف'} ${input.voucherNo}`;
   const entryDate = input.voucherDate.slice(0, 10);
 
@@ -181,6 +184,8 @@ export async function postCheckDepositToGl(
     checkNo: string;
     depositDate: string;
     amountUsd: number;
+    /** عملة القيد (شيك سند بلا سعر صرف): amountUsd يحمل مبلغ الشيك بعملته. */
+    ledgerCurrency?: string;
     bankCashboxId: string;
     userId: string | null;
   },
@@ -216,8 +221,8 @@ export async function postCheckDepositToGl(
     sourceId: input.checkId,
     userId: input.userId,
     lines: [
-      { glAccountId: bankGlId, debit: amt, credit: 0, currencyCode: 'USD', description: desc, cashboxId: input.bankCashboxId },
-      { glAccountId: checksId, debit: 0, credit: amt, currencyCode: 'USD', description: desc },
+      { glAccountId: bankGlId, debit: amt, credit: 0, currencyCode: input.ledgerCurrency || 'USD', description: desc, cashboxId: input.bankCashboxId },
+      { glAccountId: checksId, debit: 0, credit: amt, currencyCode: input.ledgerCurrency || 'USD', description: desc },
     ],
   });
 }
@@ -232,6 +237,7 @@ export async function postCheckReturnToGl(
     checkNo: string;
     returnDate: string;
     amountUsd: number;
+    ledgerCurrency?: string;
     partyType: string | null;
     partyId: string | null;
     userId: string | null;
@@ -263,11 +269,11 @@ export async function postCheckReturnToGl(
 
   if (input.partyType === 'CUSTOMER') {
     const arId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.AR);
-    lines.push({ glAccountId: arId, debit: amt, credit: 0, currencyCode: 'USD', description: desc, partyType: 'CUSTOMER', partyId: input.partyId });
+    lines.push({ glAccountId: arId, debit: amt, credit: 0, currencyCode: input.ledgerCurrency || 'USD', description: desc, partyType: 'CUSTOMER', partyId: input.partyId });
   } else {
-    lines.push({ glAccountId: suspRec, debit: amt, credit: 0, currencyCode: 'USD', description: desc });
+    lines.push({ glAccountId: suspRec, debit: amt, credit: 0, currencyCode: input.ledgerCurrency || 'USD', description: desc });
   }
-  lines.push({ glAccountId: checksId, debit: 0, credit: amt, currencyCode: 'USD', description: desc });
+  lines.push({ glAccountId: checksId, debit: 0, credit: amt, currencyCode: input.ledgerCurrency || 'USD', description: desc });
 
   await insertBalancedJournal(client, {
     companyId: input.companyId,
@@ -630,6 +636,9 @@ export async function postSalesInvoiceToGl(
     customerId: string;
     totalAmountUsd: number;
     currencyCode: string;
+    /** فاتورة بلا سعر صرف: totalAmountUsd يحمل الإجمالي بعملة الفاتورة ويُرحَّل الإيراد والذمم بها.
+     * قيد التكلفة/المخزون يبقى بعملة تقييم المخزون (USD) لأن المخزون مقيَّم بها. */
+    ledgerCurrency?: string;
     userId: string | null;
     linesForCogs: SalesInvoiceLineCogsInput[];
   },
@@ -649,7 +658,7 @@ export async function postSalesInvoiceToGl(
   const cogsId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.COGS);
   const invId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.INVENTORY);
 
-  const ccy = 'USD';
+  const ccy = input.ledgerCurrency || 'USD';
   const entryDate = input.invoiceDate.slice(0, 10);
 
   const lines: Array<{
@@ -690,14 +699,14 @@ export async function postSalesInvoiceToGl(
       glAccountId: cogsId,
       debit: cost,
       credit: 0,
-      currencyCode: ccy,
+      currencyCode: 'USD',
       description: `تكلفة — ${input.invoiceNo}`,
     });
     lines.push({
       glAccountId: invId,
       debit: 0,
       credit: cost,
-      currencyCode: ccy,
+      currencyCode: 'USD',
       description: `شطب مخزون — ${input.invoiceNo}`,
     });
   }
@@ -739,6 +748,8 @@ export async function postPurchaseInvoiceToGl(
     supplierId: string;
     totalAmountUsd: number;
     currencyCode: string;
+    /** فاتورة بلا سعر صرف: totalAmountUsd يحمل الإجمالي بعملة الفاتورة ويُرحَّل بها. */
+    ledgerCurrency?: string;
     userId: string | null;
   },
 ): Promise<void> {
@@ -754,7 +765,7 @@ export async function postPurchaseInvoiceToGl(
 
   const invId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.INVENTORY);
   const apId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.AP);
-  const ccy = 'USD';
+  const ccy = input.ledgerCurrency || 'USD';
   const entryDate = input.invoiceDate.slice(0, 10);
 
   await insertBalancedJournal(client, {
@@ -821,10 +832,19 @@ async function insertBalancedJournal(
     }>;
   },
 ): Promise<string> {
-  const sumD = round2(params.lines.reduce((s, l) => s + l.debit, 0));
-  const sumC = round2(params.lines.reduce((s, l) => s + l.credit, 0));
-  if (sumD !== sumC) {
-    throw Object.assign(new Error(`قيد GL غير متوازن: مدين ${sumD} دائن ${sumC}`), { code: 'GL_UNBALANCED' });
+  // التوازن لكل عملة على حدة (قيد بعملة المستند لا يُجمع مع عملة أخرى).
+  const perCcy = new Map<string, { d: number; c: number }>();
+  for (const l of params.lines) {
+    const k = l.currencyCode || 'USD';
+    const cur = perCcy.get(k) ?? { d: 0, c: 0 };
+    cur.d += l.debit; cur.c += l.credit;
+    perCcy.set(k, cur);
+  }
+  for (const [k, v] of perCcy) {
+    const sumD = round2(v.d), sumC = round2(v.c);
+    if (sumD !== sumC) {
+      throw Object.assign(new Error(`قيد GL غير متوازن (${k}): مدين ${sumD} دائن ${sumC}`), { code: 'GL_UNBALANCED' });
+    }
   }
 
   const entryNo = generateDocumentNo('JE');

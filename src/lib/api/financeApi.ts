@@ -9,6 +9,8 @@ export interface ChartAccountRow {
   name: string;
   type: CoaAccountType;
   balance: number;
+  /** أرصدة العملات الأخرى (مستندات بعملتها بلا تحويل) — كل عملة لحالها، لا تُجمع مع الدولار. */
+  byCurrency?: Record<string, number>;
   currency_code: string | null;
   source_note: string | null;
   isPosting?: boolean;

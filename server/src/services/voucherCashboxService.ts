@@ -63,6 +63,8 @@ export async function insertDraftVoucher(
     currencyCode: string;
     exchangeRateToUsd: number;
     amountUsd: number;
+    /** false = بلا سعر صرف (يُسجَّل بعملته فقط). */
+    usdConverted?: boolean;
     description: string | null;
     notes: string | null;
     referenceDocumentType?: string | null;
@@ -79,8 +81,8 @@ export async function insertDraftVoucher(
     `INSERT INTO vouchers (
        company_id, voucher_no, voucher_type, voucher_date, cashbox_id, party_type, party_id, party_name,
        amount, currency_code, exchange_rate_to_usd, amount_usd, payment_method, status, description, notes,
-       reference_document_type, reference_document_no, created_by_user_id
-     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,'CASH','DRAFT',$13,$14,$15,$16,$17)
+       reference_document_type, reference_document_no, created_by_user_id, usd_converted
+     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,'CASH','DRAFT',$13,$14,$15,$16,$17,$18)
      RETURNING id, voucher_no`,
     [
       input.companyId,
@@ -100,6 +102,7 @@ export async function insertDraftVoucher(
       input.referenceDocumentType?.trim() || null,
       input.referenceDocumentNo?.trim() || null,
       input.userId,
+      input.usdConverted !== false,
     ],
   );
   return { id: row.rows[0].id, voucherNo: row.rows[0].voucher_no };
@@ -196,6 +199,8 @@ export async function applyVoucherConfirmation(
     currencyCode: string;
     exchangeRateToUsd: number;
     amountUsd: number;
+    /** false = سند بلا سعر صرف: يُرحَّل القيد بعملة السند دون أي معادل دولار. */
+    usdConverted?: boolean;
     cashboxId: string;
     partyType: string | null;
     partyId: string | null;
@@ -257,7 +262,8 @@ export async function applyVoucherConfirmation(
     voucherDate: input.voucherDate,
     voucherType: input.voucherType,
     currencyCode: input.currencyCode,
-    cashboxLines: lines.map((l) => ({ cashboxId: l.cashboxId, amountUsd: l.amountUsd })),
+    ledgerCurrency: input.usdConverted === false ? String(input.currencyCode).trim().toUpperCase() : undefined,
+    cashboxLines: lines.map((l) => ({ cashboxId: l.cashboxId, amountUsd: input.usdConverted === false ? l.amount : l.amountUsd })),
     partyType: input.partyType,
     partyId: input.partyId,
     description: input.description,
