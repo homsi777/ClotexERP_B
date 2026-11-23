@@ -41,6 +41,8 @@ export const createReturnBodySchema = z.object({
   returnDate: z.string().optional(),
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().optional(),
+  /** false (مع عملة غير الدولار، مرتجع بلا فاتورة أصلية) = بعملته فقط بلا معادل دولار. */
+  convertToUsd: z.boolean().optional(),
   discountTotal: z.coerce.number().nonnegative().default(0),
   taxTotal: z.coerce.number().nonnegative().default(0),
   notes: z.string().optional().nullable(),
@@ -74,6 +76,8 @@ export type ValidatedReturnDraft = {
   originalPurchaseInvoiceId: string | null;
   currencyCode: string;
   exchangeRateToUsd: number;
+  /** false = المرتجع بعملته بلا معادل دولار. */
+  usdConverted: boolean;
   subtotal: number;
   discountTotal: number;
   taxTotal: number;
@@ -123,6 +127,8 @@ export async function validateAndBuildReturnDraft(
 
   let currencyCode = String(data.currencyCode || 'USD').trim().toUpperCase();
   let exchangeRateToUsd = data.exchangeRateToUsd != null ? Number(data.exchangeRateToUsd) : NaN;
+  // يرث المرتجع المرتبط قاعدة فاتورته الأصلية؛ غير المرتبط: حسب اختيار المستخدم.
+  let usdConverted = !(currencyCode !== 'USD' && data.convertToUsd === false);
 
   const normalizedLines: NormalizedReturnLine[] = [];
   let subtotal = 0;
@@ -130,7 +136,8 @@ export async function validateAndBuildReturnDraft(
   if (linkedSales) {
     const src = await getSourceSalesInvoiceForReturn(client, companyId, data.originalSalesInvoiceId!, opts.excludeReturnId);
     if (!src) throw Object.assign(new Error('فاتورة البيع غير موجودة أو غير مؤكدة'), { code: 'NOT_FOUND' });
-    const h = src.header as { customer_id: string; currency_code: string; exchange_rate_to_usd?: string | number };
+    const h = src.header as { customer_id: string; currency_code: string; exchange_rate_to_usd?: string | number; usd_converted?: boolean };
+    usdConverted = h.usd_converted !== false;
     if (String(h.customer_id) !== String(data.customerId)) {
       throw Object.assign(new Error('العميل لا يطابق فاتورة البيع الأصلية'), { code: 'VALIDATION' });
     }
@@ -194,7 +201,8 @@ export async function validateAndBuildReturnDraft(
   } else if (linkedPurchase) {
     const src = await getSourcePurchaseInvoiceForReturn(client, companyId, data.originalPurchaseInvoiceId!, opts.excludeReturnId);
     if (!src) throw Object.assign(new Error('فاتورة الشراء غير موجودة أو غير مؤكدة'), { code: 'NOT_FOUND' });
-    const h = src.header as { supplier_id: string; currency_code: string; exchange_rate_to_usd?: string | number };
+    const h = src.header as { supplier_id: string; currency_code: string; exchange_rate_to_usd?: string | number; usd_converted?: boolean };
+    usdConverted = h.usd_converted !== false;
     if (String(h.supplier_id) !== String(data.supplierId)) {
       throw Object.assign(new Error('المورد لا يطابق فاتورة الشراء الأصلية'), { code: 'VALIDATION' });
     }
@@ -312,6 +320,7 @@ export async function validateAndBuildReturnDraft(
     originalPurchaseInvoiceId: linkedPurchase ? data.originalPurchaseInvoiceId! : null,
     currencyCode,
     exchangeRateToUsd,
+    usdConverted,
     subtotal: round2(subtotal),
     discountTotal: data.discountTotal,
     taxTotal: data.taxTotal,

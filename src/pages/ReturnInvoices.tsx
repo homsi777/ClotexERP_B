@@ -387,6 +387,8 @@ export const ReturnInvoices = () => {
         linkMode === 'linked' && formReturnType === 'PURCHASE_RETURN' ? originalPurchaseInvoiceId : null,
       currencyCode: formCurrencyCode,
       exchangeRateToUsd: rate,
+      // مرتجع غير مرتبط بفاتورة: يبقى بعملته بلا معادل دولار؛ المرتبط يرث قاعدة فاتورته من الخادم.
+      convertToUsd: linkMode === 'linked' ? undefined : formCurrencyCode === 'USD',
       discountTotal,
       taxTotal,
       notes: formNotes.trim() || null,
@@ -471,7 +473,7 @@ export const ReturnInvoices = () => {
     setError(null);
     try {
       const rate = formCurrencyCode === 'USD' ? 1 : normalizeExchangeRate(formExchangeRateToUsd);
-      if (formCurrencyCode !== 'USD' && rate <= 0) {
+      if (false && formCurrencyCode !== 'USD' && rate <= 0) {
         showToast({ type: 'error', message: t('errors.invalidExchangeRate') });
         setSaving(false);
         return;

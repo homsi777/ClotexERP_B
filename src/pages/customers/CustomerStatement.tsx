@@ -1125,11 +1125,8 @@ const CustomerStatementInner = () => {
       return;
     }
     const currencyCode = discountCurrency.trim().toUpperCase() || 'USD';
-    const rate = currencyCode === 'USD' ? 1 : Number(discountExchangeRate);
-    if (currencyCode !== 'USD' && (!Number.isFinite(rate) || rate <= 0)) {
-      showToast({ type: 'warning', message: t('toast.invalidExchangeRate') });
-      return;
-    }
+    // الحسم بعملة غير الدولار يبقى بعملته بلا تحويل ولا معادل دولار.
+    const rate = 1;
     const description = discountDescription.trim() || t('discount.defaultDescription', { name: selectedCustomer?.name ?? t('voucherDescription.customerFallback') });
     setDiscountBusy(true);
     try {
@@ -1139,6 +1136,7 @@ const CustomerStatementInner = () => {
         amount,
         currencyCode,
         exchangeRateToUsd: rate,
+        convertToUsd: currencyCode === 'USD',
         description,
         notes: discountNotes.trim() || null,
       });

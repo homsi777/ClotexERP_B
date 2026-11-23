@@ -390,6 +390,9 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
   const services = (await db.query('SELECT id FROM external_job_services WHERE job_id=$1 AND company_id=$2 ORDER BY id FOR UPDATE', [jobId, companyId])).rows;
   if (input.lines.length !== services.length || new Set(input.lines.map(l => l.serviceId)).size !== services.length || input.lines.some(l => !services.some(s => s.id === l.serviceId))) fail('يجب تسعير جميع الخدمات مرة واحدة');
   let totalUsd = 0;
+  let ownTotal = 0;
+  const feeCurrencies = new Set<string>();
+  const feeRates = new Map<string, number>();
   for (const l of input.lines) {
     if (l.basis === 'FIXED' && l.approvedQuantity !== 1) fail('كمية المبلغ المقطوع يجب أن تكون واحداً');
     const currency = l.currencyCode.toUpperCase();
@@ -400,12 +403,23 @@ export async function priceManufacturingServices(db: Db, companyId: string, user
     const usd = Math.round(l.unitPrice * l.approvedQuantity / rate * 10000) / 10000;
     if (!Number.isFinite(usd) || usd > 9999999999.9999) fail('إجمالي الخدمة يتجاوز الحد المحاسبي المسموح');
     totalUsd += usd;
+    ownTotal += l.unitPrice * l.approvedQuantity;
+    feeCurrencies.add(currency);
+    feeRates.set(currency, rate);
     await db.query(`UPDATE external_job_services SET unit_price=$3,currency_code=$4,basis=$5,approved_quantity=$6,total_usd=$7,priced_by=$8
       WHERE id=$1 AND company_id=$2`, [l.serviceId, companyId, l.unitPrice, currency, l.basis, l.approvedQuantity, usd, userId]);
   }
   if (totalUsd > 9999999999.99) fail('إجمالي أجرة المهمة يتجاوز الحد المحاسبي المسموح');
   // One pricing source: the existing fee header and existing GL posting consume this aggregate.
   await db.query('UPDATE manufacturing_external_cost_shares SET allocated_usd=NULL,approved_at=NULL,approved_by_user_id=NULL WHERE company_id=$1 AND job_id=$2',[companyId,jobId]);
+  // عملة واحدة غير الدولار لكل الخدمات: الأجرة تبقى بعملتها (وسعرها المخزَّن يُستخدم فقط لاحتساب تكلفة التصنيع بالدولار)
+  // ويُرحَّل قيدها بهذه العملة. أكثر من عملة: يبقى التجميع بالدولار كما كان.
+  const onlyCurrency = feeCurrencies.size === 1 ? [...feeCurrencies][0] : null;
+  if (onlyCurrency && onlyCurrency !== 'USD') {
+    await db.query(`UPDATE external_jobs SET fee_amount=$3,fee_currency_code=$4,fee_exchange_rate_to_usd=$5,
+      pricing_method=NULL,approved_quantity=NULL,unit_price=NULL,updated_at=now() WHERE id=$1 AND company_id=$2`, [jobId, companyId, Math.round(ownTotal * 100) / 100, onlyCurrency, feeRates.get(onlyCurrency)]);
+    return;
+  }
   await db.query(`UPDATE external_jobs SET fee_amount=$3,fee_currency_code='USD',fee_exchange_rate_to_usd=1,
     pricing_method=NULL,approved_quantity=NULL,unit_price=NULL,updated_at=now() WHERE id=$1 AND company_id=$2`, [jobId, companyId, Math.round(totalUsd * 100) / 100]);
 }

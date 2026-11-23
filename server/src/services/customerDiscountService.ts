@@ -21,6 +21,8 @@ const createBody = z.object({
   amount: z.coerce.number().positive('المبلغ يجب أن يكون أكبر من صفر'),
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().positive().default(1),
+  /** false (مع عملة غير الدولار) = الحسم بعملته فقط بلا معادل دولار ويُرحَّل بها. */
+  convertToUsd: z.boolean().optional(),
   description: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
@@ -69,9 +71,10 @@ export async function createCustomerDiscount(
   }
   const d = parsed.data;
   const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
-  const exchangeRateToUsd = currencyCode === 'USD' ? 1 : d.exchangeRateToUsd;
+  const usdConverted = !(currencyCode !== 'USD' && d.convertToUsd === false);
+  const exchangeRateToUsd = currencyCode === 'USD' || !usdConverted ? 1 : d.exchangeRateToUsd;
   const amount = round2(d.amount);
-  const amountUsd = currencyCode === 'USD' ? amount : computeUsd(amount, exchangeRateToUsd);
+  const amountUsd = !usdConverted ? 0 : currencyCode === 'USD' ? amount : computeUsd(amount, exchangeRateToUsd);
 
   const pool = getPool();
   const client = await pool.connect();
@@ -79,9 +82,16 @@ export async function createCustomerDiscount(
     await client.query('BEGIN');
     const customer = await loadCustomer(client, companyId, customerId);
 
-    const statement = await getCustomerStatement(companyId, customerId, {});
+    // بلا سعر صرف: يُقارَن بالحسم برصيد العميل بعملة الحسم نفسها فقط (لا خلط عملات).
+    const statement = await getCustomerStatement(companyId, customerId, usdConverted ? {} : { currency: currencyCode });
     const closingBalance = Number(statement.totals.closingBalance ?? 0);
-    if (amountUsd > closingBalance + 1e-4) {
+    if (!usdConverted && amount > closingBalance + 1e-4) {
+      throw Object.assign(
+        new Error(`مبلغ الحسم (${amount.toFixed(2)} ${currencyCode}) أكبر من رصيد العميل الحالي بهذه العملة (${closingBalance.toFixed(2)} ${currencyCode}).`),
+        { code: 'VALIDATION' },
+      );
+    }
+    if (usdConverted && amountUsd > closingBalance + 1e-4) {
       throw Object.assign(
         new Error(
           `مبلغ الحسم (${amountUsd.toFixed(2)} USD) أكبر من رصيد العميل الحالي (${closingBalance.toFixed(2)} USD).`,
@@ -127,7 +137,8 @@ export async function createCustomerDiscount(
       discountDate,
       customerId,
       customerName: customer.name,
-      amountUsd,
+      amountUsd: usdConverted ? amountUsd : amount,
+      ledgerCurrency: usdConverted ? undefined : currencyCode,
       currencyCode,
       description,
       userId,

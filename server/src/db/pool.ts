@@ -8,7 +8,14 @@ let pool: pg.Pool | null = null;
 // أعمدة DATE تُعاد نصاً YYYY-MM-DD كما هي (لا كائن Date): يمنع انزياح اليوم بالمناطق الزمنية وظهور 2026-11-22T00:00:00.000Z بالواجهة.
 pg.types.setTypeParser(1082, (value: string) => value);
 
+/** للاختبارات فقط: يستبدل المجمع بكائن يلفّ عميل معاملة تُلغى بعد الاختبار. */
+let poolOverride: pg.Pool | null = null;
+export function setPoolOverrideForTests(p: unknown): void {
+  poolOverride = (p as pg.Pool | null) ?? null;
+}
+
 export function getPool(): pg.Pool {
+  if (poolOverride) return poolOverride;
   if (!pool) {
     const { DATABASE_URL } = getEnv();
     // Force UTF-8 on every new connection via the libpq `options` parameter

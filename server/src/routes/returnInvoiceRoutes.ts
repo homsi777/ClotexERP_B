@@ -313,23 +313,30 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
       }
 
       let exchangeRateToUsd = validated.exchangeRateToUsd;
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        if (validated.currencyCode === 'USD') {
-          exchangeRateToUsd = 1;
-        } else {
-          const fromDb = await getExchangeRateToUsdTx(client, companyId, validated.currencyCode);
-          exchangeRateToUsd = fromDb ?? NaN;
+      const usdConverted = validated.usdConverted;
+      if (!usdConverted) {
+        exchangeRateToUsd = 1;
+      } else {
+        if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
+          if (validated.currencyCode === 'USD') {
+            exchangeRateToUsd = 1;
+          } else {
+            const fromDb = await getExchangeRateToUsdTx(client, companyId, validated.currencyCode);
+            exchangeRateToUsd = fromDb ?? NaN;
+          }
         }
+        if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
+          throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
+        }
+        if (validated.currencyCode === 'USD') exchangeRateToUsd = 1;
       }
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-      }
-      if (validated.currencyCode === 'USD') exchangeRateToUsd = 1;
+      /** معدّل الحساب بالدولار: 0 = بلا معادل. */
+      const usdRate = usdConverted ? exchangeRateToUsd : 0;
 
-      const subtotalUsd = computeUsd(validated.subtotal, exchangeRateToUsd);
-      const discountUsd = computeUsd(validated.discountTotal, exchangeRateToUsd);
-      const taxUsd = computeUsd(validated.taxTotal, exchangeRateToUsd);
-      const totalUsd = computeUsd(validated.totalAmount, exchangeRateToUsd);
+      const subtotalUsd = computeUsd(validated.subtotal, usdRate);
+      const discountUsd = computeUsd(validated.discountTotal, usdRate);
+      const taxUsd = computeUsd(validated.taxTotal, usdRate);
+      const totalUsd = computeUsd(validated.totalAmount, usdRate);
 
       const originalInvoiceNo = await resolveHeaderOriginalInvoiceNo(client, companyId, validated, d.originalInvoiceNo ?? null);
 
@@ -340,8 +347,8 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
            return_date, currency_code, exchange_rate_to_usd,
            subtotal, discount_total, tax_total, total_amount,
            subtotal_usd, discount_total_usd, tax_total_usd, total_amount_usd,
-           status, notes, created_by_user_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'DRAFT',$22,$23)
+           status, notes, created_by_user_id, usd_converted
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'DRAFT',$22,$23,$24)
          RETURNING id, return_no, status, created_at`,
         [
           companyId,
@@ -367,6 +374,7 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
           totalUsd,
           d.notes ?? null,
           userId,
+          usdConverted,
         ],
       );
       const rid = ins.rows[0].id as string;
@@ -388,8 +396,8 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
             ln.unit,
             ln.unitPrice,
             ln.lineTotal,
-            computeUsd(ln.unitPrice, exchangeRateToUsd),
-            computeUsd(ln.lineTotal, exchangeRateToUsd),
+            computeUsd(ln.unitPrice, usdRate),
+            computeUsd(ln.lineTotal, usdRate),
             ln.notes,
             ln.originalSalesInvoiceLineId,
             ln.originalPurchaseInvoiceLineId,
@@ -466,23 +474,30 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
       }
 
       let exchangeRateToUsd = validated.exchangeRateToUsd;
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        if (validated.currencyCode === 'USD') {
-          exchangeRateToUsd = 1;
-        } else {
-          const fromDb = await getExchangeRateToUsdTx(client, companyId, validated.currencyCode);
-          exchangeRateToUsd = fromDb ?? NaN;
+      const usdConverted = validated.usdConverted;
+      if (!usdConverted) {
+        exchangeRateToUsd = 1;
+      } else {
+        if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
+          if (validated.currencyCode === 'USD') {
+            exchangeRateToUsd = 1;
+          } else {
+            const fromDb = await getExchangeRateToUsdTx(client, companyId, validated.currencyCode);
+            exchangeRateToUsd = fromDb ?? NaN;
+          }
         }
+        if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
+          throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
+        }
+        if (validated.currencyCode === 'USD') exchangeRateToUsd = 1;
       }
-      if (!Number.isFinite(exchangeRateToUsd) || exchangeRateToUsd <= 0) {
-        throw Object.assign(new Error('لا يمكن تنفيذ العملية بدون سعر صرف'), { code: 'VALIDATION' });
-      }
-      if (validated.currencyCode === 'USD') exchangeRateToUsd = 1;
+      /** معدّل الحساب بالدولار: 0 = بلا معادل. */
+      const usdRate = usdConverted ? exchangeRateToUsd : 0;
 
-      const subtotalUsd = computeUsd(validated.subtotal, exchangeRateToUsd);
-      const discountUsd = computeUsd(validated.discountTotal, exchangeRateToUsd);
-      const taxUsd = computeUsd(validated.taxTotal, exchangeRateToUsd);
-      const totalUsd = computeUsd(validated.totalAmount, exchangeRateToUsd);
+      const subtotalUsd = computeUsd(validated.subtotal, usdRate);
+      const discountUsd = computeUsd(validated.discountTotal, usdRate);
+      const taxUsd = computeUsd(validated.taxTotal, usdRate);
+      const totalUsd = computeUsd(validated.totalAmount, usdRate);
 
       const originalInvoiceNo = await resolveHeaderOriginalInvoiceNo(client, companyId, validated, d.originalInvoiceNo ?? null);
 
@@ -495,7 +510,7 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
            subtotal=$14, discount_total=$15, tax_total=$16,
            total_amount=$17,
            subtotal_usd=$18, discount_total_usd=$19, tax_total_usd=$20, total_amount_usd=$21,
-           notes=$22, updated_at=now(), created_by_user_id=$23
+           notes=$22, updated_at=now(), created_by_user_id=$23, usd_converted=$24
          WHERE id=$1 AND company_id=$2`,
         [
           id,
@@ -521,6 +536,7 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
           totalUsd,
           d.notes ?? null,
           userId,
+          usdConverted,
         ],
       );
       await client.query(`DELETE FROM return_invoice_lines WHERE return_invoice_id=$1 AND company_id=$2`, [id, companyId]);
@@ -541,8 +557,8 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
             ln.unit,
             ln.unitPrice,
             ln.lineTotal,
-            computeUsd(ln.unitPrice, exchangeRateToUsd),
-            computeUsd(ln.lineTotal, exchangeRateToUsd),
+            computeUsd(ln.unitPrice, usdRate),
+            computeUsd(ln.lineTotal, usdRate),
             ln.notes,
             ln.originalSalesInvoiceLineId,
             ln.originalPurchaseInvoiceLineId,
@@ -637,9 +653,9 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const totalAmt = Number(r.total_amount);
+      const usdConverted = r.usd_converted !== false;
       const exchangeRateToUsd = Number(r.exchange_rate_to_usd ?? 1) > 0 ? Number(r.exchange_rate_to_usd ?? 1) : 1;
-      const totalUsd =
-        Number(r.total_amount_usd ?? 0) || computeUsd(totalAmt, exchangeRateToUsd);
+      const totalUsd = !usdConverted ? 0 : Number(r.total_amount_usd ?? 0) || computeUsd(totalAmt, exchangeRateToUsd);
 
       await postReturnInvoiceToGl(client, {
         companyId,
@@ -647,8 +663,9 @@ export const returnInvoiceRoutes: FastifyPluginAsync = async (app) => {
         returnNo: r.return_no as string,
         returnDate: returnDateStr,
         returnType: r.return_type as 'SALES_RETURN' | 'PURCHASE_RETURN',
-        totalAmountUsd: totalUsd,
+        totalAmountUsd: usdConverted ? totalUsd : totalAmt,
         currencyCode: r.currency_code as string,
+        ledgerCurrency: usdConverted ? undefined : String(r.currency_code || 'USD').trim().toUpperCase(),
         customerId: (r.customer_id as string | null) ?? null,
         supplierId: (r.supplier_id as string | null) ?? null,
         userId,

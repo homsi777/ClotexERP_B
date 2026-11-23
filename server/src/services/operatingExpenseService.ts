@@ -26,6 +26,8 @@ const createBody = z.object({
   amount: z.coerce.number().positive('المبلغ يجب أن يكون أكبر من صفر'),
   currencyCode: z.string().min(1).default('USD'),
   exchangeRateToUsd: z.coerce.number().positive().default(1),
+  /** false (مع عملة غير الدولار) = المصروف بعملته فقط بلا معادل دولار ويُرحَّل بها. */
+  convertToUsd: z.boolean().optional(),
   description: z.string().min(1, 'البيان مطلوب'),
   customLabel: z.string().trim().max(120).optional().nullable(),
   notes: z.string().optional().nullable(),
@@ -224,9 +226,10 @@ export async function createOperatingExpense(
   }
   const d = parsed.data;
   const currencyCode = String(d.currencyCode || 'USD').trim().toUpperCase();
-  const exchangeRateToUsd = currencyCode === 'USD' ? 1 : d.exchangeRateToUsd;
+  const usdConverted = !(currencyCode !== 'USD' && d.convertToUsd === false);
+  const exchangeRateToUsd = currencyCode === 'USD' || !usdConverted ? 1 : d.exchangeRateToUsd;
   const amount = round2(d.amount);
-  const amountUsd = currencyCode === 'USD' ? amount : computeUsd(amount, exchangeRateToUsd);
+  const amountUsd = !usdConverted ? 0 : currencyCode === 'USD' ? amount : computeUsd(amount, exchangeRateToUsd);
   const expenseDate = d.expenseDate.slice(0, 10);
   const description = d.description.trim();
   const beneficiary = d.beneficiaryName?.trim() || null;
@@ -292,7 +295,8 @@ export async function createOperatingExpense(
       expenseNo,
       expenseDate,
       expenseGlAccountId: category.gl_account_id,
-      amountUsd,
+      amountUsd: usdConverted ? amountUsd : amount,
+      ledgerCurrency: usdConverted ? undefined : currencyCode,
       cashboxId: cashbox.id,
       description: `${category.name} — ${description}`,
       userId,

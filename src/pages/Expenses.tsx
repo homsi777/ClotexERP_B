@@ -147,7 +147,9 @@ export const Expenses = () => {
     setSaving(true);
     setErr('');
     try {
-      const rate = resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
+      // سعر الصرف مطفأ (غير الدولار): يُسجَّل المصروف بعملته بلا معادل دولار.
+      const noConversion = currencyCode !== 'USD' && !manualRate;
+      const rate = noConversion ? 1 : resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate });
       if (!rate) {
         setErr(t('invalidExchangeRate'));
         return;
@@ -165,6 +167,7 @@ export const Expenses = () => {
         amount: amountOriginal,
         currencyCode,
         exchangeRateToUsd: rate,
+        convertToUsd: !noConversion,
         description: description.trim(),
         notes: notes.trim() || null,
       });
@@ -452,12 +455,13 @@ export const Expenses = () => {
                     currencyCode={currencyCode}
                     storedRate={storedRate}
                     manual={manualRate}
+                    noConversionWhenOff
                     onManualChange={setManualRate}
                     value={exchangeRateToUsd}
                     onValueChange={setExchangeRateToUsd}
                     inputClassName="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
                   />
-                  {amount && (
+                  {amount && manualRate && (
                     <p className="text-xs text-slate-500 mt-1">
                       {t('approxUsd', { value: round2(convertToUsd(Number(amount) || 0, resolveExchangeRate({ currencyCode, manual: manualRate, manualValue: exchangeRateToUsd, storedRate, normalize: normalizeExchangeRate }) || 1)).toFixed(2) })}
                     </p>

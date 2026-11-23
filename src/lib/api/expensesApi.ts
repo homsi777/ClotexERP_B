@@ -82,6 +82,8 @@ export async function createOperatingExpense(payload: {
   amount: number;
   currencyCode?: string;
   exchangeRateToUsd?: number;
+  /** false = بعملته فقط بلا معادل دولار. */
+  convertToUsd?: boolean;
   description: string;
   customLabel?: string | null;
   notes?: string | null;

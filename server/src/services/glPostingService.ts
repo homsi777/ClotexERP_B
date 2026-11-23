@@ -316,6 +316,8 @@ export async function postReturnInvoiceToGl(
     returnType: 'SALES_RETURN' | 'PURCHASE_RETURN';
     totalAmountUsd: number;
     currencyCode: string;
+    /** مرتجع بلا سعر صرف: totalAmountUsd يحمل الإجمالي بعملة المرتجع ويُرحَّل بها (التكلفة تبقى USD). */
+    ledgerCurrency?: string;
     customerId: string | null;
     supplierId: string | null;
     userId: string | null;
@@ -359,7 +361,7 @@ export async function postReturnInvoiceToGl(
   const cashId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.CASH);
   const salesRet = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.SALES_RETURNS);
   const purchRet = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.PURCHASE_RETURNS);
-  const ccy = 'USD';
+  const ccy = input.ledgerCurrency || 'USD';
   const entryDate = input.returnDate.slice(0, 10);
   const isCashRefund = input.settlementType === 'CASH_REFUND';
 
@@ -413,14 +415,14 @@ export async function postReturnInvoiceToGl(
         glAccountId: invId,
         debit: cost,
         credit: 0,
-        currencyCode: ccy,
+        currencyCode: 'USD',
         description: `إعادة مخزون — ${input.returnNo}`,
       });
       lines.push({
         glAccountId: cogsId,
         debit: 0,
         credit: cost,
-        currencyCode: ccy,
+        currencyCode: 'USD',
         description: `عكس تكلفة — ${input.returnNo}`,
       });
     }
@@ -1020,6 +1022,8 @@ export async function postCustomerDiscountToGl(
     customerId: string;
     customerName: string;
     amountUsd: number;
+    /** حسم بلا سعر صرف: amountUsd يحمل المبلغ بعملته ويُرحَّل بها. */
+    ledgerCurrency?: string;
     currencyCode: string;
     description: string;
     userId: string | null;
@@ -1049,14 +1053,14 @@ export async function postCustomerDiscountToGl(
         glAccountId: discountAcct,
         debit: amount,
         credit: 0,
-        currencyCode: 'USD',
+        currencyCode: input.ledgerCurrency || 'USD',
         description: desc,
       },
       {
         glAccountId: arId,
         debit: 0,
         credit: amount,
-        currencyCode: 'USD',
+        currencyCode: input.ledgerCurrency || 'USD',
         description: desc,
         partyType: 'CUSTOMER',
         partyId: input.customerId,
@@ -1095,6 +1099,8 @@ export async function postOperatingExpenseToGl(
     expenseDate: string;
     expenseGlAccountId: string;
     amountUsd: number;
+    /** مصروف بلا سعر صرف: amountUsd يحمل المبلغ بعملته ويُرحَّل بها. */
+    ledgerCurrency?: string;
     cashboxId: string;
     description: string;
     userId: string | null;
@@ -1123,14 +1129,14 @@ export async function postOperatingExpenseToGl(
         glAccountId: input.expenseGlAccountId,
         debit: amount,
         credit: 0,
-        currencyCode: 'USD',
+        currencyCode: input.ledgerCurrency || 'USD',
         description: desc,
       },
       {
         glAccountId: cashId,
         debit: 0,
         credit: amount,
-        currencyCode: 'USD',
+        currencyCode: input.ledgerCurrency || 'USD',
         description: desc,
         cashboxId: input.cashboxId,
       },
@@ -1167,6 +1173,8 @@ export async function postExternalJobFeeToGl(
     feeDate: string;
     supplierId: string;
     feeAmountUsd: number;
+    /** أجرة بعملة غير الدولار: feeAmountUsd يحمل المبلغ بعملته ويُرحَّل بها. */
+    ledgerCurrency?: string;
     userId: string | null;
   },
 ): Promise<void> {
@@ -1182,7 +1190,7 @@ export async function postExternalJobFeeToGl(
 
   const feeExpenseId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.EXTERNAL_JOB_FEE_EXPENSE);
   const apId = await getGlAccountIdByKey(client, input.companyId, GL_KEYS.AP);
-  const ccy = 'USD';
+  const ccy = input.ledgerCurrency || 'USD';
 
   await insertBalancedJournal(client, {
     companyId: input.companyId,

@@ -23,6 +23,8 @@ export interface CreateCustomerDiscountPayload {
   amount: number;
   currencyCode?: string;
   exchangeRateToUsd?: number;
+  /** false = بعملته فقط بلا معادل دولار. */
+  convertToUsd?: boolean;
   description?: string | null;
   notes?: string | null;
 }

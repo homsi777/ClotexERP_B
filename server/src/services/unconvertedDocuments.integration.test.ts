@@ -94,6 +94,74 @@ test('documents without exchange rate stay in their own currency end-to-end (led
     const byCcy = await stm.getCustomerStatementByCurrency(company, cust, {});
     assert.deepEqual(byCcy.byCurrency.map((x) => x.currency), ['EGP']);
 
+    // ───── المصاريف وحسم العملاء والمرتجع: نفس القاعدة (عملة المستند، بلا تحويل) ─────
+    // المجمع يُلفّ بعميل المعاملة: BEGIN/COMMIT/ROLLBACK تصير نقاط حفظ ولا شيء يُثبَّت.
+    let sp = 0;
+    const fakeClient = {
+      query: (sql: string, params?: unknown[]) => {
+        const t = String(sql).trim().toUpperCase();
+        if (t === 'BEGIN') return db.query(`SAVEPOINT sp${++sp}`);
+        if (t === 'COMMIT') return db.query(`RELEASE SAVEPOINT sp${sp--}`);
+        if (t === 'ROLLBACK') return db.query(`ROLLBACK TO SAVEPOINT sp${sp--}`);
+        return db.query(sql, params);
+      },
+      release: () => undefined,
+    };
+    const fakePool = { connect: async () => fakeClient, query: (sql: string, params?: unknown[]) => db.query(sql, params) };
+    const { setPoolOverrideForTests } = await import('../db/pool.js');
+    setPoolOverrideForTests(fakePool);
+    try {
+      const { ensureCompanyOperatingExpenseCoa } = await import('./glCoaService.js');
+      await ensureCompanyOperatingExpenseCoa(client, company);
+      const cat = (await q('SELECT id FROM expense_categories WHERE company_id=$1 AND is_active LIMIT 1', [company]))[0];
+      const { createOperatingExpense } = await import('./operatingExpenseService.js');
+      const exp = await createOperatingExpense(company, user, {
+        expenseDate: '2026-11-13', categoryId: cat.id, cashboxId: box, amount: 250, currencyCode: 'EGP',
+        convertToUsd: false, description: 'إيجار',
+      });
+      assert.equal(Number(exp.amount_usd), 0, 'لا معادل دولار');
+      const egl = await q(`SELECT jl.currency_code, SUM(jl.debit) d, SUM(jl.credit) c FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id WHERE je.source_type='OPERATING_EXPENSE' AND je.source_id=$1 GROUP BY 1`, [exp.id]);
+      assert.deepEqual(egl.map((r) => [r.currency_code, Number(r.d), Number(r.c)]), [['EGP', 250, 250]]);
+
+      const { createCustomerDiscount } = await import('./customerDiscountService.js');
+      await assert.rejects(() => createCustomerDiscount(company, cust, user, { discountDate: '2026-11-14', amount: 700, currencyCode: 'EGP', convertToUsd: false }), /أكبر من رصيد العميل/);
+      const disc = await createCustomerDiscount(company, cust, user, { discountDate: '2026-11-14', amount: 100, currencyCode: 'EGP', convertToUsd: false });
+      assert.equal(Number(disc.amount_usd), 0);
+      const dgl = await q(`SELECT jl.currency_code, SUM(jl.debit) d FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id WHERE je.source_type='CUSTOMER_DISCOUNT' AND je.source_id=$1 GROUP BY 1`, [disc.id]);
+      assert.deepEqual(dgl.map((r) => [r.currency_code, Number(r.d)]), [['EGP', 100]]);
+      const afterDisc = await stm.getCustomerStatement(company, cust, { currency: 'EGP' });
+      assert.equal(afterDisc.totals.closingBalance, 500, '1000 - 400 - 100');
+
+      // مرتجع غير مرتبط: يبقى بعملته؛ والمرتبط يرث قاعدة فاتورته
+      const { validateAndBuildReturnDraft } = await import('./returnInvoiceDraftValidation.js');
+      const { postReturnInvoiceToGl } = await import('./glPostingService.js');
+      const v = await validateAndBuildReturnDraft(client, company, {
+        returnType: 'SALES_RETURN', customerId: cust, currencyCode: 'EGP', convertToUsd: false, settlementType: 'CREDIT_BALANCE',
+        discountTotal: 0, taxTotal: 0, lines: [{ description: 'مرتجع حر', quantity: 2, unitPrice: 50 }],
+      } as never, { excludeReturnId: null });
+      assert.equal(v.usdConverted, false);
+      assert.equal(v.totalAmount, 100);
+      const rid = randomUUID();
+      await postReturnInvoiceToGl(client, {
+        companyId: company, returnInvoiceId: rid, returnNo: 'RTN-T', returnDate: '2026-11-15', returnType: 'SALES_RETURN',
+        totalAmountUsd: v.totalAmount, currencyCode: 'EGP', ledgerCurrency: 'EGP', customerId: cust, supplierId: null, userId: user, settlementType: 'CREDIT_BALANCE',
+      });
+      const rgl = await q(`SELECT jl.currency_code, SUM(jl.debit) d, SUM(jl.credit) c FROM journal_lines jl JOIN journal_entries je ON je.id=jl.entry_id WHERE je.source_type='RETURN_INVOICE' AND je.source_id=$1 GROUP BY 1`, [rid]);
+      assert.deepEqual(rgl.map((r) => [r.currency_code, Number(r.d), Number(r.c)]), [['EGP', 100, 100]]);
+
+      // دليل الحسابات: الدولار في عموده، وكل عملة أخرى لحالها (لا جمع)
+      const { getGlChartOfAccounts } = await import('./glReportService.js');
+      const chart = await getGlChartOfAccounts(company);
+      const nonZero = chart.filter((a) => Math.abs(a.balance) > 0.004 || Object.values(a.byCurrency).some((v) => Math.abs(v) > 0.004));
+      console.log('CHART', JSON.stringify(nonZero.map((a) => ({ code: a.code, name: a.name, usd: a.balance, other: a.byCurrency }))));
+      const ar = chart.find((a) => a.isPosting && Math.abs(a.byCurrency.EGP ?? 0) > 0 && a.name.includes('ذمم') && a.type === 'asset');
+      assert.ok(ar, 'حساب الذمم يحمل رصيداً بالجنيه');
+      assert.equal(Math.round((ar!.byCurrency.EGP ?? 0) * 100) / 100, 400, 'الذمم: 1000 − 400 قبض − 100 حسم − 100 مرتجع');
+      assert.equal(ar!.balance, 0, 'لا دولار في الذمم');
+    } finally {
+      setPoolOverrideForTests(null);
+    }
+
     // الدفتر لا يجمع الجنيه مع الدولار
     const { getGlChartOfAccounts } = await import('./glReportService.js');
     void getGlChartOfAccounts;

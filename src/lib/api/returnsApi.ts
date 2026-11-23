@@ -79,6 +79,8 @@ export interface CreateReturnPayload {
   returnDate?: string;
   currencyCode?: string;
   exchangeRateToUsd?: number;
+  /** false = تسجيل بالعملة فقط بلا معادل دولار (مرتجع غير مرتبط). */
+  convertToUsd?: boolean;
   discountTotal?: number;
   taxTotal?: number;
   notes?: string | null;
@@ -167,6 +169,7 @@ function buildCreateBody(payload: CreateReturnPayload) {
     returnDate: payload.returnDate,
     currencyCode: payload.currencyCode ?? 'USD',
     exchangeRateToUsd: payload.exchangeRateToUsd,
+    convertToUsd: payload.convertToUsd,
     discountTotal: payload.discountTotal ?? 0,
     taxTotal: payload.taxTotal ?? 0,
     notes: payload.notes ?? null,

@@ -547,7 +547,10 @@ export async function postExternalJobFee(
     throw Object.assign(new Error('تم ترحيل الأجرة مسبقاً'), { code: 'INVALID_STATE' });
   }
 
-  const feeAmountUsd = round2(Number(job.fee_amount) / Number(job.fee_exchange_rate_to_usd || 1));
+  // أجرة بعملة غير الدولار: تُرحَّل بعملتها دون تحويل (التحويل للدولار يبقى لتكلفة التصنيع الداخلية فقط).
+  const feeCcy = String(job.fee_currency_code).trim().toUpperCase();
+  const ownCurrency = feeCcy !== 'USD';
+  const feeAmountUsd = ownCurrency ? round2(Number(job.fee_amount)) : round2(Number(job.fee_amount) / Number(job.fee_exchange_rate_to_usd || 1));
 
   await postExternalJobFeeToGl(client, {
     companyId,
@@ -556,6 +559,7 @@ export async function postExternalJobFee(
     feeDate: String(job.sent_date),
     supplierId: String(job.supplier_id),
     feeAmountUsd,
+    ledgerCurrency: ownCurrency ? feeCcy : undefined,
     userId,
   });
 
