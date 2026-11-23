@@ -11,6 +11,7 @@
     },
     "sections":{
       "specifications":{"title":"Teknik föy kütüphanesi","description":"Excel dosyasını seçin, verileri inceleyin, sürümü kaydedip onaylayın."},
+      "specCards":{"title":"Teknik föy kartları","description":"Referans kart kütüphanesi: kumaş, kodu ve kumaş rehberine isteğe bağlı bağlantı; görüntüleme, düzenleme, yazdırma ve dışa aktarma."},
       "workOrders":{"title":"Üretim emirleri","description":"Onaylı teknik föyden emir oluşturun ve kapanışına kadar takip edin."},
       "warping":{"title":"Çözgü ve çözgü kartı","description":"Çözgü emri, iplik çıkışı ve iade/fire mutabakatı. Kart numarasının yanındaki düğmeden yazdırın."},
       "sizing":{"title":"Haşıllama","description":"Haşıllamaya sevk edilen levendi seçin, reçeteyi ve tüketimi kaydedip aşamayı tamamlayın."},
@@ -27,7 +28,7 @@
   },
   "pageTitle":"Üretim ve İmalat","referenceSubtitle":"Üretim emirlerinden önce fabrika, makine ve kalite ana verileri","refresh":"Yenile","add":"Ekle","edit":"Düzenle","save":"Kaydet","saving":"Kaydediliyor…","cancel":"İptal","apply":"Uygula","loading":"Yükleniyor…","noData":"Kayıt yok","yes":"Evet","no":"Hayır","history":"Geçmiş","changeStatus":"Makine durumunu değiştir","addBreakdown":"Yeni arıza kaydet","statusHistory":"Durum geçmişi","maintenanceHistory":"Arıza ve bakım geçmişi","technicalSpecifications":"Teknik özellikler",
   "summary":{"machines":"Makineler","active":"Çalışan makineler","unavailable":"Duruş veya bakım","openMaintenance":"Açık bakım"},
-  "tabs":{"machines":"Makineler","departments":"Fabrika bölümleri","downtime":"Duruş nedenleri","defects":"Kalite kusurları","specifications":"Spesifikasyon kütüphanesi","workOrders":"Üretim emirleri","warping":"Çözgü ve kartları"},
+  "tabs":{"machines":"Makineler","departments":"Fabrika bölümleri","downtime":"Duruş nedenleri","defects":"Kalite kusurları","specCards":"Teknik föy kartları","specifications":"Spesifikasyon kütüphanesi","workOrders":"Üretim emirleri","warping":"Çözgü ve kartları"},
   "columns":{"code":"Kod","name":"Ad","type":"Tür","model":"Üretici ve model","department":"Bölüm","width":"Genişlik","location":"Konum","ownership":"Mülkiyet","status":"Durum","actions":"İşlemler","description":"Açıklama","is_active":"Aktif","stage":"Aşama","is_planned":"Planlı","inspection_type":"Kontrol türü","default_severity":"Varsayılan derece"},
   "machineType":{"WARPING":"Çözgü","SIZING":"Haşıl","LOOM":"Dokuma tezgâhı","PROCESSING":"İşleme","INSPECTION":"Kontrol","OTHER":"Diğer"},
   "machineStatus":{"ACTIVE":"Çalışıyor","STOPPED":"Duruşta","MAINTENANCE":"Bakımda","OUT_OF_SERVICE":"Hizmet dışı"},

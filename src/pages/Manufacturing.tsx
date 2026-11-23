@@ -1,6 +1,7 @@
 import { DateInput } from '../components/common/DateInput';
 import {ExecutionTrackingLauncher} from '../components/manufacturing/ExecutionTrackingLauncher';
 import {ManufacturingItemSpecificationMapping} from '../components/manufacturing/ManufacturingItemSpecificationMapping';
+import {SpecCardsPanel} from '../components/manufacturing/SpecCardsPanel';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {ManufacturingPrintButton} from '../components/manufacturing/ManufacturingPrintButton';
 import {WorkbookSheetGrid} from '../components/manufacturing/WorkbookSheetGrid';
@@ -66,7 +67,7 @@ export const Manufacturing = () => {
   const canRawInspection=has("manufacturing.raw_inspection.manage");
   const canInventoryManage=has("inventory.manage");
   const allowedSections=manufacturingSections.filter(s=>{
-    const permissions:Record<Tab,string[]>={machines:['manufacturing.reference.view','manufacturing.machines.manage'],departments:['manufacturing.reference.view','manufacturing.reference.manage'],downtime:['manufacturing.reference.view','manufacturing.reference.manage'],defects:['manufacturing.reference.view','manufacturing.quality.catalog.manage'],specifications:['manufacturing.specifications.view','manufacturing.specifications.import','manufacturing.specifications.approve'],workOrders:['manufacturing.work_orders.view','manufacturing.work_orders.manage'],warping:['manufacturing.warping.view','manufacturing.warping.manage'],sizing:['manufacturing.sizing.view','manufacturing.sizing.manage'],weaving:['manufacturing.weaving.view','manufacturing.weaving.manage'],rawInspection:['manufacturing.raw_inspection.manage','manufacturing.weaving.view'],reports:['manufacturing.reports.view','reports.view'],costing:['manufacturing.cost.view','manufacturing.cost.manage','inventory.manage'],external:['inventory.manage','purchases.view','manufacturing.work_orders.view']};
+    const permissions:Record<Tab,string[]>={machines:['manufacturing.reference.view','manufacturing.machines.manage'],departments:['manufacturing.reference.view','manufacturing.reference.manage'],downtime:['manufacturing.reference.view','manufacturing.reference.manage'],defects:['manufacturing.reference.view','manufacturing.quality.catalog.manage'],specifications:['manufacturing.specifications.view','manufacturing.specifications.import','manufacturing.specifications.approve'],specCards:['manufacturing.specifications.view'],workOrders:['manufacturing.work_orders.view','manufacturing.work_orders.manage'],warping:['manufacturing.warping.view','manufacturing.warping.manage'],sizing:['manufacturing.sizing.view','manufacturing.sizing.manage'],weaving:['manufacturing.weaving.view','manufacturing.weaving.manage'],rawInspection:['manufacturing.raw_inspection.manage','manufacturing.weaving.view'],reports:['manufacturing.reports.view','reports.view'],costing:['manufacturing.cost.view','manufacturing.cost.manage','inventory.manage'],external:['inventory.manage','purchases.view','manufacturing.work_orders.view']};
     return permissions[s].some(has)||(s==='costing'&&user?.role==='accountant');
   });
   const load = useCallback(async () => {
@@ -165,7 +166,9 @@ export const Manufacturing = () => {
           />
         )}
         <div key={`${tab}:${revision}`} className="min-w-0 overflow-x-auto">
-          {tab === "specifications" ? (
+          {tab === "specCards" ? (
+            <SpecCardsPanel canCreate={canSpecImport} canEdit={canSpecImport} canDelete={canSpecApprove} canPrint={has('manufacturing.specifications.view')} canExport={has('manufacturing.specifications.view')} />
+          ) : tab === "specifications" ? (
             <><ManufacturingItemSpecificationMapping/><WorkbookPreviewPanel t={t} canImport={canSpecImport} canApprove={canSpecApprove} /></>
           ) : tab === "workOrders" ? (
             <WorkOrdersPanel t={t} canManage={canWorkManage} canRelease={canWorkRelease} />

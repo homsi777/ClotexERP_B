@@ -22,7 +22,9 @@ test('complete work order includes structured warp, weft, draft, allocations and
   const html=renderManufacturingWorkOrder({work_order_no:evil,source_file_name:evil,source_file_sha256:'HASH',notes:evil,
     parsed_data:{technicalFields:{[evil]:evil},warp:{yarnCount:30,pattern:[{sequenceNo:1,colorName:evil,threadOrPickCount:5,repeatCount:2}],requirements:[{colorName:'REF',requiredWeightKg:7}]},weft:{yarnCount:40,pattern:[{colorName:'WEFT',threadOrPickCount:3}]}},
     draft:{cells:[{address:'A1',value:evil,formula:'SUM(B1:B2)'}],limitation:'جدولي'},allocations:[{order_no:'CUSTOMER-1'}],validation_warnings:[{message:evil}]});
-  for(const text of ['أمر السداء','أمر اللحمة','التركيب واللقي','SUM(B1:B2)','WEFT','CUSTOMER-1','HASH','ليست إذن صرف','&lt;script&gt;'])assert.ok(html.includes(text),text);
+  for(const text of ['أمر السداء','أمر اللحمة','التركيب واللقي','WEFT','CUSTOMER-1','لا تُستخدم لحساب استهلاك','&lt;script&gt;'])assert.ok(html.includes(text),text);
+  // M-0002: لا تفاصيل فحص Excel الداخلية بالطباعة (تحذيرات، أكواد، عناوين خلايا، معادلات، SHA، وقت الطلب)
+  for(const text of ['تحذيرات المواصفة','SUM(B1:B2)','HASH','SHA-256','وقت طلب البيانات','المعادلة الأصلية','خلية المصدر'])assert.ok(!html.includes(text),text);
   assert.ok(!html.includes('<script>'));
   assert.ok(renderManufacturingWorkOrder({}).includes('لا توجد بيانات مسجلة'));
 });
@@ -39,10 +41,15 @@ test('workbook grids preserve zero, cell colors, merges, formula text and reject
     {address:'C2',row:1,col:2,value:'<img onerror=x>',fill:'red; background:url(https://evil)',fontColor:'" onload="x'}],
     merges:[{startRow:0,startCol:0,endRow:0,endCol:1}]};
   const html=renderManufacturingSheets([sheet]);
-  for(const text of ['colspan="2"','#abcdef','#123456','>0</td>','SUM(B1:C1)','&lt;img','&lt;script&gt;'])assert.ok(html.includes(text),text);
+  for(const text of ['colspan="2"','#abcdef','#123456','>0</td>','&lt;img','&lt;script&gt;'])assert.ok(html.includes(text),text);
+  assert.ok(!html.includes('SUM(B1:C1)')&&!html.includes('title="A1"')&&!html.includes('A1:C2'),'لا معادلات ولا عناوين خلايا');
   assert.ok(!html.includes('url(')&&!html.includes('onload=')&&!html.includes('<script>'));
   const order=renderManufacturingWorkOrder({parsed_data:{sheets:[sheet]},draft:{cells:[{address:'FALLBACK',value:'old'}]}});
-  assert.ok(order.includes('أوراق المواصفة والتركيب واللقي')&&!order.includes('FALLBACK'));
+  assert.ok(order.includes('المواصفة والتركيب واللقي')&&!order.includes('FALLBACK'));
+  // الرجوع لورقة التركيب واللقي المحفوظة: جدول قيم بترتيبها دون عناوين خلايا ولا معادلات، والأرقام كما هي (0.59)
+  const fb=renderManufacturingWorkOrder({draft:{cells:[{address:'B2',value:0.59,formula:'SUM(A1)'},{address:'A2',value:'التركيب'},{address:'D5',value:3}]}});
+  assert.ok(fb.includes('>0.59</td>')&&fb.includes('>التركيب</td>')&&fb.includes('>3</td>'));
+  assert.ok(!fb.includes('B2')&&!fb.includes('SUM(A1)')&&!fb.includes('الخلية'));
   assert.ok(renderManufacturingSheets([{...sheet,cells:[{address:'A2001',row:2000,col:0,value:1}]}]).includes('حدود الطباعة الآمنة'));
 });
 test('only bounded inline PNG/JPEG originals enter print HTML, with escaped image names',()=>{

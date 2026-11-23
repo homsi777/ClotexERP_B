@@ -1,9 +1,9 @@
 import { ChevronLeft, Factory, FileSpreadsheet, Gauge, ShieldCheck, Calculator, Truck, Settings } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-export type ManufacturingSection='machines'|'departments'|'downtime'|'defects'|'specifications'|'workOrders'|'warping'|'sizing'|'weaving'|'rawInspection'|'costing'|'reports'|'external';
+export type ManufacturingSection='machines'|'departments'|'downtime'|'defects'|'specifications'|'specCards'|'workOrders'|'warping'|'sizing'|'weaving'|'rawInspection'|'costing'|'reports'|'external';
 export const manufacturingGroups=[
- {id:'planning',icon:FileSpreadsheet,sections:['specifications','workOrders']},
+ {id:'planning',icon:FileSpreadsheet,sections:['specifications','specCards','workOrders']},
  {id:'operations',icon:Gauge,sections:['warping','sizing','weaving']},
  {id:'quality',icon:ShieldCheck,sections:['rawInspection']},
  {id:'costs',icon:Calculator,sections:['costing','reports']},

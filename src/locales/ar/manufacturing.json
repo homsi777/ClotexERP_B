@@ -11,6 +11,7 @@
     },
     "sections":{
       "specifications":{"title":"مكتبة المواصفات","description":"اختر ملف Excel، راجع بياناته ثم احفظ الإصدار واعتمده."},
+      "specCards":{"title":"بطاقات المواصفات","description":"مكتبة مرجعية للبطاقات: خامة وكودها وربط اختياري بدليل الخامات، مع عرض وتعديل وطباعة وتصدير."},
       "workOrders":{"title":"أوامر الإنتاج","description":"أنشئ الأمر من مواصفة معتمدة، ثم أصدره وتابع حالته حتى الإغلاق."},
       "warping":{"title":"التسدية وكارت السداء","description":"أنشئ أمر التسدية واصرف الخيط وسوِّ المرتجع والهالك. طباعة كارت السداء من زر الطباعة بجانب رقم الكارت."},
       "sizing":{"title":"التصميغ","description":"اختر مطواة محالة إلى التصميغ، سجّل الوصفة واستهلاك المواد ثم أكمل المرحلة."},
@@ -27,7 +28,7 @@
   },
   "pageTitle":"التصنيع والإنتاج","referenceSubtitle":"التعريفات الأساسية للمصنع والماكينات والجودة قبل تشغيل أوامر الإنتاج","refresh":"تحديث","add":"إضافة","edit":"تعديل","save":"حفظ","saving":"جارٍ الحفظ…","cancel":"إلغاء","apply":"تطبيق","loading":"جارٍ التحميل…","noData":"لا توجد بيانات","yes":"نعم","no":"لا","history":"السجل","changeStatus":"تغيير حالة الماكينة","addBreakdown":"تسجيل عطل جديد","statusHistory":"سجل الحالات","maintenanceHistory":"سجل الأعطال والصيانة","technicalSpecifications":"المواصفات الفنية",
   "summary":{"machines":"الماكينات","active":"ماكينات تعمل","unavailable":"متوقفة أو صيانة","openMaintenance":"صيانة مفتوحة"},
-  "tabs":{"machines":"الماكينات","departments":"أقسام المصنع","downtime":"أسباب التوقف","defects":"عيوب الجودة","specifications":"مكتبة المواصفات","workOrders":"أوامر الإنتاج","warping":"التسدية وكروت السداء"},
+  "tabs":{"machines":"الماكينات","departments":"أقسام المصنع","downtime":"أسباب التوقف","defects":"عيوب الجودة","specifications":"مكتبة المواصفات","specCards":"بطاقات المواصفات","workOrders":"أوامر الإنتاج","warping":"التسدية وكروت السداء"},
   "columns":{"code":"الكود","name":"الاسم","type":"النوع","model":"الصانع والموديل","department":"القسم","width":"العرض","location":"الموقع","ownership":"الملكية","status":"الحالة","actions":"الإجراءات","description":"الوصف","is_active":"فعّال","stage":"المرحلة","is_planned":"مخطط","inspection_type":"نوع الفحص","default_severity":"الدرجة الافتراضية"},
   "machineType":{"WARPING":"تسدية","SIZING":"تصميغ","LOOM":"نول نسج","PROCESSING":"معالجة","INSPECTION":"فحص","OTHER":"أخرى"},
   "machineStatus":{"ACTIVE":"تعمل","STOPPED":"متوقفة","MAINTENANCE":"تحت الصيانة","OUT_OF_SERVICE":"خارج الخدمة"},

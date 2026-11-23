@@ -10,7 +10,7 @@ export function renderManufacturingSheets(sheets:SheetGrid[]=[]):string{
     const maxRow=cells.reduce((n,c)=>Math.max(n,c.row),merges.reduce((n,m)=>Math.max(n,m.endRow),0));
     const maxCol=cells.reduce((n,c)=>Math.max(n,c.col),merges.reduce((n,m)=>Math.max(n,m.endCol),0));
     if((maxRow+1)*(maxCol+1)>50000||cells.length!==sheet.cells.length||merges.length!==sheet.merges.length)
-      return '<h2>'+esc(sheet.name)+'</h2><p>تعذر عرض شبكة الورقة ضمن حدود الطباعة الآمنة؛ راجع Excel الأصلي.</p>';
+      return '<h2>'+esc(sheet.name)+'</h2><p>تعذر عرض هذه الورقة ضمن حدود الطباعة الآمنة.</p>';
     const byPosition=new Map(cells.map(c=>[c.row+':'+c.col,c])),covered=new Set<string>(),starts=new Map<string,typeof merges[number]>();
     let expanded=0;
     for(const m of merges){
@@ -28,12 +28,11 @@ export function renderManufacturingSheets(sheets:SheetGrid[]=[]):string{
       for(let c=0;c<=maxCol;c++){
         const key=r+':'+c,m=starts.get(key),cell=byPosition.get(key);
         if(covered.has(key)&&!m)continue;
-        rows+='<td'+(m?' rowspan="'+(m.endRow-m.startRow+1)+'" colspan="'+(m.endCol-m.startCol+1)+'"':'')+' style="background-color:'+safeColor(cell?.fill)+';color:'+safeColor(cell?.fontColor)+'" title="'+esc(cell?.address)+'">'+esc(cell?.value)+'</td>';
+        rows+='<td'+(m?' rowspan="'+(m.endRow-m.startRow+1)+'" colspan="'+(m.endCol-m.startCol+1)+'"':'')+' style="background-color:'+safeColor(cell?.fill)+';color:'+safeColor(cell?.fontColor)+'">'+esc(cell?.value)+'</td>';
       }
       rows+='</tr>';
     }
-    const formulas=cells.filter(c=>c.formula).map(c=>'<tr><td>'+esc(c.address)+'</td><td dir="ltr">'+esc(c.formula)+'</td></tr>').join('');
-    return '<section class="sheet"><h2>'+esc(sheet.name)+' — '+esc(sheet.range)+'</h2><table dir="ltr" class="sheet-grid"><tbody>'+rows+'</tbody></table>'+(formulas?'<p>المعادلات المحفوظة — لا تحسب تلقائياً</p><table><tbody>'+formulas+'</tbody></table>':'')+'</section>';
+    return '<section class="sheet"><h2>'+esc(sheet.name)+'</h2><table dir="ltr" class="sheet-grid"><tbody>'+rows+'</tbody></table></section>';
   }).join('');
 }
 export function renderManufacturingIllustrations(items:Array<{name:string;mimeType:string;base64:string}>=[]):string{
