@@ -1,5 +1,5 @@
 import { ACTION_LABELS, PERMISSION_GROUPS, PERMISSION_MODULES } from '../services/permissionCatalog.js';
-import { grantedMatrixCodes, saveUserPermissions } from '../services/userPermissionService.js';
+import { canGrantPermissions, deletePermissionTemplate, grantedMatrixCodes, listPermissionTemplates, savePermissionTemplate, saveUserPermissions } from '../services/userPermissionService.js';
 import bcrypt from 'bcryptjs';
 import type { FastifyPluginAsync } from 'fastify';
 import https from 'node:https';
@@ -331,7 +331,7 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/users', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
-    if (!requirePermission(req.user, 'users.manage')) {
+    if (!requirePermission(req.user, 'users.manage') && !canGrantPermissions(req.user)) {
       return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     }
 
@@ -432,12 +432,12 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
 
   // ───────── مصفوفة الصلاحيات التفصيلية لكل مستخدم ─────────
   app.get('/permission-catalog', { preHandler: authenticateRequest }, async (req, reply) => {
-    if (!requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     return reply.send({ ok: true, data: { groups: PERMISSION_GROUPS, modules: PERMISSION_MODULES, actionLabels: ACTION_LABELS } });
   });
 
   app.get('/users/:id/permissions', { preHandler: authenticateRequest }, async (req, reply) => {
-    if (!requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     const { id } = req.params as { id: string };
     const pool = getPool();
     const u = await pool.query<{ id: string; role: string; perm_mode: string; company_id: string; username: string }>('SELECT id, role, perm_mode, company_id, username FROM users WHERE id=$1', [id]);
@@ -450,7 +450,7 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.put('/users/:id/permissions', { preHandler: authenticateRequest }, async (req, reply) => {
-    if (!requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     const { id } = req.params as { id: string };
     const parsed = z.object({ mode: z.enum(['ROLE', 'CUSTOM']), codes: z.array(z.string().max(120)).max(500).default([]) }).safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
@@ -470,6 +470,30 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
     } finally {
       client.release();
     }
+  });
+
+  // قوالب الصلاحيات المسمّاة — المدير والمحاسب فقط.
+  app.get('/permission-templates', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    return reply.send({ ok: true, data: await listPermissionTemplates(getPool(), req.user!.companyId) });
+  });
+  app.put('/permission-templates', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const parsed = z.object({ name: z.string().max(80), codes: z.array(z.string().max(120)).max(500) }).safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    try {
+      const data = await savePermissionTemplate(getPool(), { companyId: req.user!.companyId, userId: req.user!.sub, ...parsed.data });
+      return reply.send({ ok: true, data });
+    } catch (e) {
+      const err = e as { code?: string; message?: string };
+      if (err.code === 'VALIDATION') return sendError(reply, 400, err.message ?? ArabicErrors.validation, 'VALIDATION');
+      throw e;
+    }
+  });
+  app.delete('/permission-templates/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!canGrantPermissions(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const ok = await deletePermissionTemplate(getPool(), req.user!.companyId, (req.params as { id: string }).id);
+    return ok ? reply.send({ ok: true }) : sendError(reply, 404, 'القالب غير موجود', 'NOT_FOUND');
   });
 
   app.get('/active-sessions', { preHandler: authenticateRequest }, async (req, reply) => {

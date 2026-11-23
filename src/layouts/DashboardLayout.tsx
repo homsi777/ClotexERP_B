@@ -263,7 +263,7 @@ const Topbar = () => {
     { labelKey: 'journal', to: '/journal', icon: BookOpen },
     { labelKey: 'manufacturing', to: '/manufacturing', icon: Factory },
     { labelKey: 'partners', to: '/partners', icon: Handshake },
-    ...(navUser && (navUser.role === 'admin' || navUser.permissions.includes('users.manage')) ? [{ labelKey: 'permissions', to: '/permissions', icon: ShieldCheck } as NavItem] : []),
+    ...(navUser && (['admin', 'manager', 'accountant'].includes(navUser.role) || navUser.permissions.includes('users.manage')) ? [{ labelKey: 'permissions', to: '/permissions', icon: ShieldCheck } as NavItem] : []),
     ...(navUser && (navUser.role === 'admin' || navUser.permissions.includes('users.manage')) ? [{ labelKey: 'approvalsCenter', to: '/approvals-center', icon: ShieldCheck } as NavItem] : []),
     { labelKey: 'settings', to: '/settings', icon: Settings },
   ];

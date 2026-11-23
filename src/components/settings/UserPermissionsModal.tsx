@@ -5,6 +5,10 @@ import {
   getPermissionCatalog,
   getUserPermissions,
   saveUserPermissionMatrix,
+  listPermissionTemplates,
+  savePermissionTemplate,
+  deletePermissionTemplate,
+  type PermissionTemplateDto,
   type PermissionCatalog,
   type UserPermissionsDto,
 } from '../../lib/api/settingsApi';
@@ -20,6 +24,7 @@ const TEXT = {
     financial: 'مالي', search: 'بحث عن وحدة…', save: 'حفظ الصلاحيات', cancel: 'إغلاق', saving: 'جارٍ الحفظ…', saved: 'تم حفظ الصلاحيات',
     selected: 'المظلَّل', history: 'آخر التغييرات', by: 'بواسطة', added: 'أُضيف', removed: 'أُزيل', loadFailed: 'تعذر تحميل الصلاحيات',
     module: 'الوحدة', rowAll: 'الكل', adminNote: 'مدير النظام لا يُقيَّد.', financialCount: 'وحدات مالية ممنوحة',
+    tplTitle: 'قوالب مسمّاة', tplPick: 'اختر قالباً…', tplApply: 'تطبيق', tplSave: 'حفظ الحالي كقالب', tplDelete: 'حذف القالب', tplName: 'اسم القالب', tplSaved: 'حُفظ القالب', tplNone: 'لا قوالب بعد',
     draftNote: 'فاتورة البيع: إن مُنح «إضافة» دون «تسعير/اعتماد» يحفظ الموظف مسودة (عميل + بضاعة) ويسعّرها المحاسب ويرحّلها.',
   },
   tr: {
@@ -30,6 +35,7 @@ const TEXT = {
     financial: 'mali', search: 'Modül ara…', save: 'Yetkileri kaydet', cancel: 'Kapat', saving: 'Kaydediliyor…', saved: 'Yetkiler kaydedildi',
     selected: 'Seçili', history: 'Son değişiklikler', by: 'yapan', added: 'eklenen', removed: 'kaldırılan', loadFailed: 'Yetkiler yüklenemedi',
     module: 'Modül', rowAll: 'Hepsi', adminNote: 'Sistem yöneticisi kısıtlanamaz.', financialCount: 'verilen mali modül',
+    tplTitle: 'Adlandırılmış şablonlar', tplPick: 'Şablon seç…', tplApply: 'Uygula', tplSave: 'Mevcudu şablon olarak kaydet', tplDelete: 'Şablonu sil', tplName: 'Şablon adı', tplSaved: 'Şablon kaydedildi', tplNone: 'Henüz şablon yok',
     draftNote: 'Satış faturası: «Ekle» var ama «Fiyat/Onay» yoksa çalışan taslak (müşteri + mal) kaydeder; muhasebe fiyatlar ve işler.',
   },
 } as const;
@@ -50,6 +56,22 @@ export const PermissionMatrixEditor: React.FC<{ user: PermUser; onSaved: (mode: 
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const isAdmin = user.role === 'admin';
+  const [templates, setTemplates] = useState<PermissionTemplateDto[]>([]);
+  const [tplId, setTplId] = useState('');
+  const reloadTemplates = () => listPermissionTemplates().then(setTemplates).catch(() => setTemplates([]));
+  useEffect(() => { void reloadTemplates(); }, []);
+  const applyTemplate = () => { const t = templates.find((x) => x.id === tplId); if (t) setCodes(new Set(t.codes)); };
+  const saveAsTemplate = async () => {
+    const name = window.prompt(L.tplName, templates.find((x) => x.id === tplId)?.name ?? '')?.trim();
+    if (!name) return;
+    try { const t = await savePermissionTemplate({ name, codes: [...codes] }); await reloadTemplates(); setTplId(t.id); setMessage(L.tplSaved); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  };
+  const removeTemplate = async () => {
+    if (!tplId) return;
+    try { await deletePermissionTemplate(tplId); setTplId(''); await reloadTemplates(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  };
 
   useEffect(() => {
     let active = true;
@@ -125,6 +147,16 @@ export const PermissionMatrixEditor: React.FC<{ user: PermUser; onSaved: (mode: 
                   <button type="button" onClick={() => preset('read')} className="rounded-lg border px-3 py-1.5 text-xs font-bold hover:bg-slate-50">{L.readOnly}</button>
                   <button type="button" onClick={() => preset('noFinance')} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900">{L.noFinance}</button>
                   <button type="button" onClick={() => preset('clear')} className="rounded-lg border px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50">{L.clear}</button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-2">
+                  <span className="text-sm font-bold">{L.tplTitle}:</span>
+                  <select value={tplId} onChange={(e) => setTplId(e.target.value)} className="min-w-[10rem] rounded-lg border px-2 py-1.5 text-sm" aria-label={L.tplTitle}>
+                    <option value="">{templates.length ? L.tplPick : L.tplNone}</option>
+                    {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.codes.length})</option>)}
+                  </select>
+                  <button type="button" disabled={!tplId} onClick={applyTemplate} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold disabled:opacity-40">{L.tplApply}</button>
+                  <button type="button" onClick={() => void saveAsTemplate()} className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-xs font-bold text-indigo-800">{L.tplSave}</button>
+                  <button type="button" disabled={!tplId} onClick={() => void removeTemplate()} className="rounded-lg border px-3 py-1.5 text-xs font-bold text-rose-700 disabled:opacity-40">{L.tplDelete}</button>
                 </div>
                 <p className="text-xs text-slate-600">{L.selected}: <b>{codes.size}</b> · {L.financialCount}: <b>{financialGranted}</b></p>
                 <p className="rounded-lg bg-sky-50 p-2 text-xs text-sky-900">{L.draftNote}</p>

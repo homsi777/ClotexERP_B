@@ -245,3 +245,14 @@ export async function getUserPermissions(userId: string): Promise<UserPermission
 export async function saveUserPermissionMatrix(userId: string, body: { mode: 'ROLE' | 'CUSTOM'; codes: string[] }) {
   return apiFetch<{ ok: boolean; data: { mode: string; granted: number } }>(`/api/system/users/${userId}/permissions`, { method: 'PUT', body: JSON.stringify(body) });
 }
+
+export type PermissionTemplateDto = { id: string; name: string; codes: string[]; updatedAt: string };
+export async function listPermissionTemplates() {
+  return (await apiFetch<{ ok: boolean; data: PermissionTemplateDto[] }>('/api/system/permission-templates')).data;
+}
+export async function savePermissionTemplate(body: { name: string; codes: string[] }) {
+  return (await apiFetch<{ ok: boolean; data: PermissionTemplateDto }>('/api/system/permission-templates', { method: 'PUT', body: JSON.stringify(body) })).data;
+}
+export async function deletePermissionTemplate(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/system/permission-templates/${id}`, { method: 'DELETE' });
+}
