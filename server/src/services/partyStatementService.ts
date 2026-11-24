@@ -10,7 +10,7 @@ const VOUCHER_CHECK_SUFFIX = `COALESCE((SELECT ' — شيك رقم ' || string_a
 
 
 /** مجموع بنود الشيكات في سند القبض (تُستثنى من صف السند وتُحتسب عند التحصيل). */
-const VOUCHER_CHECK_AMOUNT = `COALESCE((SELECT SUM(vl.amount) FROM voucher_lines vl WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id AND vl.check_id IS NOT NULL), 0)`;
+export const VOUCHER_CHECK_AMOUNT = `COALESCE((SELECT SUM(vl.amount) FROM voucher_lines vl WHERE vl.voucher_id = v.id AND vl.company_id = v.company_id AND vl.check_id IS NOT NULL), 0)`;
 
 /** سند محوَّل بسعر صرف (اختياري): يظهر المكافئ والسعر بجانب المبلغ الأصلي. */
 const VOUCHER_CONVERT_SUFFIX = `CASE WHEN v.converted_amount IS NOT NULL THEN ' — ما يعادل ' || trim(to_char(v.converted_amount,'FM999999999990.00')) || ' ' || v.convert_to_currency_code || ' بسعر ' || trim(to_char(v.convert_rate,'FM999999990.999999')) ELSE '' END`;

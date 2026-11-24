@@ -62,6 +62,7 @@ import { aiRoutes } from './routes/aiRoutes.js';
 import { manufacturingReferenceRoutes } from './routes/manufacturingReferenceRoutes.js';
 import { specCardRoutes } from './routes/specCardRoutes.js';
 import { platformRoutes } from './routes/platformRoutes.js';
+import { partyBalanceRoutes } from './routes/partyBalanceRoutes.js';
 import {manufacturingPrintRoutes} from './routes/manufacturingPrintRoutes.js';
 import { manufacturingWorkOrderRoutes } from './routes/manufacturingWorkOrderRoutes.js';
 import { manufacturingWarpingRoutes } from './routes/manufacturingWarpingRoutes.js';
@@ -207,6 +208,7 @@ export async function buildApp() {
   await app.register(manufacturingItemSpecificationRoutes, {prefix:'/api/manufacturing'});
   await app.register(specCardRoutes, { prefix: '/api/manufacturing/spec-cards' });
   await app.register(platformRoutes, { prefix: '/api/platform' });
+  await app.register(partyBalanceRoutes, { prefix: '/api/party-balances' });
   await app.register(manufacturingReferenceRoutes, { prefix: '/api/manufacturing/reference' });
   await app.register(manufacturingPrintRoutes,{prefix:'/api/manufacturing/print'});
   await app.register(manufacturingWorkOrderRoutes, { prefix: '/api/manufacturing/work-orders' });
