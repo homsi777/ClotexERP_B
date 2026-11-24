@@ -186,6 +186,7 @@ const Topbar = () => {
     { labelKey: 'home', to: '/', icon: Home },
     // لوحة المالك: لمدير المنصة فقط (نظرة موحّدة على كل الفروع).
     ...(navUser?.isPlatformAdmin ? [{ labelKey: 'platform', to: '/platform', icon: Network } as NavItem] : []),
+    ...(['admin', 'manager', 'accountant'].includes(navUser?.role ?? '') || navUser?.permMode === 'CUSTOM' ? [{ labelKey: 'branchManagement', to: '/management', icon: Network } as NavItem] : []),
     // المخزون: شاشة واحدة بشريط أيقونات أفقي (المخزون / المستودعات والتنظيم / الإعدادات) بدل القائمة المنسدلة.
     { labelKey: 'inventory', to: '/inventory-hub', icon: Package },
     {

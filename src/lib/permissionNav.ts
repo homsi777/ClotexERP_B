@@ -30,6 +30,7 @@ const PATH_MODULES: [string, string[]][] = [
   ['/invoices/statement', ['sales.invoices', 'purchases.invoices']],
   ['/orders', ['orders']],
   ['/customers/balances', ['customers.balances']],
+  ['/management', ['management']],
   ['/customers', ['customers']],
   ['/suppliers/balances', ['suppliers.balances']],
   ['/suppliers', ['suppliers']],
