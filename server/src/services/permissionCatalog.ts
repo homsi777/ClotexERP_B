@@ -66,14 +66,14 @@ export const PERMISSION_GROUPS: { code: string; name: string }[] = [
 
 export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'dashboard', name: 'لوحة التحكم', group: 'general', actions: ['view'], prefixes: [], legacy: { view: W('dashboard.view') } },
-  { code: 'reports', name: 'التقارير', group: 'general', financial: true, actions: ['view', 'print', 'export'], prefixes: ['/api/reports'], legacy: { view: W('reports.view') } },
+  { code: 'reports', name: 'التقارير', group: 'general', financial: true, actions: ['view', 'print', 'export'], prefixes: ['/api/reports'], openRoots: ['/api/reports/dashboard-summary'], legacy: { view: W('reports.view') } },
 
   { code: 'customers', name: 'العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/customers', '/api/customer-discounts', '/api/party-logs', '/api/reports/customers', '/api/reports/parties'], openRoots: ['/api/customers'], legacyAny: ['customers.view', 'customers.manage'],
     legacy: { view: W('customers.view'), create: W('customers.manage'), edit: W('customers.manage'), delete: W('customers.manage') } },
   { code: 'orders', name: 'أوردرات العملاء', group: 'sales', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/customer-orders'],
     needsView: ['customers', 'inventory.items'], legacy: { price: W('orders.price') } },
   { code: 'sales.invoices', name: 'فواتير البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/sales-invoices', '/api/reports/sales'],
-    needsView: ['customers', 'inventory.items', 'inventory.rolls'], legacy: { price: W('invoices.price') } },
+    needsView: ['customers', 'inventory.items', 'inventory.rolls', 'inventory.warehouses'], legacy: { price: W('invoices.price') } },
   { code: 'sales.returns', name: 'مرتجعات البيع', group: 'sales', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/returns'], needsView: ['customers', 'sales.invoices'] },
   { code: 'cartela', name: 'الكارتيلات (التوليد والمكتبة والألوان)', group: 'cartela', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'inventory.items'] },
   { code: 'cartela.custody', name: 'عهدة وتسليم الكارتيلات', group: 'cartela', actions: ['view', 'create', 'edit', 'delete', 'print'], prefixes: ['/api/cartela-custody'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['customers', 'cartela'] },
@@ -81,7 +81,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { code: 'suppliers', name: 'الموردون', group: 'purchases', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/suppliers', '/api/reports/suppliers'], openRoots: ['/api/suppliers'], legacyAny: ['suppliers.view', 'suppliers.manage'],
     legacy: { view: W('suppliers.view'), create: W('suppliers.manage'), edit: W('suppliers.manage'), delete: W('suppliers.manage') } },
   { code: 'purchases.invoices', name: 'فواتير الشراء', group: 'purchases', financial: true, actions: ['view', 'create', 'edit', 'delete', 'approve', 'print', 'export', 'price'], prefixes: ['/api/purchase-invoices', '/api/reports/purchases'], legacyAny: ['purchases.view', 'purchases.manage'],
-    needsView: ['suppliers', 'inventory.items'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), edit: W('purchases.manage'), delete: W('purchases.manage'), approve: W('purchases.manage') } },
+    needsView: ['suppliers', 'inventory.items', 'inventory.warehouses'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), edit: W('purchases.manage'), delete: W('purchases.manage'), approve: W('purchases.manage') } },
   { code: 'purchases.import', name: 'استيراد المشتريات (Excel)', group: 'purchases', financial: true, actions: ['view', 'create', 'approve'], prefixes: ['/api/purchases/import'], legacyAny: ['purchases.view', 'purchases.manage'],
     needsView: ['suppliers'], legacy: { view: W('purchases.view'), create: W('purchases.manage'), approve: W('purchases.manage') } },
 

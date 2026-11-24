@@ -35,3 +35,14 @@ test('report families are gated by their own module, not only by "reports"', () 
   assert.equal(mod('/api/reports/dashboard-summary'), 'reports');
   assert.equal(mod('/api/reports/executive/summary-report'), 'reports');
 });
+
+test('home dashboard summary is open to every account (masked per module), and invoices imply the lookups their forms need', async () => {
+  const p = resolveRoutePolicy('/api/reports/dashboard-summary', 'GET');
+  assert.equal(p?.open, true, 'اللوحة الرئيسية لا تتطلب وحدة «التقارير»؛ تُقلَّص حقولها حسب الوحدات الممنوحة');
+  assert.equal(resolveRoutePolicy('/api/reports/payroll/summary', 'GET')?.open, false);
+  const { expandImplied } = await import('./permissionCatalog.js');
+  const implied = expandImplied(['p:sales.invoices.create']);
+  for (const m of ['customers', 'inventory.items', 'inventory.rolls', 'inventory.warehouses']) assert.ok(implied.has(`p:${m}.view`), m);
+  assert.ok(expandImplied(['p:purchases.invoices.create']).has('p:inventory.warehouses.view'));
+  assert.ok(!implied.has('p:hr.payroll.view'));
+});

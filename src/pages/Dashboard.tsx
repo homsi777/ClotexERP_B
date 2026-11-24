@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getDashboardSummary, type DashboardSummary } from '../lib/api/reportsApi';
+import { usePermissions } from '../hooks/usePermissions';
+import { canAccessRoute, canViewModule } from '../lib/permissionNav';
 import { MaterialInquiryModal } from '../components/inventory/MaterialInquiryModal';
 
 const defaultLinkIds = ['create_item', 'inventory', 'warehouses', 'sales', 'purchases', 'bonds_in', 'bonds_out', 'cartela', 'orders'];
@@ -60,6 +62,9 @@ function fmtMoney(value: unknown, locale: string, currency = 'USD'): string {
 export const Dashboard = () => {
   const { t, i18n } = useTranslation(['dashboard', 'common']);
   const numberLocale = i18n.language === 'tr' ? 'tr-TR' : 'ar-SY';
+  const { user } = usePermissions();
+  // حساب مقيَّد: لا يظهر له إلا ما مُنح (اختصارات ومؤشرات وصناديق)، دون طلبات مرفوضة أو أخطاء.
+  const canMod = (m: string) => canViewModule(user, m);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,35 +101,36 @@ export const Dashboard = () => {
     void loadSummary();
   }, []);
 
-  const activeLinks = quickLinkDefs.filter((link) => selectedLinkIds.includes(link.id));
+  const allowedLinkDefs = quickLinkDefs.filter((link) => canAccessRoute(user, link.path));
+  const activeLinks = allowedLinkDefs.filter((link) => selectedLinkIds.includes(link.id));
 
   const cards = useMemo(() => {
     const d = summary;
     return [
-      { key: 'cards.customers', value: fmtNumber(d?.customers_count, numberLocale), icon: Users, bg: 'bg-indigo-50', color: 'text-indigo-700' },
-      { key: 'cards.suppliers', value: fmtNumber(d?.suppliers_count, numberLocale), icon: TrendingUp, bg: 'bg-orange-50', color: 'text-orange-700' },
-      { key: 'cards.totalRolls', value: fmtNumber(d?.fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-cyan-50', color: 'text-cyan-700' },
-      { key: 'cards.activeRolls', value: fmtNumber(d?.active_fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-emerald-50', color: 'text-emerald-700' },
-      { key: 'cards.totalMeters', value: fmtNumber(d?.total_roll_length_m, numberLocale, 2), icon: Layers, bg: 'bg-blue-50', color: 'text-blue-700' },
-      { key: 'cards.totalWeightKg', value: fmtNumber(d?.total_roll_weight_kg, numberLocale, 2), icon: Layers, bg: 'bg-slate-50', color: 'text-slate-700' },
-      { key: 'cards.receiptVouchers', value: fmtMoney(d?.receipt_total, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
-      { key: 'cards.paymentVouchers', value: fmtMoney(d?.payment_total, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
-    ];
-  }, [summary, numberLocale]);
+      { key: 'cards.customers', module: 'customers', value: fmtNumber(d?.customers_count, numberLocale), icon: Users, bg: 'bg-indigo-50', color: 'text-indigo-700' },
+      { key: 'cards.suppliers', module: 'suppliers', value: fmtNumber(d?.suppliers_count, numberLocale), icon: TrendingUp, bg: 'bg-orange-50', color: 'text-orange-700' },
+      { key: 'cards.totalRolls', module: 'inventory.rolls', value: fmtNumber(d?.fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-cyan-50', color: 'text-cyan-700' },
+      { key: 'cards.activeRolls', module: 'inventory.rolls', value: fmtNumber(d?.active_fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-emerald-50', color: 'text-emerald-700' },
+      { key: 'cards.totalMeters', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_length_m, numberLocale, 2), icon: Layers, bg: 'bg-blue-50', color: 'text-blue-700' },
+      { key: 'cards.totalWeightKg', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_weight_kg, numberLocale, 2), icon: Layers, bg: 'bg-slate-50', color: 'text-slate-700' },
+      { key: 'cards.receiptVouchers', module: 'treasury.vouchers', value: fmtMoney(d?.receipt_total, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
+      { key: 'cards.paymentVouchers', module: 'treasury.vouchers', value: fmtMoney(d?.payment_total, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
+    ].filter((c) => canMod(c.module));
+  }, [summary, numberLocale, user]);
 
   const operations = useMemo(
     () => [
-      { key: 'operations.warehouses', value: fmtNumber(summary?.warehouses_count, numberLocale), path: '/inventory/warehouses' },
-      { key: 'operations.importBatches', value: fmtNumber(summary?.purchase_import_batches_count, numberLocale), path: '/purchases/import-batches' },
-      { key: 'operations.inventoryMovements', value: fmtNumber(summary?.inventory_movements_count, numberLocale), path: '/reports' },
-      { key: 'operations.vouchers', value: fmtNumber(summary?.vouchers_count, numberLocale), path: '/bonds/records' },
-      { key: 'operations.returns', value: fmtNumber(summary?.return_invoices_count, numberLocale), path: '/invoices/returns' },
-      { key: 'operations.transfers', value: fmtNumber(summary?.transfers_count, numberLocale), path: '/inventory/transfers' },
-    ],
-    [summary, numberLocale],
+      { key: 'operations.warehouses', module: 'inventory.warehouses', value: fmtNumber(summary?.warehouses_count, numberLocale), path: '/inventory/warehouses' },
+      { key: 'operations.importBatches', module: 'inventory.rolls', value: fmtNumber(summary?.purchase_import_batches_count, numberLocale), path: '/purchases/import-batches' },
+      { key: 'operations.inventoryMovements', module: 'inventory.rolls', value: fmtNumber(summary?.inventory_movements_count, numberLocale), path: '/reports' },
+      { key: 'operations.vouchers', module: 'treasury.vouchers', value: fmtNumber(summary?.vouchers_count, numberLocale), path: '/bonds/records' },
+      { key: 'operations.returns', module: 'sales.returns', value: fmtNumber(summary?.return_invoices_count, numberLocale), path: '/invoices/returns' },
+      { key: 'operations.transfers', module: 'inventory.transfers', value: fmtNumber(summary?.transfers_count, numberLocale), path: '/inventory/transfers' },
+    ].filter((o) => canMod(o.module) && canAccessRoute(user, o.path)),
+    [summary, numberLocale, user],
   );
 
-  const cashRows = summary?.total_cash_by_currency ?? [];
+  const cashRows = canMod('treasury.cashboxes') ? (summary?.total_cash_by_currency ?? []) : [];
   const damagedRolls = numberValue(summary?.damaged_or_waste_rolls_count);
 
   const handleSaveSettings = () => {
@@ -141,6 +147,7 @@ export const Dashboard = () => {
           <p className="mt-1 text-sm text-slate-500">{t('subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canMod('inventory.rolls') && (
           <button
             type="button"
             onClick={() => setInquiryOpen(true)}
@@ -149,6 +156,7 @@ export const Dashboard = () => {
             <Search className="h-4 w-4" />
             {t('button.open', { ns: 'materialInquiry' })}
           </button>
+          )}
           <button
             type="button"
             onClick={() => void loadSummary()}
@@ -228,7 +236,7 @@ export const Dashboard = () => {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          {canMod('treasury.cashboxes') && <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="mb-4 text-lg font-black text-slate-900">{t('cashboxBalances')}</h3>
             {cashRows.length === 0 ? (
               <div className="rounded-xl bg-slate-50 p-4 text-center text-sm font-bold text-slate-500">{t('noActiveCashboxes')}</div>
@@ -242,9 +250,9 @@ export const Dashboard = () => {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
-          <div className={`rounded-2xl border p-5 shadow-sm ${damagedRolls > 0 ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
+          {canMod('inventory.rolls') && <div className={`rounded-2xl border p-5 shadow-sm ${damagedRolls > 0 ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
             <div className="flex items-center gap-3">
               <AlertTriangle className={`h-6 w-6 ${damagedRolls > 0 ? 'text-rose-600' : 'text-emerald-600'}`} />
               <div>
@@ -252,7 +260,7 @@ export const Dashboard = () => {
                 <p className={`text-2xl font-black ${damagedRolls > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{loading ? '...' : fmtNumber(damagedRolls, numberLocale)}</p>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -269,7 +277,7 @@ export const Dashboard = () => {
               </button>
             </div>
             <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto p-5 sm:grid-cols-2">
-              {quickLinkDefs.map((link) => {
+              {allowedLinkDefs.map((link) => {
                 const selected = tempSelected.includes(link.id);
                 return (
                   <button
