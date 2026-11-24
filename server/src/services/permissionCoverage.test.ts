@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { resolveRoutePolicy } from './permissionCatalog.js';
+import { PERMISSION_MODULES, resolveRoutePolicy } from './permissionCatalog.js';
 import { CUSTOM_OPEN_API_ROOTS } from '../middleware/auth.js';
 
 // كل جذر API مسجَّل بالتطبيق يجب أن يتبع وحدة صلاحيات أو يكون ضمن الجذور المفتوحة صراحةً،
@@ -13,6 +13,8 @@ test('every registered API root is covered by a permission module or an explicit
   const uncovered = registered.filter((p) => {
     if (p === '/api') return false; // health
     if (CUSTOM_OPEN_API_ROOTS.some((r) => p === r || p.startsWith(r + '/'))) return false;
+    // جذر يتفرّع لوحدات بجذور أدق (مثل /api/party-balances/customers) يُعدّ مغطّى إن غطّت الوحدات فروعه.
+    if (PERMISSION_MODULES.some((m) => m.prefixes.some((x) => x.startsWith(p + '/')))) return false;
     return resolveRoutePolicy(p + '/x', 'GET') === null;
   });
   assert.deepEqual(uncovered, [], 'جذور بلا تصنيف: أضفها لوحدة بالكتالوج أو للجذور المفتوحة');

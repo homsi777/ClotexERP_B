@@ -36,6 +36,8 @@
   "parties.customersLog": "Müşteri Kayıtları",
   "parties.suppliersLog": "Tedarikçi Kayıtları",
   "parties.customerStatement": "Müşteri Hesap Özeti",
+  "parties.customerBalances": "Müşteri bakiyeleri",
+  "parties.supplierBalances": "Tedarikçi bakiyeleri",
   "parties.supplierStatement": "Tedarikçi Hesap Özeti",
   "treasury": "Kasa",
   "treasury.safes": "Kasalar",

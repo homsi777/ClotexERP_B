@@ -29,54 +29,47 @@ export const partyBalanceRoutes: FastifyPluginAsync = async (app) => {
     if (id && !z.string().uuid().safeParse(id).success) return sendError(reply, 400, 'معرف غير صالح', 'VALIDATION');
   });
 
-  const kindOf = (req: FastifyRequest) => KINDS[(req.params as { kind: string }).kind]?.kind;
+  // مسارات حرفية لكل نوع (لا :kind) كي يطابقها الحارس المركزي بوحدتها (customers.balances / suppliers.balances).
+  for (const [seg, cfg] of Object.entries(KINDS)) {
+    const kind = cfg.kind;
 
-  app.get('/:kind', async (req, reply) => {
-    const kind = kindOf(req);
-    if (!kind) return sendError(reply, 404, 'مسار غير معروف', 'NOT_FOUND');
-    const q = req.query as Record<string, string>;
-    const sort = (['name', 'balance', 'lastPayment', 'lastOperation'] as const).find((s) => s === q.sort);
-    reply.header('Cache-Control', 'no-store');
-    return {
-      ok: true,
-      data: await getPartyBalances(getPool(), req.user!.companyId, kind, {
-        search: q.search, currency: q.currency?.toUpperCase() || undefined,
-        onlyWithBalance: q.onlyWithBalance === 'true', onlyAlerts: q.onlyAlerts === 'true',
-        sort, dir: q.dir === 'asc' ? 'asc' : 'desc',
-      }),
-    };
-  });
+    app.get(`/${seg}`, async (req, reply) => {
+      const q = req.query as Record<string, string>;
+      const sort = (['name', 'balance', 'lastPayment', 'lastOperation'] as const).find((s) => s === q.sort);
+      reply.header('Cache-Control', 'no-store');
+      return {
+        ok: true,
+        data: await getPartyBalances(getPool(), req.user!.companyId, kind, {
+          search: q.search, currency: q.currency?.toUpperCase() || undefined,
+          onlyWithBalance: q.onlyWithBalance === 'true', onlyAlerts: q.onlyAlerts === 'true',
+          sort, dir: q.dir === 'asc' ? 'asc' : 'desc',
+        }),
+      };
+    });
 
-  app.put('/:kind/:id/profile', async (req, reply) => {
-    const kind = kindOf(req);
-    if (!kind) return sendError(reply, 404, 'مسار غير معروف', 'NOT_FOUND');
-    const parsed = z.object({
-      ownerUserId: z.string().uuid().nullable().optional(),
-      creditLimit: z.number().nonnegative().nullable().optional(), creditLimitCurrency: z.string().min(1).max(8).nullable().optional(),
-      expectedCollectionDate: z.string().nullable().optional(),
-      promisedAmount: z.number().nonnegative().nullable().optional(), promisedCurrency: z.string().min(1).max(8).nullable().optional(),
-    }).strict().safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 400, 'بيانات المتابعة غير صالحة', 'VALIDATION');
-    try {
-      await savePartyProfile(getPool(), req.user!.companyId, req.user!.sub, kind, (req.params as { id: string }).id, parsed.data);
-      return { ok: true };
-    } catch (e) { return handle(reply, e); }
-  });
+    app.put(`/${seg}/:id/profile`, async (req, reply) => {
+      const parsed = z.object({
+        ownerUserId: z.string().uuid().nullable().optional(),
+        creditLimit: z.number().nonnegative().nullable().optional(), creditLimitCurrency: z.string().min(1).max(8).nullable().optional(),
+        expectedCollectionDate: z.string().nullable().optional(),
+        promisedAmount: z.number().nonnegative().nullable().optional(), promisedCurrency: z.string().min(1).max(8).nullable().optional(),
+      }).strict().safeParse(req.body);
+      if (!parsed.success) return sendError(reply, 400, 'بيانات المتابعة غير صالحة', 'VALIDATION');
+      try {
+        await savePartyProfile(getPool(), req.user!.companyId, req.user!.sub, kind, (req.params as { id: string }).id, parsed.data);
+        return { ok: true };
+      } catch (e) { return handle(reply, e); }
+    });
 
-  app.get('/:kind/:id/notes', async (req, reply) => {
-    const kind = kindOf(req);
-    if (!kind) return sendError(reply, 404, 'مسار غير معروف', 'NOT_FOUND');
-    return { ok: true, data: await listPartyNotes(getPool(), req.user!.companyId, kind, (req.params as { id: string }).id) };
-  });
+    app.get(`/${seg}/:id/notes`, async (req) => ({ ok: true, data: await listPartyNotes(getPool(), req.user!.companyId, kind, (req.params as { id: string }).id) }));
 
-  app.post('/:kind/:id/notes', async (req, reply) => {
-    const kind = kindOf(req);
-    if (!kind) return sendError(reply, 404, 'مسار غير معروف', 'NOT_FOUND');
-    const parsed = z.object({ note: z.string().min(1).max(2000) }).strict().safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 400, 'نص الملاحظة غير صالح', 'VALIDATION');
-    try {
-      await addPartyNote(getPool(), req.user!.companyId, req.user!.sub, kind, (req.params as { id: string }).id, parsed.data.note);
-      return reply.code(201).send({ ok: true });
-    } catch (e) { return handle(reply, e); }
-  });
+    app.post(`/${seg}/:id/notes`, async (req, reply) => {
+      const parsed = z.object({ note: z.string().min(1).max(2000) }).strict().safeParse(req.body);
+      if (!parsed.success) return sendError(reply, 400, 'نص الملاحظة غير صالح', 'VALIDATION');
+      try {
+        await addPartyNote(getPool(), req.user!.companyId, req.user!.sub, kind, (req.params as { id: string }).id, parsed.data.note);
+        return reply.code(201).send({ ok: true });
+      } catch (e) { return handle(reply, e); }
+    });
+  }
 };

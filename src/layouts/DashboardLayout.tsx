@@ -233,7 +233,9 @@ const Topbar = () => {
         { labelKey: 'parties.suppliers', to: '/suppliers' },
         { labelKey: 'parties.customersLog', to: '/customers/log' },
         { labelKey: 'parties.suppliersLog', to: '/suppliers/log' },
+        { labelKey: 'parties.customerBalances', to: '/customers/balances' },
         { labelKey: 'parties.customerStatement', to: '/customers/statement' },
+        { labelKey: 'parties.supplierBalances', to: '/suppliers/balances' },
         { labelKey: 'parties.supplierStatement', to: '/suppliers/statement' },
       ],
     },
@@ -273,8 +275,8 @@ const Topbar = () => {
     if ('subItems' in item && item.subItems) {
       const subItems = item.subItems.filter((sub) => {
         // كشوف الحساب مالية: لا تظهر لمن لا يملك «الأمور المالية» للعملاء/الموردين.
-        if (sub.to === '/customers/statement' && !canSeeFinanceUser(navUser, 'customers')) return false;
-        if (sub.to === '/suppliers/statement' && !canSeeFinanceUser(navUser, 'suppliers')) return false;
+        if ((sub.to === '/customers/statement' || sub.to === '/customers/balances') && !canSeeFinanceUser(navUser, 'customers')) return false;
+        if ((sub.to === '/suppliers/statement' || sub.to === '/suppliers/balances') && !canSeeFinanceUser(navUser, 'suppliers')) return false;
         return canAccessRoute(navUser, sub.to);
       });
       return subItems.length ? [{ ...item, subItems }] : [];

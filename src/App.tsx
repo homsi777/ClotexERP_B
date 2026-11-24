@@ -183,6 +183,7 @@ import { CartelaCustody } from './pages/cartela/CartelaCustody';
 import { CartelaStock } from './pages/cartela/CartelaStock';
 import { CartelaColorsIndex } from './pages/cartela/CartelaColorsIndex';
 import { PlatformOverview } from './pages/PlatformOverview';
+import { PartyBalancesPage } from './pages/PartyBalances';
 import { RollCut } from './pages/inventory/RollCut';
 import { BulkPricing } from './pages/inventory/BulkPricing';
 import { Warehouses } from './pages/inventory/Warehouses';
@@ -353,9 +354,11 @@ export default function App() {
             <Route path="customers" element={<Customers />} />
             <Route path="customers/log" element={<CustomersLog />} />
             <Route path="customers/statement" element={<CustomerStatement />} />
+            <Route path="customers/balances" element={<PartyBalancesPage kind="customers" />} />
             <Route path="suppliers" element={<Suppliers />} />
             <Route path="suppliers/log" element={<SuppliersLog />} />
             <Route path="suppliers/statement" element={<SupplierStatement />} />
+            <Route path="suppliers/balances" element={<PartyBalancesPage kind="suppliers" />} />
 
             <Route path="expenses" element={<Expenses />} />
 
