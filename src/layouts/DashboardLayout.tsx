@@ -44,7 +44,7 @@ import {OrderNotificationInbox} from '../components/orders/OrderNotificationInbo
 import { BRAND } from '../branding';
 import { useAnchoredPopoverStyle } from '../lib/useAnchoredPopoverStyle';
 import { fetchMe, type AuthUser } from '../lib/api/authApi';
-import { canSeePath } from '../lib/permissionNav';
+import { canAccessRoute, canSeePath } from '../lib/permissionNav';
 import { getCheckDueSummary, type CheckDueItem } from '../lib/api/checksApi';
 import { fetchPricingQueue, type PricingQueueItem } from '../lib/api/pricingQueueApi';
 import { pendingEditRequests, decideEditRequestApi, entityPath, ENTITY_AR, type EditRequestDto } from '../lib/api/editRequestsApi';
@@ -273,11 +273,11 @@ const Topbar = () => {
         // كشوف الحساب مالية: لا تظهر لمن لا يملك «الأمور المالية» للعملاء/الموردين.
         if (sub.to === '/customers/statement' && !canSeeFinanceUser(navUser, 'customers')) return false;
         if (sub.to === '/suppliers/statement' && !canSeeFinanceUser(navUser, 'suppliers')) return false;
-        return canSeePath(navUser, sub.to);
+        return canAccessRoute(navUser, sub.to);
       });
       return subItems.length ? [{ ...item, subItems }] : [];
     }
-    return canSeePath(navUser, (item as { to: string }).to) ? [item] : [];
+    return canAccessRoute(navUser, (item as { to: string }).to) ? [item] : [];
   });
 
   const isRouteActive = (to?: string) => {
@@ -715,6 +715,7 @@ const Topbar = () => {
 export const DashboardLayout = () => {
   const location = useLocation();
   const isReports = location.pathname === '/reports' || location.pathname.startsWith('/reports/');
+  const [guardUser, setGuardUser] = useState<AuthUser | null>(null);
 
   // عند فتح التطبيق أو تحديث الصفحة (جلسة مستمرة، بدون تسجيل دخول جديد)،
   // اضبطي لغة الواجهة حسب لغة الفرع الحالي — ما لم يكن المستخدم قد بدّل
@@ -723,7 +724,10 @@ export const DashboardLayout = () => {
     let cancelled = false;
     void fetchMe()
       .then((user) => {
-        if (!cancelled) void applyCompanyDefaultLanguage(user.companyDefaultLanguage);
+        if (!cancelled) {
+          setGuardUser(user);
+          void applyCompanyDefaultLanguage(user.companyDefaultLanguage);
+        }
       })
       .catch(() => {
         /* غير مسجّل دخول أو فشل الطلب — لا حاجة لأي إجراء هنا */
@@ -742,7 +746,12 @@ export const DashboardLayout = () => {
         <ToastProvider>
           <SessionPresenceTracker />
           <BackButton />
-          <Outlet />
+          {guardUser && !canAccessRoute(guardUser, location.pathname) ? (
+            <div role="alert" className="mx-auto mt-16 max-w-md rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
+              <p className="text-lg font-black text-rose-800">ليست لديك صلاحية على هذه الصفحة</p>
+              <p className="mt-2 text-sm text-rose-700">راجع المدير إن كنت تحتاجها.</p>
+            </div>
+          ) : <Outlet />}
           <ChatWidget />
           <AiAssistantLauncher />
         </ToastProvider>

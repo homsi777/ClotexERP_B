@@ -1,5 +1,7 @@
 import { DateInput } from '../../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canSeeReportPath, canViewModule } from '../../lib/permissionNav';
 import {
   FileText,
   TrendingUp,
@@ -41,6 +43,9 @@ interface ReportCardDef {
   path: string;
   tab: TabId;
 }
+
+/** تقارير الرواتب والموظفين: لا تظهر إلا لمن يملك صلاحية الرواتب (مدير أو «عرض الرواتب»). */
+const PAYROLL_REPORT_IDS = new Set(['payroll_summary', 'pay_emp', 'pay_runs', 'pay_month']);
 
 const ALL_REPORT_CARDS: ReportCardDef[] = [
   { id: 'executive_summary', path: '/executive/summary-report', tab: 'executive' },
@@ -225,6 +230,8 @@ function sortInventoryRollRows(rows: ReportRow[], sortBy: string, sortDir: 'asc'
 }
 
 export const ReportsCenter = () => {
+  const { has, user: meUser } = usePermissions();
+  const canPayroll = has('payroll.view') || has('payroll.manage');
   const { t, i18n } = useTranslation('reportsCenter');
   const navigate = useNavigate();
   const getReportTitle = useCallback((id: string) => t(`reportTypes.${id}.title`), [t]);
@@ -407,7 +414,7 @@ export const ReportsCenter = () => {
   const renderCards = (tab: TabId) => (
     <div className="animation-fade-in pb-8">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {ALL_REPORT_CARDS.filter((c) => c.tab === tab).map((reportItem) => (
+        {ALL_REPORT_CARDS.filter((c) => c.tab === tab && (canPayroll || !PAYROLL_REPORT_IDS.has(c.id)) && canSeeReportPath(meUser, c.path)).map((reportItem) => (
           <button
             key={reportItem.id}
             type="button"
@@ -700,6 +707,9 @@ export const ReportsCenter = () => {
 
 function ExecutiveDashboardPanel() {
   const { t } = useTranslation('reportsCenter');
+  const { has, user: meUser } = usePermissions();
+  const canMod = (m: string) => canViewModule(meUser, m);
+  const canPayroll = has('payroll.view') || has('payroll.manage');
   const [dash, setDash] = useState<DashboardSummary | null>(null);
   const [inv, setInv] = useState<Awaited<ReturnType<typeof getInventorySummary>>['data'] | null>(null);
   const [vch, setVch] = useState<Awaited<ReturnType<typeof getVouchersSummary>>['data'] | null>(null);
@@ -710,18 +720,20 @@ function ExecutiveDashboardPanel() {
   useEffect(() => {
     void (async () => {
       try {
-        const [d, i, v, p, c] = await Promise.all([
+        const ok = <T,>(r: PromiseSettledResult<{ data: T }>) => (r.status === 'fulfilled' ? r.value.data : null);
+        const [d, i, v, p, c] = await Promise.allSettled([
           getDashboardSummary(),
-          getInventorySummary(),
-          getVouchersSummary(),
-          getPayrollSummary(),
-          getCashboxSummary(),
+          canMod('inventory.rolls') ? getInventorySummary() : Promise.reject(new Error('hidden')),
+          canMod('treasury.vouchers') ? getVouchersSummary() : Promise.reject(new Error('hidden')),
+          canPayroll ? getPayrollSummary() : Promise.reject(new Error('hidden')),
+          canMod('treasury.cashboxes') ? getCashboxSummary() : Promise.reject(new Error('hidden')),
         ]);
-        setDash(d.data);
-        setInv(i.data);
-        setVch(v.data);
-        setPay(p.data);
-        setCashDetail(c.data);
+        if (d.status === 'rejected') throw d.reason;
+        setDash(d.value.data);
+        setInv(ok(i) as typeof inv);
+        setVch(ok(v) as typeof vch);
+        setPay(ok(p) as typeof pay);
+        setCashDetail(ok(c) as typeof cashDetail);
       } catch (e) {
         setErr(e instanceof ApiRequestError ? e.message : t('toast.summaryLoadError'));
       }
@@ -729,11 +741,11 @@ function ExecutiveDashboardPanel() {
   }, [t]);
 
   const kpis =
-    dash && inv && vch
+    dash
       ? [
-          { label: t('dashboard.kpis.customers'), value: dash.customers_count.toLocaleString(), icon: Users, bg: 'bg-indigo-50', color: 'text-indigo-600' },
-          { label: t('dashboard.kpis.suppliers'), value: dash.suppliers_count.toLocaleString(), icon: Truck, bg: 'bg-slate-50', color: 'text-slate-600' },
-          { label: t('dashboard.kpis.fabricRolls'), value: dash.fabric_rolls_count.toLocaleString(), icon: PackageSearch, bg: 'bg-cyan-50', color: 'text-cyan-600' },
+          { label: t('dashboard.kpis.customers'), value: (dash.customers_count ?? 0).toLocaleString(), icon: Users, bg: 'bg-indigo-50', color: 'text-indigo-600' },
+          { label: t('dashboard.kpis.suppliers'), value: (dash.suppliers_count ?? 0).toLocaleString(), icon: Truck, bg: 'bg-slate-50', color: 'text-slate-600' },
+          { label: t('dashboard.kpis.fabricRolls'), value: (dash.fabric_rolls_count ?? 0).toLocaleString(), icon: PackageSearch, bg: 'bg-cyan-50', color: 'text-cyan-600' },
           {
             label: t('dashboard.kpis.activeFabricRolls'),
             value: (dash.active_fabric_rolls_count ?? 0).toLocaleString(),
@@ -743,7 +755,7 @@ function ExecutiveDashboardPanel() {
           },
           {
             label: t('dashboard.kpis.totalRollLength'),
-            value: Number(inv.totalLengthM).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+            value: Number(inv?.totalLengthM ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 }),
             unit: t('dashboard.units.m'),
             icon: Activity,
             bg: 'bg-emerald-50',
@@ -766,7 +778,7 @@ function ExecutiveDashboardPanel() {
           },
           {
             label: t('dashboard.kpis.inventoryMovements'),
-            value: (dash.inventory_movements_count ?? inv.movementsCount).toLocaleString(),
+            value: (dash.inventory_movements_count ?? inv?.movementsCount ?? 0).toLocaleString(),
             icon: TrendingUp,
             bg: 'bg-amber-50',
             color: 'text-amber-600',
@@ -792,14 +804,25 @@ function ExecutiveDashboardPanel() {
             bg: 'bg-violet-50',
             color: 'text-violet-700',
           },
-          {
+          ...(canPayroll ? [{
             label: t('dashboard.kpis.payrollRuns'),
             value: (dash.payroll_runs_count ?? 0).toLocaleString(),
             icon: Activity,
             bg: 'bg-sky-50',
             color: 'text-sky-700',
-          },
-        ]
+          }] : []),
+        ].filter((k) => {
+          const byKey: Array<[string, string]> = [
+            ['dashboard.kpis.customers', 'customers'], ['dashboard.kpis.suppliers', 'suppliers'],
+            ['dashboard.kpis.fabricRolls', 'inventory.rolls'], ['dashboard.kpis.activeFabricRolls', 'inventory.rolls'],
+            ['dashboard.kpis.totalRollLength', 'inventory.rolls'], ['dashboard.kpis.rollWeight', 'inventory.rolls'],
+            ['dashboard.kpis.inventoryMovements', 'inventory.rolls'], ['dashboard.kpis.damagedRolls', 'inventory.rolls'],
+            ['dashboard.kpis.importBatchesPrintJobs', 'inventory.rolls'],
+            ['dashboard.kpis.receiptPayment', 'treasury.vouchers'], ['dashboard.kpis.cashboxesVouchers', 'treasury.vouchers'],
+          ];
+          const hit = byKey.find(([key]) => t(key) === k.label);
+          return hit ? canMod(hit[1]) : true;
+        })
       : [];
 
   return (
@@ -833,7 +856,7 @@ function ExecutiveDashboardPanel() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-xl border border-slate-200">
+            {canMod('treasury.vouchers') && <div className="bg-white p-6 rounded-xl border border-slate-200">
               <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <Package className="w-5 h-5 text-indigo-500" />
                 {t('dashboard.vouchers.title')}
@@ -856,9 +879,9 @@ function ExecutiveDashboardPanel() {
                   <span className="font-mono">{Number(vch?.confirmed_payments ?? 0).toLocaleString()}</span>
                 </div>
               </div>
-            </div>
+            </div>}
 
-            <div className="bg-white p-6 rounded-xl border border-slate-200">
+            {canMod('treasury.cashboxes') && <div className="bg-white p-6 rounded-xl border border-slate-200">
               <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-emerald-600" />
                 {t('dashboard.cashBalances.title')}
@@ -878,17 +901,17 @@ function ExecutiveDashboardPanel() {
                   <p className="text-xs text-slate-400 pt-2">{t('dashboard.cashBalances.activeCashboxes', { count: cashDetail.cashboxes.length })}</p>
                 ) : null}
               </div>
-            </div>
+            </div>}
           </div>
 
-          <div className="mt-6 bg-white p-6 rounded-xl border border-slate-200">
+          {canPayroll &&<div className="mt-6 bg-white p-6 rounded-xl border border-slate-200">
             <h4 className="font-bold text-slate-900 mb-2">{t('dashboard.hr.title')}</h4>
             <p className="text-sm text-slate-600">
               {t('dashboard.hr.activeEmployees')}: <strong>{pay?.active_employees ?? '—'}</strong> — {t('dashboard.hr.payrollRuns')}:{' '}
               <strong>{pay?.payroll_runs_count ?? '—'}</strong> — {t('dashboard.hr.paidRuns')}:{' '}
               <strong>{pay?.paid_runs ?? '—'}</strong>
             </p>
-          </div>
+          </div>}
         </>
       )}
     </div>

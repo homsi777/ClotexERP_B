@@ -1,6 +1,47 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+
+/** بيانات الرواتب/الموظفين: مدير النظام أو من يملك «عرض الرواتب» فقط (ROLE وCUSTOM معاً). */
+function canSeePayroll(req: FastifyRequest): boolean {
+  const u = req.user;
+  return !!u && (u.role === 'admin' || u.permissions.includes('payroll.view') || u.permissions.includes('payroll.manage'));
+}
+/** رؤية وحدة بعينها: مدير النظام، أو وضع الأدوار (السلوك القديم)، أو «عرض» الوحدة بمصفوفة الحساب المخصّص. */
+function canViewModule(req: FastifyRequest, moduleCode: string): boolean {
+  const u = req.user;
+  if (!u) return false;
+  if (u.role === 'admin' || !u.customPerms) return true;
+  return (u.matrix ?? []).includes(`p:${moduleCode}.view`);
+}
+/** حقول ملخص اللوحة مقابل الوحدة التي تملكها؛ تُحذف الحقول التي لا يملك الحساب وحدتها. */
+const SUMMARY_FIELD_MODULES: Array<[string, string[]]> = [
+  ['customers', ['customers_count']],
+  ['suppliers', ['suppliers_count']],
+  ['inventory.rolls', ['fabric_rolls_count', 'active_fabric_rolls_count', 'damaged_or_waste_rolls_count', 'damaged_rolls_count', 'total_roll_length_m', 'total_roll_weight_kg', 'purchase_import_batches_count', 'print_jobs_count', 'inventory_movements_count']],
+  ['inventory.warehouses', ['warehouses_count']],
+  ['inventory.transfers', ['transfers_count']],
+  ['inventory.waste', ['waste_records_count']],
+  ['treasury.cashboxes', ['cashboxes_count', 'total_cash_by_currency']],
+  ['treasury.vouchers', ['vouchers_count', 'receipt_total', 'payment_total']],
+  ['sales.returns', ['return_invoices_count']],
+];
+function maskSummaryFields(req: FastifyRequest, data: Record<string, unknown>) {
+  for (const [mod, fields] of SUMMARY_FIELD_MODULES) {
+    if (!canViewModule(req, mod)) for (const f of fields) delete data[f];
+  }
+}
+const EXECUTIVE_LABEL_MODULES: Array<[string, string[]]> = [
+  ['customers', ['العملاء']], ['suppliers', ['الموردون']],
+  ['inventory.rolls', ['أتواب', 'أتواب نشطة', 'تالف / هالك', 'أمتار', 'وزن (تقدير)', 'دفعات استيراد', 'مهام طباعة']],
+  ['inventory.warehouses', ['المستودعات']], ['inventory.transfers', ['تحويلات مخزون']], ['inventory.waste', ['سجلات هدر']],
+  ['treasury.cashboxes', ['صناديق']], ['treasury.vouchers', ['سندات', 'إجمالي قبض (مؤكد)', 'إجمالي صرف (مؤكد)']],
+  ['sales.returns', ['فواتير مرتجع']],
+];
+async function requirePayrollView(req: FastifyRequest, reply: FastifyReply) {
+  if (!canSeePayroll(req)) return sendError(reply, 403, 'ليست لديك صلاحية على بيانات الرواتب والموظفين', 'FORBIDDEN');
+}
 import { sendError } from '../middleware/errorHandler.js';
 import {
   fetchExtendedDashboardSummary,
@@ -78,6 +119,13 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
   app.get('/dashboard-summary', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;
     const data = await fetchExtendedDashboardSummary(companyId);
+    if (!canSeePayroll(req)) {
+      // لا أرقام موظفين/مسيرات لمن لا يملك صلاحية الرواتب.
+      const d = data as unknown as Record<string, unknown>;
+      delete d.payroll_employees_count;
+      delete d.payroll_runs_count;
+    }
+    maskSummaryFields(req, data as unknown as Record<string, unknown>);
     return reply.send({ ok: true, data });
   });
 
@@ -137,7 +185,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: r.rows[0] });
   });
 
-  app.get('/payroll-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll-summary', { preHandler: [authenticateRequest, requirePayrollView] }, async (req, reply) => {
     const { companyId } = req.user!;
     const pool = getPool();
     const r = await pool.query(
@@ -154,6 +202,18 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/executive/summary-report', { preHandler: authenticateRequest }, async (req, reply) => {
     const report = await reportExecutiveSummary(req.user!.companyId);
+    if (!canSeePayroll(req)) {
+      const r = report as unknown as { rows?: Array<{ metric?: string }>; summaryCards?: Array<{ label?: string }> };
+      const hide = (l?: string) => l === 'موظفو رواتب' || l === 'مسيرات رواتب';
+      if (Array.isArray(r.rows)) r.rows = r.rows.filter((m) => !hide(m.metric));
+      if (Array.isArray(r.summaryCards)) r.summaryCards = r.summaryCards.filter((m) => !hide(m.label));
+    }
+    {
+      const r = report as unknown as { rows?: Array<{ metric?: string }>; summaryCards?: Array<{ label?: string }> };
+      const hidden = new Set(EXECUTIVE_LABEL_MODULES.filter(([mod]) => !canViewModule(req, mod)).flatMap(([, labels]) => labels));
+      if (Array.isArray(r.rows)) r.rows = r.rows.filter((m) => !hidden.has(m.metric ?? ''));
+      if (Array.isArray(r.summaryCards)) r.summaryCards = r.summaryCards.filter((m) => !hidden.has(m.label ?? ''));
+    }
     return reply.send({ ok: true, report });
   });
 
@@ -352,15 +412,15 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, report });
   });
 
-  app.get('/payroll/employees', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/employees', { preHandler: [authenticateRequest, requirePayrollView] }, async (req, reply) => {
     const report = await reportPayrollEmployees(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/payroll/runs-list', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/runs-list', { preHandler: [authenticateRequest, requirePayrollView] }, async (req, reply) => {
     const report = await reportPayrollRunsList(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
-  app.get('/payroll/monthly-summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/monthly-summary', { preHandler: [authenticateRequest, requirePayrollView] }, async (req, reply) => {
     const report = await reportPayrollMonthlySummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });
@@ -430,7 +490,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, report });
   });
 
-  app.get('/payroll/summary', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.get('/payroll/summary', { preHandler: [authenticateRequest, requirePayrollView] }, async (req, reply) => {
     const report = await reportPayrollSummary(req.user!.companyId);
     return reply.send({ ok: true, report });
   });

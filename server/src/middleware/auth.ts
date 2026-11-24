@@ -11,6 +11,12 @@ import { ACTION_LABELS, resolveRoutePolicy } from '../services/permissionCatalog
 import { loadUserWarehouseScope } from '../services/warehouseAccess.js';
 import { findApprovedGrant } from '../services/editRequestService.js';
 
+/** جذور API التي لا تتبع وحدة صلاحيات وتبقى متاحة لكل مستخدم مسجَّل (لها فحوصاتها الداخلية). */
+export const CUSTOM_OPEN_API_ROOTS = [
+  '/api/auth', '/api/health', '/api/chat', '/api/edit-requests', '/api/documents',
+  '/api/telegram', '/api/companies', '/api/activation', '/api/system',
+];
+
 export type JwtPayload = {
   sub: string;
   companyId: string;
@@ -124,6 +130,14 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
         if (await findApprovedGrant(pool, payload.companyId, payload.sub, grantHeader, entityId)) {
           grantOk = true;
           request.editGrantId = grantHeader;
+        }
+      }
+      // رفض افتراضي: مسار لا يتبع أي وحدة صلاحيات ولا يقع ضمن الجذور المفتوحة يُرفض لمن بوضع «مخصّص»،
+      // حتى لا يتسرب أي مسار جديد (أو بيانات حساسة بمسار غير مُصنَّف) إلى مستخدم مقيَّد.
+      if (!policy) {
+        const routeUrl = request.routeOptions?.url ?? request.url.split('?')[0];
+        if (!CUSTOM_OPEN_API_ROOTS.some((root) => routeUrl === root || routeUrl.startsWith(root + '/'))) {
+          return sendError(reply, 403, 'هذا المسار غير متاح لحسابك', 'FORBIDDEN');
         }
       }
       if (policy && !policy.open && !eff.matrix.includes(policy.code) && !grantOk) {
