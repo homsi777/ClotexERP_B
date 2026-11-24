@@ -1,97 +1,115 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Building2, Loader2, RefreshCw, ArrowLeftRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeftRight, Building2, KeyRound, Loader2, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { fetchMe, switchCompanyApi } from '../lib/api/authApi';
 import { applyCompanyDefaultLanguage } from '../i18n/applyCompanyLanguage';
 import { fetchOverview } from '../lib/api/managementApi';
 import type { Overview, PeriodQuery } from '../lib/api/managementApi';
-import { AdminCostPanel, AlertsPanel, DecisionsPanel, LiquidityPanel, MetricsGrid, Money, OversightPanel, PeriodBar, SummaryPanel, nf, when } from './ManagementPanels';
+import { MetricsDashboard, useDashExtras } from './management/Dashboard';
+import { CustomizeDialog, useDashPrefs } from './management/Customize';
+import { AdminCostSection } from './management/AdminCost';
+import { AlertsPanel, DecisionsPanel, LiquidityPanel, OversightPanel, SummaryPanel } from './management/Panels';
+import { ChartCard, CurrencyTabs, HBars } from './management/charts';
+import { ErrorLine, MoneyLines, PeriodBar, errMsg, nf, when } from './management/kit';
+import './management/dash.css';
 
 type Tab = 'overview' | 'alerts' | 'decisions' | 'liquidity' | 'summary' | 'users' | 'cost';
-const TABS: Array<[Tab, string]> = [['overview', 'نظرة عامة'], ['alerts', 'مركز التنبيهات'], ['decisions', 'قرارات معلّقة'], ['liquidity', 'السيولة'], ['summary', 'ملخصات'], ['users', 'المستخدمون والاستثناءات'], ['cost', 'التكلفة والربحية (سري)']];
-const HOME_KEY = 'clotex.platform.home';
+const TABS: Array<[Tab, string]> = [['overview', 'نظرة عامة'], ['alerts', 'التنبيهات'], ['decisions', 'القرارات'], ['liquidity', 'السيولة'], ['summary', 'ملخصات'], ['users', 'المستخدمون والرقابة'], ['cost', 'التكلفة والربحية (سري)']];
 
-/** لوحة المالك المركزية: كل الفروع، فترة قابلة للاختيار، كل مؤشر ينقل لشاشته الأصلية. */
+/** مقارنة فروع مختارة جنباً إلى جنب: كل مقياس لعملة واحدة، ولا اختلاط بين الفروع أو العملات. */
+function Compare({ branches }: { branches: Overview['branches'] }) {
+  const ccys = [...new Set(branches.flatMap((b) => [...b.metrics.sales.current, ...b.metrics.purchases.current, ...b.metrics.balances.customers.map((c) => ({ currency: c.currency }))].map((x) => x.currency)))].sort();
+  const [ccy, setCcy] = useState('');
+  const cur = ccys.includes(ccy) ? ccy : ccys[0] ?? '';
+  const pick = (rows: Array<{ currency: string; total: number }>) => rows.find((r) => r.currency === cur)?.total ?? 0;
+  const item = (f: (b: Overview['branches'][number]) => number) => branches.map((b) => ({ label: b.name, values: [f(b)] }));
+  return <div className="space-y-3">
+    <div className="cx-card overflow-x-auto p-2"><table className="cx-tbl"><thead><tr><th>المؤشر</th>{branches.map((b) => <th key={b.id}>{b.name}</th>)}</tr></thead><tbody>
+      {([['المبيعات', (b) => <MoneyLines rows={b.metrics.sales.current} deltaAgainst={b.metrics.sales.previous} />], ['المشتريات', (b) => <MoneyLines rows={b.metrics.purchases.current} deltaAgainst={b.metrics.purchases.previous} />],
+        ['العملاء مدينون', (b) => <MoneyLines rows={b.metrics.balances.customers.map((c) => ({ currency: c.currency, total: c.owedToUs }))} />], ['الموردون (علينا)', (b) => <MoneyLines rows={b.metrics.balances.suppliers.map((c) => ({ currency: c.currency, total: c.weOwe }))} />],
+        ['الصناديق', (b) => <MoneyLines rows={b.metrics.cash} />], ['شيكات متأخرة', (b) => <span className="num">{b.metrics.cheques.overdue}</span>], ['مخزون متاح (م)', (b) => <span className="num">{nf(b.metrics.inventory.available.meters, 1)}</span>],
+        ['طلبيات متأخرة', (b) => <span className="num">{b.metrics.orders.late}</span>], ['مصنعية خارجية متأخرة', (b) => <span className="num">{b.metrics.external.late}</span>], ['أوامر إنتاج متأخرة', (b) => <span className="num">{b.metrics.production.late}</span>]] as Array<[string, (b: Overview['branches'][number]) => React.ReactNode]>)
+        .map(([l, f]) => <tr key={l}><td className="font-bold">{l}</td>{branches.map((b) => <td key={b.id}>{f(b)}</td>)}</tr>)}</tbody></table></div>
+    <div className="cx-charts">
+      <ChartCard title="مقارنة المبيعات" right={<CurrencyTabs currencies={ccys} value={cur} onChange={setCcy} />} empty={!ccys.length ? 'لا مبيعات.' : undefined}><HBars unit={cur} legend={['المبيعات']} items={item((b) => pick(b.metrics.sales.current))} /></ChartCard>
+      <ChartCard title="مقارنة المشتريات" right={<CurrencyTabs currencies={ccys} value={cur} onChange={setCcy} />} empty={!ccys.length ? 'لا مشتريات.' : undefined}><HBars unit={cur} legend={['المشتريات']} items={item((b) => pick(b.metrics.purchases.current))} /></ChartCard>
+      <ChartCard title="مقارنة المخزون المتاح (أمتار)"><HBars unit="م" legend={['أمتار']} items={item((b) => b.metrics.inventory.available.meters)} /></ChartCard>
+      <ChartCard title="مقارنة ديون العملاء" right={<CurrencyTabs currencies={ccys} value={cur} onChange={setCcy} />} empty={!ccys.length ? 'لا أرصدة.' : undefined}><HBars unit={cur} legend={['مدينون لنا']} items={item((b) => b.metrics.balances.customers.find((c) => c.currency === cur)?.owedToUs ?? 0)} /></ChartCard>
+    </div>
+  </div>;
+}
+
+/** لوحة المالك المركزية: كل الفروع، اختيار فرع أو مقارنة عدة فروع، وإدارة التنبيهات دون تبديل الفرع. */
 export function PlatformOverview() {
+  const { prefs, loaded, update, reset } = useDashPrefs('owner');
   const [data, setData] = useState<Overview | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(true);
   const [isPlatform, setIsPlatform] = useState<boolean | null>(null), [currentId, setCurrentId] = useState(''), [switching, setSwitching] = useState('');
-  const [period, setPeriod] = useState<PeriodQuery>({ period: 'month' });
-  const [tab, setTab] = useState<Tab>(() => { try { const t = localStorage.getItem(HOME_KEY) as Tab | null; return t && TABS.some(([k]) => k === t) ? t : 'overview'; } catch { return 'overview'; } });
-  const [open, setOpen] = useState(''), [costBranch, setCostBranch] = useState('');
+  const [period, setPeriod] = useState<PeriodQuery | null>(null), [tab, setTab] = useState<Tab | null>(null), [custom, setCustom] = useState(false);
+  const [sel, setSel] = useState<string[] | null>(null);
 
+  useEffect(() => { void fetchMe().then((me) => { setIsPlatform(me.isPlatformAdmin); setCurrentId(me.companyId); }).catch(() => setIsPlatform(false)); }, []);
+  useEffect(() => { if (loaded && !period) { setPeriod({ period: prefs?.defaultPeriod ?? 'month' }); const t = prefs?.defaultTab as Tab | undefined; setTab(t && TABS.some(([k]) => k === t) ? t : 'overview'); } }, [loaded, period, prefs]);
   const load = useCallback(async () => {
-    if (period.period === 'custom' && !(period.from && period.to)) return;
+    if (!period || (period.period === 'custom' && !(period.from && period.to))) return;
     setLoading(true); setError('');
-    try { setData(await fetchOverview('owner', period)); }
-    catch (e) { setError(e instanceof Error ? e.message : 'تعذر تحميل اللوحة'); }
-    finally { setLoading(false); }
+    try { const o = await fetchOverview('owner', period); setData(o); setSel((s) => s ?? o.branches.map((b) => b.id)); } catch (e) { setError(errMsg(e)); } finally { setLoading(false); }
   }, [period]);
+  useEffect(() => { if (isPlatform && period) void load(); }, [isPlatform, period, load]);
 
-  useEffect(() => { void fetchMe().then((me) => { setIsPlatform(me.isPlatformAdmin); setCurrentId(me.companyId); setCostBranch(me.companyId); }).catch(() => setIsPlatform(false)); }, []);
-  useEffect(() => { if (isPlatform) void load(); }, [isPlatform, load]);
+  const chosen = useMemo(() => (data?.branches ?? []).filter((b) => (sel ?? []).includes(b.id)), [data, sel]);
+  const single = chosen.length === 1 ? chosen[0] : null;
+  const focusId = single?.id ?? chosen.find((b) => b.id === currentId)?.id ?? chosen[0]?.id;
+  const focus = (data?.branches ?? []).find((b) => b.id === focusId);
+  const extras = useDashExtras('owner', period ?? { period: 'month' }, focusId, !!single && tab === 'overview');
 
-  const openBranch = async (id: string, to = '/') => {
+  const goBranch = async (id: string, to: string) => {
     if (id === currentId) { window.location.assign(to); return; }
     setSwitching(id);
     try { const u = await switchCompanyApi(id); await applyCompanyDefaultLanguage(u.companyDefaultLanguage); window.location.assign(to); }
-    catch (e) { setError(e instanceof Error ? e.message : 'تعذر فتح الفرع'); setSwitching(''); }
+    catch (e) { setError(errMsg(e)); setSwitching(''); }
   };
-  const setHome = (t: Tab) => { try { localStorage.setItem(HOME_KEY, t); } catch { /* ignore */ } };
 
   if (isPlatform === false) return <p role="alert" className="mx-auto mt-16 max-w-md rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center font-bold text-rose-800">هذه اللوحة لمالك المنصة فقط.</p>;
+  if (!period || !tab) return <div className="cx-dash p-10 text-center"><Loader2 className="inline h-6 w-6 animate-spin" /></div>;
 
-  return <div className="space-y-5" dir="rtl">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-black text-slate-950">لوحة المالك</h1><p className="text-sm text-slate-500">كل الفروع في مكان واحد. المبالغ لكل عملة على حدة دون تحويل، والفروع لا تختلط.</p></div>
-      <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />تحديث</button>
+  return <div className="cx-dash space-y-3" dir="rtl">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div><h1 className="cx-title text-xl">لوحة المالك</h1><p className="cx-muted text-xs">كل الفروع · المبالغ لكل عملة على حدة دون تحويل · الفروع لا تختلط · آخر تحديث {when(data?.generatedAt)}</p></div>
+      <div className="cx-noprint flex gap-1.5"><button type="button" className="cx-btn" onClick={() => setCustom(true)}><SlidersHorizontal className="inline h-4 w-4" /> تخصيص</button><button type="button" onClick={() => void load()} disabled={loading} className="cx-btn"><RefreshCw className={`inline h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></div>
     </div>
-    <PeriodBar value={period} onChange={setPeriod} />
-    <div className="flex flex-wrap items-center gap-1.5">
-      {TABS.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${tab === k ? 'bg-slate-900 text-white' : 'border bg-white'}`}>{l}</button>)}
-      <button type="button" onClick={() => setHome(tab)} className="ms-auto text-xs text-slate-500 underline">اجعل هذا القسم صفحتي الافتتاحية</button>
+    <div className="cx-tabs cx-noprint space-y-2">
+      <div className="cx-hscroll">{TABS.map(([k, l]) => <button key={k} type="button" aria-pressed={tab === k} className="cx-chip" onClick={() => setTab(k)}>{l}</button>)}</div>
+      <PeriodBar value={period} onChange={setPeriod} />
+      {data && <div className="cx-hscroll items-center"><span className="cx-muted text-xs">الفروع:</span>
+        <button type="button" className="cx-chip" aria-pressed={chosen.length === data.branches.length} onClick={() => setSel(data.branches.map((b) => b.id))}>الكل (مقارنة)</button>
+        {data.branches.map((b) => <button key={b.id} type="button" className="cx-chip" aria-pressed={(sel ?? []).includes(b.id)} onClick={() => setSel((s) => { const cur = s ?? []; const next = cur.includes(b.id) ? cur.filter((x) => x !== b.id) : [...cur, b.id]; return next.length ? next : cur; })}>{b.name}</button>)}</div>}
     </div>
-    {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</p>}
+    <ErrorLine msg={error} />
+    {loading && !data && <div className="p-10 text-center"><Loader2 className="inline h-6 w-6 animate-spin" /></div>}
 
-    {tab === 'overview' && <>
-      {loading && !data && <div className="p-10 text-center text-slate-500"><Loader2 className="inline h-6 w-6 animate-spin" /></div>}
-      {data && <>
-        <p className="text-xs text-slate-500">الفترة: {data.period.label} ({data.period.from} → {data.period.to}) — مقارنة بالفترة السابقة {data.period.prevFrom} → {data.period.prevTo}</p>
-        <div className="grid gap-4 lg:grid-cols-3">
-          {data.branches.map((b) => <section key={b.id} className={`rounded-2xl border bg-white p-4 shadow-sm ${b.isActive ? '' : 'opacity-60'} ${open === b.id ? 'lg:col-span-3' : ''}`}>
-            <div className="mb-2 flex items-start justify-between gap-2">
-              <div><h2 className="flex items-center gap-2 text-lg font-black"><Building2 className="h-5 w-5 text-indigo-600" />{b.name}</h2><p className="font-mono text-xs text-slate-400" dir="ltr">{b.code} · آخر نشاط {when(b.lastActivityAt)}</p></div>
-              <div className="flex gap-1">
-                <button type="button" onClick={() => setOpen(open === b.id ? '' : b.id)} className="rounded-lg border px-3 py-1.5 text-xs font-bold">{open === b.id ? 'طيّ' : 'التفاصيل'}</button>
-                <button type="button" disabled={!!switching} onClick={() => void openBranch(b.id, '/management')} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{switching === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeftRight className="h-3.5 w-3.5" />}لوحة الفرع</button>
-              </div>
-            </div>
-            {open === b.id ? <MetricsGrid m={b.metrics} linked={b.id === currentId} /> : <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-slate-600">مبيعات</span><Money rows={b.metrics.sales.current} /></div>
-              <div className="flex justify-between"><span className="text-slate-600">العملاء مدينون (كشف الحساب)</span><Money rows={b.metrics.balances.customers.map((r) => ({ currency: r.currency, total: r.owedToUs }))} /></div>
-              <div className="flex justify-between"><span className="text-slate-600">الموردون (علينا)</span><Money rows={b.metrics.balances.suppliers.map((r) => ({ currency: r.currency, total: r.weOwe }))} /></div>
-              <div className="flex justify-between"><span className="text-slate-600">الصناديق</span><Money rows={b.metrics.cash} /></div>
-              <div className="flex justify-between"><span className="text-slate-600">أتواب متاحة</span><span className="font-mono font-bold" dir="ltr">{nf(b.metrics.inventory.available.rolls)} · {nf(b.metrics.inventory.available.meters, 1)} م</span></div>
-            </div>}
-            {open === b.id && b.id !== currentId && <p className="mt-2 text-xs text-slate-500">روابط المؤشرات تعمل داخل الفرع الحالي فقط؛ افتح «لوحة الفرع» للتنقل إلى تفاصيله.</p>}
-          </section>)}
+    {tab === 'overview' && data && <>
+      {single ? <div className="space-y-3">
+        <div className="cx-card cx-noprint flex flex-wrap items-center justify-between gap-2 p-3">
+          <div className="flex items-center gap-2"><Building2 className="h-5 w-5" style={{ color: 'var(--cx-brand)' }} /><b>{single.name}</b><span className="cx-muted num text-xs">{single.code} · آخر نشاط {when(single.lastActivityAt)}</span></div>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" className="cx-btn cx-btn-primary" disabled={!!switching} onClick={() => void goBranch(single.id, '/management')}>{switching === single.id ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <ArrowLeftRight className="inline h-4 w-4" />} فتح التفاصيل داخل الفرع</button>
+            <button type="button" className="cx-btn" disabled={!!switching} onClick={() => void goBranch(single.id, '/permissions')}><KeyRound className="inline h-4 w-4" /> إدارة صلاحيات الفرع</button>
+          </div>
         </div>
-        <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-lg font-black">آخر النشاطات في كل الفروع</h2>
-          <div className="overflow-x-auto"><table className="w-full text-right text-sm"><thead className="text-xs text-slate-500"><tr><th className="p-2">الوقت</th><th className="p-2">الفرع</th><th className="p-2">المستخدم</th><th className="p-2">العملية</th></tr></thead><tbody>
-            {data.recentActivity.map((r, i) => <tr key={i} className="border-t"><td className="p-2 whitespace-nowrap">{when(r.at)}</td><td className="p-2">{r.branch ?? '—'}</td><td className="p-2">{r.username}</td><td className="p-2 font-mono text-xs" dir="ltr">{r.action}{r.entity_type ? ` · ${r.entity_type}` : ''}</td></tr>)}
-            {!data.recentActivity.length && <tr><td colSpan={4} className="p-4 text-center text-slate-400">لا نشاط مسجَّل.</td></tr>}
-          </tbody></table></div>
-        </section>
-        <p className="text-xs text-slate-400">آخر تحديث: {when(data.generatedAt)}</p>
-      </>}
+        <MetricsDashboard m={single.metrics} linked={single.id === currentId} prefs={prefs} analytics={extras.analytics} liquidity={extras.liquidity} attention={extras.attention} onTab={(t) => setTab(t as Tab)} branchId={single.id} scope="owner" />
+        {single.id !== currentId && <p className="cx-muted text-xs">روابط المؤشرات تفتح داخل الفرع الحالي؛ استخدم «فتح التفاصيل داخل الفرع» للانتقال إلى هذا الفرع بالذات (لا خلط بين الفروع).</p>}
+      </div> : <div className="space-y-3">
+        <Compare branches={chosen} />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{chosen.map((b) => <div key={b.id} className="cx-card cx-noprint flex items-center justify-between gap-2 p-3"><div className="flex items-center gap-2 text-sm font-bold"><Building2 className="h-4 w-4" />{b.name}</div><button type="button" className="cx-btn" onClick={() => setSel([b.id])}>تفاصيل</button></div>)}</div>
+      </div>}
+      {data.recentActivity.length > 0 && <details className="cx-card p-3"><summary className="cursor-pointer text-sm font-bold">آخر النشاطات في الفروع</summary>
+        <div className="mt-2 overflow-x-auto"><table className="cx-tbl"><thead><tr><th>الوقت</th><th>الفرع</th><th>المستخدم</th><th>العملية</th></tr></thead><tbody>{data.recentActivity.map((r, i) => <tr key={i}><td>{when(r.at)}</td><td>{r.branch ?? '—'}</td><td>{r.username}</td><td className="num">{r.action}{r.entity_type ? ` · ${r.entity_type}` : ''}</td></tr>)}</tbody></table></div></details>}
     </>}
-    {tab === 'alerts' && <AlertsPanel scope="owner" />}
-    {tab === 'decisions' && <DecisionsPanel scope="owner" />}
-    {tab === 'liquidity' && <LiquidityPanel scope="owner" />}
-    {tab === 'summary' && <p className="text-sm text-slate-600">الملخصات تُعرض لكل فرع على حدة: افتح «لوحة الفرع» ثم تبويب «ملخصات».</p>}
+    {tab === 'alerts' && <AlertsPanel scope="owner" branchId={single?.id ?? focusId} branchName={focus?.name} />}
+    {tab === 'decisions' && <DecisionsPanel scope="owner" branchId={single?.id} />}
+    {tab === 'liquidity' && <LiquidityPanel scope="owner" branchId={single?.id} />}
+    {tab === 'summary' && (single ? <SummaryPanel scope="owner" branchId={single.id} /> : <p className="cx-muted text-sm">اختر فرعاً واحداً لعرض ملخصاته.</p>)}
     {tab === 'users' && <OversightPanel scope="owner" />}
-    {tab === 'cost' && <div className="space-y-3">
-      <select value={costBranch} onChange={(e) => setCostBranch(e.target.value)} className="rounded-lg border px-2 py-1 text-sm">{(data?.branches ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-      {costBranch && <AdminCostPanel branchId={costBranch} period={period} />}
-    </div>}
+    {tab === 'cost' && (single ? <AdminCostSection branchId={single.id} period={period} isOwner /> : <p className="cx-muted text-sm">اختر فرعاً واحداً لعرض التكلفة والربحية (لا اختلاط بين الفروع).</p>)}
+    {custom && <CustomizeDialog prefs={prefs} tabs={TABS} onChange={update} onReset={() => void reset()} onClose={() => setCustom(false)} />}
   </div>;
 }

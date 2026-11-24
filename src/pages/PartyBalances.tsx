@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
+import {useSearchParams} from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {Link} from 'react-router-dom';
 import {AlertTriangle,FileSpreadsheet,Loader2,MessageCircle,Printer,RefreshCw,Send,X,ClipboardList,FileText} from 'lucide-react';
@@ -22,7 +23,9 @@ function Stack({row,pick,cls=''}:{row:PartyBalanceRow;pick:(c:CurrencyBalance)=>
 export function PartyBalancesPage({kind}:{kind:BalanceKind}){
   const L=T[kind];
   const [data,setData]=useState<PartyBalancesResult|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
-  const [search,setSearch]=useState(''),[currency,setCurrency]=useState(''),[onlyBal,setOnlyBal]=useState(true),[onlyAlerts,setOnlyAlerts]=useState(false);
+  const [urlParams]=useSearchParams();
+  // الروابط القادمة من اللوحة/التنبيهات تطبّق البحث والفلاتر تلقائياً (?search= &currency= &alerts=1 &all=1)
+  const [search,setSearch]=useState(urlParams.get('search')??''),[currency,setCurrency]=useState(urlParams.get('currency')??''),[onlyBal,setOnlyBal]=useState(urlParams.get('all')!=='1'),[onlyAlerts,setOnlyAlerts]=useState(urlParams.get('alerts')==='1');
   const [sort,setSort]=useState<'name'|'balance'|'lastPayment'|'lastOperation'>('balance'),[dir,setDir]=useState<'asc'|'desc'>('desc');
   const [follow,setFollow]=useState<PartyBalanceRow|null>(null),[share,setShare]=useState<PartyBalanceRow|null>(null);
 

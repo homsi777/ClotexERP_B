@@ -261,8 +261,9 @@ export async function branchSummary(db: Db, companyId: string, kind: 'daily' | '
   const text = [
     `ملخص ${kind === 'daily' ? 'يومي' : kind === 'weekly' ? 'أسبوعي' : 'شهري'} — ${period.from}${period.from !== period.to ? ` → ${period.to}` : ''}`,
     `المبيعات: ${money(metrics.sales.current)} (السابق: ${money(metrics.sales.previous)})`,
-    `المشتريات: ${money(metrics.purchases.current)}`,
+    `المشتريات: ${money(metrics.purchases.current)} (السابق: ${money(metrics.purchases.previous)})`,
     `أرصدة الصناديق: ${money(metrics.cash)}`,
+    `ذمم العملاء المدينة: ${money(metrics.balances.customers.map((r) => ({ currency: r.currency, total: r.owedToUs })))} · ذمم الموردين علينا: ${money(metrics.balances.suppliers.map((r) => ({ currency: r.currency, total: r.weOwe })))}`,
     `شيكات قيد التحصيل: ${metrics.cheques.pending} (متأخر ${metrics.cheques.overdue})`,
     `طلبيات متأخرة: ${metrics.orders.late} · مصنعية خارجية متأخرة: ${metrics.external.late} · أوامر إنتاج متأخرة: ${metrics.production.late}`,
     `تنبيهات: جديدة ${alerts.opened} · معالَجة ${alerts.resolved} · نشطة ${alerts.active} (عالية ${alerts.high})`,

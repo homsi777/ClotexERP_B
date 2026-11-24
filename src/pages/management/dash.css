@@ -1,0 +1,68 @@
+/* لوحات الإدارة (المالك/الفرع): هوية CLOTEX — أزرق رمادي داكن + كهرماني، بطاقات هادئة وحدود خفيفة. */
+.cx-dash {
+  --cx-brand: #35505f;
+  --cx-brand-soft: #e9eff2;
+  --cx-accent: #ffb03a;
+  --cx-accent-soft: #fff4de;
+  --cx-bg: #f4f6f8;
+  --cx-card: #ffffff;
+  --cx-line: #e3e8ec;
+  --cx-text: #1f2d36;
+  --cx-muted: #66767f;
+  --cx-good: #15803d; --cx-good-bg: #e8f6ec;
+  --cx-warn: #c2570c; --cx-warn-bg: #fff1e3;
+  --cx-bad: #b42318; --cx-bad-bg: #fdeceb;
+  --cx-neutral: #3f5360; --cx-neutral-bg: #eef2f4;
+  color: var(--cx-text);
+  font-family: "Cairo", "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  /* مساحة سفلية كي لا تغطي أزرار المحادثة والمساعد المحتوى */
+  padding-bottom: 6.5rem;
+}
+.cx-dash .cx-card { background: var(--cx-card); border: 1px solid var(--cx-line); border-radius: 14px; }
+.cx-dash .cx-title { color: var(--cx-brand); font-weight: 800; }
+.cx-dash .cx-muted { color: var(--cx-muted); }
+.cx-dash .cx-chip { border: 1px solid var(--cx-line); background: var(--cx-card); color: var(--cx-neutral); border-radius: 999px; padding: .28rem .8rem; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.cx-dash .cx-chip[aria-pressed='true'] { background: var(--cx-brand); border-color: var(--cx-brand); color: #fff; }
+.cx-dash .cx-btn { border: 1px solid var(--cx-line); background: var(--cx-card); color: var(--cx-neutral); border-radius: 10px; padding: .35rem .75rem; font-size: .8rem; font-weight: 700; }
+.cx-dash .cx-btn:hover { background: var(--cx-brand-soft); }
+.cx-dash .cx-btn-primary { background: var(--cx-brand); border-color: var(--cx-brand); color: #fff; }
+.cx-dash .cx-btn-primary:hover { background: #2b4350; }
+.cx-dash .cx-input { border: 1px solid var(--cx-line); border-radius: 8px; padding: .3rem .5rem; font-size: .85rem; background: #fff; }
+.cx-dash .cx-hscroll { display: flex; gap: .4rem; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.cx-dash .cx-hscroll::-webkit-scrollbar { display: none; }
+
+/* بطاقة المؤشر المختصرة: بطاقتان في الصف على الهاتف، وتتسع حسب الشاشة */
+.cx-dash .cx-grid { display: grid; gap: .5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 640px) { .cx-dash .cx-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; } }
+@media (min-width: 1024px) { .cx-dash .cx-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1440px) { .cx-dash .cx-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* على الهاتف: بطاقتان في الصف حتى للعملات المتعددة؛ تتسع على الشاشات الأكبر */
+@media (min-width: 640px) { .cx-dash .cx-wide { grid-column: span 2; } }
+.cx-dash .cx-tile { display: block; position: relative; padding: .55rem .7rem .6rem; border-radius: 12px; border: 1px solid var(--cx-line); background: var(--cx-card); min-height: 4.1rem; border-inline-start: 3px solid var(--cx-line); }
+.cx-dash a.cx-tile:hover { box-shadow: 0 2px 10px rgba(53, 80, 95, .12); border-color: #cfd8de; }
+.cx-dash .cx-tile .l { font-size: .72rem; color: var(--cx-muted); font-weight: 600; line-height: 1.2; }
+.cx-dash .cx-tile .v { margin-top: .2rem; font-size: .98rem; font-weight: 800; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.cx-dash .cx-tile .u { font-size: .7rem; font-weight: 600; color: var(--cx-muted); margin-inline-start: .2rem; }
+.cx-dash .cx-tile .d { margin-top: .15rem; font-size: .68rem; font-weight: 700; }
+.cx-dash .cx-tile .h { margin-top: .15rem; font-size: .66rem; color: var(--cx-muted); }
+.cx-dash .cx-tile.good { border-inline-start-color: var(--cx-good); }
+.cx-dash .cx-tile.warn { border-inline-start-color: var(--cx-warn); background: linear-gradient(0deg, var(--cx-warn-bg), var(--cx-card) 70%); }
+.cx-dash .cx-tile.bad { border-inline-start-color: var(--cx-bad); background: linear-gradient(0deg, var(--cx-bad-bg), var(--cx-card) 70%); }
+.cx-dash .cx-tile.neutral { border-inline-start-color: #9fb0ba; }
+.cx-dash .cx-up { color: var(--cx-good); } .cx-dash .cx-down { color: var(--cx-bad); } .cx-dash .cx-flat { color: var(--cx-muted); }
+.cx-dash .cx-sec-h { display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%; padding: .6rem .8rem; text-align: start; }
+.cx-dash .cx-sec-h b { color: var(--cx-brand); font-size: .95rem; }
+.cx-dash .cx-badge { border-radius: 999px; padding: .05rem .5rem; font-size: .7rem; font-weight: 800; }
+.cx-dash .cx-badge.good { background: var(--cx-good-bg); color: var(--cx-good); }
+.cx-dash .cx-badge.warn { background: var(--cx-warn-bg); color: var(--cx-warn); }
+.cx-dash .cx-badge.bad { background: var(--cx-bad-bg); color: var(--cx-bad); }
+.cx-dash .cx-badge.neutral { background: var(--cx-neutral-bg); color: var(--cx-neutral); }
+.cx-dash .cx-tbl { width: 100%; font-size: .78rem; text-align: right; }
+.cx-dash .cx-tbl th { color: var(--cx-muted); font-weight: 700; padding: .35rem .4rem; white-space: nowrap; }
+.cx-dash .cx-tbl td { padding: .35rem .4rem; border-top: 1px solid var(--cx-line); }
+.cx-dash .num { direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+.cx-dash .cx-charts { display: grid; gap: .65rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .cx-dash .cx-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1500px) { .cx-dash .cx-charts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.cx-dash .cx-tabs { position: sticky; top: 0; z-index: 20; background: var(--cx-bg); padding: .4rem 0; margin-inline: -.25rem; padding-inline: .25rem; }
+@media print { .cx-dash .cx-noprint { display: none !important; } .cx-dash { padding-bottom: 0; } }
