@@ -1,9 +1,12 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { getBranchOverview, periodFromQuery } from '../services/platformOverviewService.js';
+import { ALERT_TYPES, actOnAlert, branchSummary, getAlertSettings, listAlerts, listPendingDecisions, liquidityForecast, saveAlertSettings, syncAlerts, type AlertStatus } from '../services/alertCenterService.js';
+import { administrativeExceptions, listUsersOversight, permissionChangeLog } from '../services/oversightService.js';
 
 /** من يرى لوحة إدارة الفرع: مدير النظام/المدير/المحاسب (وضع الدور)، أو من مُنح «عرض» وحدة الإدارة (وضع مخصّص يطبّقه الحارس المركزي). */
 export function canSeeManagement(user: { role: string; customPerms?: boolean } | undefined): boolean {
@@ -12,14 +15,61 @@ export function canSeeManagement(user: { role: string; customPerms?: boolean } |
   return ['admin', 'manager', 'accountant'].includes(user.role);
 }
 
-/** لوحة إدارة الفرع: بيانات فرع المستخدم وحده. */
+function handle(reply: FastifyReply, e: unknown) {
+  const err = e as { code?: string; message?: string };
+  if (err.code === 'VALIDATION') return sendError(reply, 400, err.message ?? 'بيانات غير صالحة', 'VALIDATION');
+  if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message ?? 'غير موجود', 'NOT_FOUND');
+  throw e;
+}
+
+/** لوحة إدارة الفرع ومركز تنبيهاته: بيانات فرع المستخدم وحده، ولا تكشف فرعاً آخر. */
 export const managementRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/overview', { preHandler: authenticateRequest }, async (req, reply) => {
+  app.addHook('preHandler', authenticateRequest);
+  app.addHook('preHandler', async (req, reply) => {
     if (!canSeeManagement(req.user)) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
-    let period;
-    try { period = periodFromQuery(req.query as Record<string, string>); }
-    catch (e) { return sendError(reply, 400, (e as Error).message, 'VALIDATION'); }
     reply.header('Cache-Control', 'no-store');
-    return { ok: true, data: await getBranchOverview(getPool(), req.user!.companyId, period) };
+  });
+
+  app.get('/overview', async (req, reply) => {
+    try { return { ok: true, data: await getBranchOverview(getPool(), req.user!.companyId, periodFromQuery(req.query as Record<string, string>)) }; }
+    catch (e) { return handle(reply, e); }
+  });
+
+  // ── مركز التنبيهات ──
+  app.get('/alerts', async (req) => {
+    const q = req.query as Record<string, string>;
+    const db = getPool(), companyId = req.user!.companyId;
+    await syncAlerts(db, companyId, await getAlertSettings(db, companyId));
+    const status = (['OPEN', 'ACKNOWLEDGED', 'SNOOZED', 'RESOLVED', 'ACTIVE'] as const).find((s) => s === q.status) ?? 'ACTIVE';
+    return { ok: true, data: { types: ALERT_TYPES, alerts: await listAlerts(db, companyId, { status: status as AlertStatus | 'ACTIVE', assignee: q.assignee && /^[0-9a-f-]{36}$/i.test(q.assignee) ? q.assignee : undefined }) } };
+  });
+  app.post('/alerts/action', async (req, reply) => {
+    const parsed = z.object({ key: z.string().min(1).max(200), action: z.enum(['ack', 'snooze', 'assign', 'reopen', 'note']), until: z.string().optional(), assigneeUserId: z.string().uuid().nullable().optional(), note: z.string().max(1000).optional() }).strict().safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, 'بيانات الإجراء غير صالحة', 'VALIDATION');
+    try { await actOnAlert(getPool(), req.user!.companyId, req.user!.sub, parsed.data); return { ok: true }; }
+    catch (e) { return handle(reply, e); }
+  });
+  app.get('/alert-settings', async (req) => ({ ok: true, data: { settings: await getAlertSettings(getPool(), req.user!.companyId), types: ALERT_TYPES } }));
+  app.put('/alert-settings', async (req, reply) => {
+    const parsed = z.object({ inactiveCustomerDays: z.number().int().optional(), slowStockDays: z.number().int().optional(), externalLateDays: z.number().int().optional(), draftAgeDays: z.number().int().optional(), chequeDueSoonDays: z.number().int().optional(), disabledTypes: z.array(z.string()).max(30).optional() }).strict().safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, 'بيانات غير صالحة', 'VALIDATION');
+    try { return { ok: true, data: await saveAlertSettings(getPool(), req.user!.companyId, req.user!.sub, parsed.data) }; }
+    catch (e) { return handle(reply, e); }
+  });
+
+  // ── القرارات والموافقات المعلّقة (تجمع الآليات الموجودة؛ الاعتماد من شاشاتها) ──
+  app.get('/decisions', async (req) => ({ ok: true, data: await listPendingDecisions(getPool(), req.user!.companyId) }));
+
+  // ── السيولة والملخصات ──
+  app.get('/liquidity', async (req) => ({ ok: true, data: await liquidityForecast(getPool(), req.user!.companyId) }));
+  app.get('/summary', async (req, reply) => {
+    const kind = (['daily', 'weekly', 'monthly'] as const).find((k) => k === (req.query as Record<string, string>).kind) ?? 'daily';
+    try { return { ok: true, data: await branchSummary(getPool(), req.user!.companyId, kind) }; } catch (e) { return handle(reply, e); }
+  });
+
+  // ── المستخدمون والرقابة (فرع المستخدم وحده) ──
+  app.get('/oversight', async (req) => {
+    const db = getPool(), companyId = req.user!.companyId;
+    return { ok: true, data: { users: await listUsersOversight(db, companyId), permissionLog: await permissionChangeLog(db, companyId), exceptions: await administrativeExceptions(db, companyId) } };
   });
 };

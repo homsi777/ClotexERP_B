@@ -9,6 +9,7 @@ type DbQuery = Pick<PoolClient, 'query'>;
 import { postSalesInvoiceToGl, reverseSalesInvoiceGl } from './glPostingService.js';
 import { applyVoucherConfirmation, cancelConfirmedVoucher, insertDraftVoucher } from './voucherCashboxService.js';
 import { getExchangeRateToUsdTx } from './exchangeRateService.js';
+import { snapshotAdminCostForInvoice } from './adminCostService.js';
 import { generateSequentialDocumentNo } from '../utils/documentNumbers.js';
 import {
   assertSalesInvoiceCustomerMatchesOrder,
@@ -1843,6 +1844,16 @@ export async function confirmSalesInvoice(
      WHERE id=$1 AND company_id=$2`,
     [invoiceId, companyId, pay.remaining, pay.paymentStatus, voucherIdOut, userId, remainingUsd, totalUsd, paidUsd],
   );
+
+  // لقطة التكلفة الإدارية السرّية (للمالك فقط): خارج المحاسبة والمخزون، ولا يُعطَّل البيع إن فشلت.
+  try {
+    await client.query('SAVEPOINT admin_cost_snapshot');
+    await snapshotAdminCostForInvoice(client, companyId, invoiceId);
+    await client.query('RELEASE SAVEPOINT admin_cost_snapshot');
+  } catch (e) {
+    await client.query('ROLLBACK TO SAVEPOINT admin_cost_snapshot');
+    console.error('[admin-cost] تعذّر حفظ لقطة التكلفة الإدارية', (e as Error).message);
+  }
 
   await syncCustomerOrderFulfillmentForInvoice(client, companyId, invoiceId, userId);
 }
