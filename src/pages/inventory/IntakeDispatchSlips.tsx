@@ -34,6 +34,10 @@ export const IntakeDispatchSlips: React.FC = () => {
   const [openSlipId, setOpenSlipId] = useState<string | null>(null);
   const [lines, setLines] = useState<ApiIntakeDispatchSlipLine[]>([]);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  // تسعير بالخامة (أساسي) وباللون (اختياري) بدل سعر لكل توب؛ يُحوَّل عند الحفظ إلى سعر لكل سطر.
+  const [itemPrice, setItemPrice] = useState<Record<string, string>>({});
+  const [colorPrice, setColorPrice] = useState<Record<string, string>>({});
+  const [colorOpen, setColorOpen] = useState<Record<string, boolean>>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [printingId, setPrintingId] = useState<string | null>(null);
@@ -89,6 +93,13 @@ export const IntakeDispatchSlips: React.FC = () => {
       const { lines: ls } = await getIntakeDispatchSlip(slipId);
       setLines(ls);
       setPrices(Object.fromEntries(ls.map((l) => [l.id, l.unit_price ?? ''])));
+      // قيمة موحّدة موجودة مسبقاً لكل خامة تُعرض كسعر الخامة
+      const seed: Record<string, string> = {};
+      for (const g of new Set(ls.map((l) => l.item_name))) {
+        const vals = new Set(ls.filter((l) => l.item_name === g).map((l) => l.unit_price ?? ''));
+        if (vals.size === 1) seed[g] = [...vals][0];
+      }
+      setItemPrice(seed); setColorPrice({}); setColorOpen({});
     } catch (e) {
       showToast({ type: 'error', message: e instanceof ApiRequestError ? e.message : t('loadFailed') });
       setOpenSlipId(null);
@@ -99,9 +110,16 @@ export const IntakeDispatchSlips: React.FC = () => {
 
   const savePrices = async () => {
     if (!openSlipId) return;
+    const effective = (l: ApiIntakeDispatchSlipLine) => {
+      const c = colorPrice[`${l.item_name}|${l.color_name_ar ?? ''}`];
+      if (c !== undefined && c !== '') return c; // سعر اللون يتقدّم على سعر الخامة
+      const i = itemPrice[l.item_name];
+      if (i !== undefined && i !== '') return i;
+      return prices[l.id] ?? '';
+    };
     const payload = lines
-      .filter((l) => prices[l.id] !== '' && prices[l.id] !== undefined)
-      .map((l) => ({ lineId: l.id, unitPrice: Number(prices[l.id]) || 0 }));
+      .filter((l) => effective(l) !== '')
+      .map((l) => ({ lineId: l.id, unitPrice: Number(effective(l)) || 0 }));
     if (payload.length === 0) {
       showToast({ type: 'warning', message: t('enterAtLeastOnePrice') });
       return;
@@ -314,38 +332,38 @@ export const IntakeDispatchSlips: React.FC = () => {
               {detailLoading ? (
                 <div className="text-center text-slate-500 py-6"><Loader2 className="w-5 h-5 animate-spin inline ml-2" />{t('loading')}</div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-slate-500">
-                      <th className="p-2 text-right">{t('colBarcode')}</th>
-                      <th className="p-2 text-right">{t('colItem')}</th>
-                      <th className="p-2 text-right">{t('colColor')}</th>
-                      <th className="p-2 text-right">{t('colLength')}</th>
-                      <th className="p-2 text-right">{t('colUnitPrice')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((l) => (
-                      <tr key={l.id} className="border-t border-slate-100">
-                        <td className="p-2 font-mono" dir="ltr">{l.barcode}</td>
-                        <td className="p-2">{l.item_name}</td>
-                        <td className="p-2">{l.color_name_ar || '—'}</td>
-                        <td className="p-2 font-mono">{Number(l.length_m).toFixed(2)}</td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={prices[l.id] ?? ''}
-                            onChange={(e) => setPrices((prev) => ({ ...prev, [l.id]: e.target.value }))}
-                            className="w-24 rounded border border-slate-200 px-2 py-1 text-sm font-mono"
-                            dir="ltr"
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">سعر واحد لكل خامة، وتسعير حسب اللون اختياري عند اختلاف الألوان.</p>
+                  {[...new Set(lines.map((l) => l.item_name))].map((g) => {
+                    const gl = lines.filter((l) => l.item_name === g);
+                    const colors = [...new Set(gl.map((l) => l.color_name_ar ?? ''))];
+                    const meters = gl.reduce((a, l) => a + Number(l.length_m), 0);
+                    return (
+                      <div key={g} className="rounded-xl border border-slate-200 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div><b>{g}</b> <span className="text-xs text-slate-500">· {gl.length} توب · {meters.toFixed(2)} م</span></div>
+                          <label className="flex items-center gap-2 text-sm">سعر الخامة
+                            <input type="number" min={0} step="0.01" value={itemPrice[g] ?? ''} onChange={(e) => setItemPrice((p) => ({ ...p, [g]: e.target.value }))} className="w-24 rounded border border-slate-200 px-2 py-1 text-sm font-mono" dir="ltr" />
+                          </label>
+                        </div>
+                        {colors.length > 1 && (
+                          <div className="mt-2">
+                            <button type="button" className="text-xs font-bold text-indigo-700" onClick={() => setColorOpen((o) => ({ ...o, [g]: !o[g] }))}>{colorOpen[g] ? 'إخفاء' : 'تسعير حسب اللون (اختياري)'}</button>
+                            {colorOpen[g] && (
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                {colors.map((c) => (
+                                  <label key={c} className="flex items-center justify-between gap-2 rounded bg-slate-50 px-2 py-1 text-sm">{c || 'بلا لون'}
+                                    <input type="number" min={0} step="0.01" placeholder={itemPrice[g] ?? ''} value={colorPrice[`${g}|${c}`] ?? ''} onChange={(e) => setColorPrice((p) => ({ ...p, [`${g}|${c}`]: e.target.value }))} className="w-24 rounded border border-slate-200 px-2 py-1 text-sm font-mono" dir="ltr" />
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
             <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2 bg-slate-50">
