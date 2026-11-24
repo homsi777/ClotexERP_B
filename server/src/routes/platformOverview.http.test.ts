@@ -33,9 +33,10 @@ test('owner panel: platform admin sees every branch (per-currency, no mixing); e
     setPoolOverrideForTests({ connect: async () => fakeClient, query: (sql: string, params?: unknown[]) => db.query(sql, params), on: () => undefined });
     const q = async (sql: string, p: unknown[] = []) => (await db.query(sql, p)).rows;
 
-    const a = randomUUID(), b = randomUUID(), owner = randomUUID(), plain = randomUUID(), custA = randomUUID(), custB = randomUUID();
+    const a = randomUUID(), b = randomUUID(), owner = randomUUID(), plain = randomUUID(), viewerId = randomUUID(), custA = randomUUID(), custB = randomUUID();
     await q("INSERT INTO companies(id,code,name,is_active) VALUES ($1,'A','فرع أ',true),($2,'B','فرع ب',true)", [a, b]);
     await q("INSERT INTO users(id,company_id,username,password_hash,role,is_active,is_platform_admin) VALUES ($1,$3,'owner','x','admin',true,true),($2,$3,'plain','x','admin',true,false)", [owner, plain, a]);
+    await q("INSERT INTO users(id,company_id,username,password_hash,role,is_active) VALUES ($1,$2,'v','x','viewer',true)", [viewerId, a]);
     await q("INSERT INTO customers(id,company_id,code,name) VALUES ($1,$3,'C','عميل أ'),($2,$4,'C','عميل ب')", [custA, custB, a, b]);
     const inv = (company: string, cust: string, no: string, ccy: string, total: number) => q(
       `INSERT INTO sales_invoices(company_id,invoice_no,customer_id,invoice_date,document_status,currency_code,subtotal,total_amount,remaining_amount)
@@ -51,19 +52,37 @@ test('owner panel: platform admin sees every branch (per-currency, no mixing); e
     const app = await buildApp();
     const get = (token: string) => app.inject({ method: 'GET', url: '/api/platform/overview', headers: { authorization: `Bearer ${token}` } });
 
-    const plainRes = await get(signAuthToken({ sub: plain, companyId: a, username: 'plain', role: 'admin', permissions: [], isPlatformAdmin: false }));
+    const plainTok = signAuthToken({ sub: plain, companyId: a, username: 'plain', role: 'admin', permissions: [], isPlatformAdmin: false });
+    const plainRes = await get(plainTok);
     assert.equal(plainRes.statusCode, 403, 'مدير فرع عادي لا يرى لوحة المالك');
 
-    const res = await get(signAuthToken({ sub: owner, companyId: a, username: 'owner', role: 'admin', permissions: [], isPlatformAdmin: true }));
+    const ownerTok = signAuthToken({ sub: owner, companyId: a, username: 'owner', role: 'admin', permissions: [], isPlatformAdmin: true });
+    const res = await get(ownerTok);
     assert.equal(res.statusCode, 200);
-    const data = res.json().data as { branches: Array<{ code: string; sales30d: Array<{ currency: string; total: number }>; cash: Array<{ currency: string; total: number }>; cheques: { pending: number; overdue: number }; receivables: Array<{ currency: string; total: number }> }> };
+    type M = { sales: { current: Array<{ currency: string; total: number }> }; cash: Array<{ currency: string; total: number }>; cheques: { pending: number; overdue: number } };
+    const data = res.json().data as { period: { kind: string }; branches: Array<{ code: string; metrics: M }> };
+    assert.equal(data.period.kind, 'month');
     assert.deepEqual(data.branches.map((x) => x.code), ['A', 'B']);
-    const A = data.branches[0], B = data.branches[1];
-    assert.deepEqual(A.sales30d.map((x) => [x.currency, x.total]), [['EGP', 1000], ['USD', 50]], 'كل عملة لحالها');
-    assert.deepEqual(B.sales30d.map((x) => [x.currency, x.total]), [['TRY', 700]], 'لا اختلاط بين الفروع');
+    const A = data.branches[0].metrics, B = data.branches[1].metrics;
+    assert.deepEqual(A.sales.current.map((x) => [x.currency, x.total]), [['EGP', 1000], ['USD', 50]], 'كل عملة لحالها');
+    assert.deepEqual(B.sales.current.map((x) => [x.currency, x.total]), [['TRY', 700]], 'لا اختلاط بين الفروع');
     assert.deepEqual(A.cash.map((x) => [x.currency, x.total]), [['EGP', 250]]);
     assert.equal(B.cash.length, 0);
     assert.deepEqual([A.cheques.pending, A.cheques.overdue], [1, 1]);
+
+    // الفترات: أمس لا يحوي مبيعات اليوم، والمخصّصة تُتحقَّق
+    const yest = await app.inject({ method: 'GET', url: '/api/platform/overview?period=yesterday', headers: { authorization: `Bearer ${ownerTok}` } });
+    assert.equal(yest.statusCode, 200);
+    assert.equal((yest.json().data.branches[0].metrics.sales.current as unknown[]).length, 0);
+    const bad = await app.inject({ method: 'GET', url: '/api/platform/overview?period=custom&from=2026-12-01&to=2026-11-01', headers: { authorization: `Bearer ${ownerTok}` } });
+    assert.equal(bad.statusCode, 400);
+
+    // لوحة إدارة الفرع: فرعه وحده، والمشاهد/غير المخوّل مرفوض
+    const mgr = await app.inject({ method: 'GET', url: '/api/management/overview', headers: { authorization: `Bearer ${plainTok}` } });
+    assert.equal(mgr.statusCode, 200);
+    assert.deepEqual((mgr.json().data.branches as Array<{ code: string }>).map((x) => x.code), ['A'], 'فرعه فقط');
+    const viewerRes = await app.inject({ method: 'GET', url: '/api/management/overview', headers: { authorization: `Bearer ${signAuthToken({ sub: viewerId, companyId: a, username: 'v', role: 'viewer', permissions: [], isPlatformAdmin: false })}` } });
+    assert.equal(viewerRes.statusCode, 403);
     await app.close();
   } finally {
     setPoolOverrideForTests(null);
