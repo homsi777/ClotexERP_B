@@ -311,7 +311,7 @@ export async function apiFetch<T>(
       body?.error ||
       (response.status === 401
         ? 'يجب تسجيل الدخول أو انتهت الجلسة.'
-        : 'طلب غير ناجح.') ||
+        : `طلب غير ناجح (${response.status}${body?.code ? ' ' + String(body.code) : ''}).`) ||
       response.statusText;
 
     // Hard-evict any stale token on 401 so the route guard sends the user
