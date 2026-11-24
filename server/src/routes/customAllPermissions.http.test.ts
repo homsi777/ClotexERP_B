@@ -51,11 +51,11 @@ test('custom-mode account with every permission can load every main screen API',
     await q("INSERT INTO users(id,company_id,username,password_hash,role) VALUES ($1,$2,'boss','x','manager')", [boss, company]);
 
     const results: Record<string, string> = {};
-    for (const role of ['viewer', 'manager', 'accountant', 'warehouse']) {
+    for (const variant of ['all', 'noHr'] as const) for (const role of ['viewer', 'manager', 'accountant', 'warehouse']) {
       const id = randomUUID();
-      await q("INSERT INTO users(id,company_id,username,password_hash,role,is_active) VALUES ($1,$2,$3,'x',$4,true)", [id, company, 'k_' + role, role]);
-      await saveUserPermissions(fakeClient as never, { companyId: company, targetUserId: id, changedBy: boss, mode: 'CUSTOM', codes: ALL_MATRIX_CODES });
-      const token = signAuthToken({ sub: id, companyId: company, username: 'k_' + role, role, permissions: [], isPlatformAdmin: false });
+      await q("INSERT INTO users(id,company_id,username,password_hash,role,is_active) VALUES ($1,$2,$3,'x',$4,true)", [id, company, 'k_' + variant + role, role]);
+      await saveUserPermissions(fakeClient as never, { companyId: company, targetUserId: id, changedBy: boss, mode: 'CUSTOM', codes: variant === 'all' ? ALL_MATRIX_CODES : ALL_MATRIX_CODES.filter((c) => !c.startsWith('p:hr.')) });
+      const token = signAuthToken({ sub: id, companyId: company, username: 'k_' + variant + role, role, permissions: [], isPlatformAdmin: false });
       const { buildApp } = await import('../app.js');
       const app = await buildApp();
       const failures: string[] = [];
@@ -66,10 +66,11 @@ test('custom-mode account with every permission can load every main screen API',
         '/api/inventory/transfers', '/api/expenses', '/api/checks',
       ]) {
         const res = await app.inject({ method: 'GET', url: path, headers: { authorization: `Bearer ${token}` } });
-        if (res.statusCode !== 200) failures.push(`${path} → ${res.statusCode} ${res.body.slice(0, 120)}`);
+        const expected = variant === 'noHr' && path.startsWith('/api/payroll') ? 403 : 200;
+        if (res.statusCode !== expected) failures.push(`${path} → ${res.statusCode} ${res.body.slice(0, 120)}`);
       }
       await app.close();
-      results[role] = failures.length ? failures.join('\n      ') : 'OK';
+      results[variant + ':' + role] = failures.length ? failures.join('\n      ') : 'OK';
     }
     console.log('PROBE', JSON.stringify(results, null, 1));
     for (const [role, r] of Object.entries(results)) if (r !== 'OK' && !r.includes('skipped')) assert.fail(`${role}: ${r}`);
