@@ -8,14 +8,16 @@ export type Severity = 'HIGH' | 'MEDIUM' | 'LOW';
 export type AlertStatus = 'OPEN' | 'ACKNOWLEDGED' | 'SNOOZED' | 'RESOLVED';
 const fail = (m: string, code = 'VALIDATION') => Object.assign(new Error(m), { code });
 
-export interface AlertSettings { inactiveCustomerDays: number; slowStockDays: number; externalLateDays: number; draftAgeDays: number; chequeDueSoonDays: number; disabledTypes: string[] }
-export const DEFAULT_ALERT_SETTINGS: AlertSettings = { inactiveCustomerDays: 60, slowStockDays: 90, externalLateDays: 30, draftAgeDays: 3, chequeDueSoonDays: 7, disabledTypes: [] };
-export const ALERT_TYPES: Array<{ type: string; label: string }> = [
-  { type: 'CHEQUE_OVERDUE', label: 'شيك متأخر التحصيل' }, { type: 'CHEQUE_DUE_SOON', label: 'شيك يستحق قريباً' },
-  { type: 'CREDIT_LIMIT', label: 'تجاوز حد الائتمان' }, { type: 'PROMISE_OVERDUE', label: 'تجاوز موعد التحصيل/السداد' },
-  { type: 'PRICING_WAITING', label: 'مستند بانتظار التسعير' }, { type: 'DRAFT_STALE', label: 'مسودة فاتورة متأخرة' },
-  { type: 'ORDER_LATE', label: 'طلبية متأخرة' }, { type: 'EXTERNAL_LATE', label: 'مصنعية خارجية متأخرة' },
-  { type: 'WORKORDER_LATE', label: 'أمر إنتاج متأخر' }, { type: 'TRANSFER_STALE', label: 'مناقلة معلّقة قديمة' },
+export interface AlertSettings { inactiveCustomerDays: number; slowStockDays: number; externalLateDays: number; draftAgeDays: number; chequeDueSoonDays: number; disabledTypes: string[]; /** تنبيهات اختيارية مطفأة افتراضياً ويفعّلها الفرع صراحةً */ enabledOptionalTypes: string[] }
+export const DEFAULT_ALERT_SETTINGS: AlertSettings = { inactiveCustomerDays: 60, slowStockDays: 90, externalLateDays: 30, draftAgeDays: 3, chequeDueSoonDays: 7, disabledTypes: [], enabledOptionalTypes: [] };
+export const ALERT_TYPES: Array<{ type: string; label: string; dept: string; optional?: boolean }> = [
+  { type: 'CHEQUE_OVERDUE', label: 'شيك متأخر التحصيل', dept: 'المالية' }, { type: 'CHEQUE_DUE_SOON', label: 'شيك يستحق قريباً', dept: 'المالية' },
+  { type: 'CREDIT_LIMIT', label: 'تجاوز حد الائتمان', dept: 'المالية' }, { type: 'PROMISE_OVERDUE', label: 'تجاوز موعد التحصيل/السداد', dept: 'المالية' },
+  { type: 'PRICING_WAITING', label: 'مستند بانتظار التسعير', dept: 'المشتريات والمبيعات' }, { type: 'DRAFT_STALE', label: 'مسودة فاتورة متأخرة', dept: 'المشتريات والمبيعات' },
+  { type: 'ORDER_LATE', label: 'طلبية متأخرة', dept: 'المبيعات' }, { type: 'EXTERNAL_LATE', label: 'مصنعية خارجية متأخرة', dept: 'التصنيع' },
+  { type: 'WORKORDER_LATE', label: 'أمر إنتاج متأخر', dept: 'التصنيع' }, { type: 'TRANSFER_STALE', label: 'مناقلة معلّقة قديمة', dept: 'المخزون' },
+  // اختياري: تحديد المواقع غير إلزامي بالنظام، فعدم تحديد الموقع ليس خطأً ولا يمنع بيعاً أو حجزاً أو مناقلة.
+  { type: 'NO_LOCATION', label: 'أتواب بلا موقع تخزين (معلوماتي، اختياري)', dept: 'المخزون', optional: true },
 ];
 
 export async function getAlertSettings(db: Db, companyId: string): Promise<AlertSettings> {
@@ -23,7 +25,7 @@ export async function getAlertSettings(db: Db, companyId: string): Promise<Alert
   if (!r) return { ...DEFAULT_ALERT_SETTINGS };
   return {
     inactiveCustomerDays: Number(r.inactive_customer_days), slowStockDays: Number(r.slow_stock_days), externalLateDays: Number(r.external_late_days),
-    draftAgeDays: Number(r.draft_age_days), chequeDueSoonDays: Number(r.cheque_due_soon_days), disabledTypes: (r.disabled_types as string[]) ?? [],
+    draftAgeDays: Number(r.draft_age_days), chequeDueSoonDays: Number(r.cheque_due_soon_days), disabledTypes: (r.disabled_types as string[]) ?? [], enabledOptionalTypes: (r.enabled_optional_types as string[]) ?? [],
   };
 }
 export const thresholdsOf = (s: AlertSettings): Thresholds => ({ inactiveCustomerDays: s.inactiveCustomerDays, slowStockDays: s.slowStockDays, externalLateDays: s.externalLateDays });
@@ -35,13 +37,13 @@ export async function saveAlertSettings(db: Db, companyId: string, userId: strin
   within(n.inactiveCustomerDays, 7, 730, 'أيام توقف العميل'); within(n.slowStockDays, 7, 730, 'أيام الركود'); within(n.externalLateDays, 3, 365, 'أيام تأخر المصنعية');
   within(n.draftAgeDays, 1, 60, 'أيام عمر المسودة'); within(n.chequeDueSoonDays, 1, 60, 'أيام قرب الاستحقاق');
   const known = new Set(ALERT_TYPES.map((t) => t.type));
-  if (n.disabledTypes.some((t) => !known.has(t))) throw fail('نوع تنبيه غير معروف');
+  if (n.disabledTypes.some((t) => !known.has(t)) || n.enabledOptionalTypes.some((t) => !known.has(t))) throw fail('نوع تنبيه غير معروف');
   await db.query(
-    `INSERT INTO alert_settings (company_id, inactive_customer_days, slow_stock_days, external_late_days, draft_age_days, cheque_due_soon_days, disabled_types, updated_by_user_id, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+    `INSERT INTO alert_settings (company_id, inactive_customer_days, slow_stock_days, external_late_days, draft_age_days, cheque_due_soon_days, disabled_types, enabled_optional_types, updated_by_user_id, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$9,$8,now())
      ON CONFLICT (company_id) DO UPDATE SET inactive_customer_days=EXCLUDED.inactive_customer_days, slow_stock_days=EXCLUDED.slow_stock_days, external_late_days=EXCLUDED.external_late_days,
-       draft_age_days=EXCLUDED.draft_age_days, cheque_due_soon_days=EXCLUDED.cheque_due_soon_days, disabled_types=EXCLUDED.disabled_types, updated_by_user_id=EXCLUDED.updated_by_user_id, updated_at=now()`,
-    [companyId, n.inactiveCustomerDays, n.slowStockDays, n.externalLateDays, n.draftAgeDays, n.chequeDueSoonDays, n.disabledTypes, userId]);
+       draft_age_days=EXCLUDED.draft_age_days, cheque_due_soon_days=EXCLUDED.cheque_due_soon_days, disabled_types=EXCLUDED.disabled_types, enabled_optional_types=EXCLUDED.enabled_optional_types, updated_by_user_id=EXCLUDED.updated_by_user_id, updated_at=now()`,
+    [companyId, n.inactiveCustomerDays, n.slowStockDays, n.externalLateDays, n.draftAgeDays, n.chequeDueSoonDays, n.disabledTypes, userId, n.enabledOptionalTypes]);
   return n;
 }
 
@@ -50,7 +52,8 @@ export interface ComputedAlert { key: string; type: string; severity: Severity; 
 /** يحسب التنبيهات الحالية من بيانات الفرع الفعلية (لا بيانات بديلة). المفتاح يحدّد الكيان فلا تتكرر. */
 export async function computeAlerts(db: Db, companyId: string, s: AlertSettings): Promise<ComputedAlert[]> {
   const out: ComputedAlert[] = [];
-  const enabled = (t: string) => !s.disabledTypes.includes(t);
+  const optional = new Set(ALERT_TYPES.filter((t) => t.optional).map((t) => t.type));
+  const enabled = (t: string) => !s.disabledTypes.includes(t) && (!optional.has(t) || s.enabledOptionalTypes.includes(t));
   const q = async <T extends Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, [companyId, ...params])).rows;
 
   if (enabled('CHEQUE_OVERDUE') || enabled('CHEQUE_DUE_SOON')) {
@@ -121,10 +124,14 @@ export async function computeAlerts(db: Db, companyId: string, s: AlertSettings)
       out.push({ key: `TRANSFER_STALE:${r.id}`, type: 'TRANSFER_STALE', severity: 'LOW', title: `مناقلة معلّقة ${r.transfer_no}`, detail: `منذ ${r.age} يوماً`, href: '/inventory/transfers' });
     }
   }
+  if (enabled('NO_LOCATION')) {
+    const r = (await q<{ n: string }>(`SELECT count(*)::text AS n FROM fabric_rolls WHERE company_id=$1 AND status IN ('AVAILABLE','RESERVED') AND location_id IS NULL`))[0];
+    if (Number(r.n) > 0) out.push({ key: 'NO_LOCATION:branch', type: 'NO_LOCATION', severity: 'LOW', title: `${Number(r.n)} توب بلا موقع تخزين`, detail: 'معلومة فقط: تحديد المواقع اختياري ولا يمنع البيع أو الحجز أو المناقلة.', href: '/inventory/zones' });
+  }
   return out;
 }
 
-export interface AlertRow extends ComputedAlert { status: AlertStatus; assigneeUserId: string | null; assigneeName: string | null; snoozedUntil: string | null; note: string | null; firstSeenAt: string; lastSeenAt: string; resolvedAt: string | null }
+export interface AlertRow extends ComputedAlert { department: string; updatedByName: string | null; updatedAt: string | null; status: AlertStatus; assigneeUserId: string | null; assigneeName: string | null; snoozedUntil: string | null; note: string | null; firstSeenAt: string; lastSeenAt: string; resolvedAt: string | null }
 
 /**
  * مزامنة الحالة مع الواقع: تنبيه جديد يُفتح، المكرَّر لا يُنشأ ثانية (مفتاح فريد)، والمؤجَّل يعود بعد انتهاء التأجيل،
@@ -153,12 +160,12 @@ export async function syncAlerts(db: Db, companyId: string, s: AlertSettings, to
 
 export async function listAlerts(db: Db, companyId: string, opts: { status?: AlertStatus | 'ACTIVE'; assignee?: string } = {}): Promise<AlertRow[]> {
   const rows = (await db.query<Record<string, unknown>>(
-    `SELECT a.*, COALESCE(u.full_name, u.username) AS assignee_name FROM alert_states a LEFT JOIN users u ON u.id=a.assignee_user_id
+    `SELECT a.*, COALESCE(u.full_name, u.username) AS assignee_name, COALESCE(u2.full_name, u2.username) AS updated_by_name FROM alert_states a LEFT JOIN users u ON u.id=a.assignee_user_id LEFT JOIN users u2 ON u2.id=a.updated_by_user_id
       WHERE a.company_id=$1 AND ($2::text IS NULL OR ($2='ACTIVE' AND a.status IN ('OPEN','ACKNOWLEDGED','SNOOZED')) OR a.status=$2)
         AND ($3::uuid IS NULL OR a.assignee_user_id=$3)
       ORDER BY CASE a.severity WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END, a.first_seen_at DESC LIMIT 500`, [companyId, opts.status ?? null, opts.assignee ?? null])).rows;
   return rows.map((r) => ({
-    key: String(r.alert_key), type: String(r.alert_type), severity: r.severity as Severity, title: String(r.title), detail: String(r.detail ?? ''), href: String(r.href ?? ''),
+    key: String(r.alert_key), type: String(r.alert_type), department: ALERT_TYPES.find((t) => t.type === String(r.alert_type))?.dept ?? '—', updatedByName: (r.updated_by_name as string | null) ?? null, updatedAt: r.updated_at ? String(r.updated_at) : null, severity: r.severity as Severity, title: String(r.title), detail: String(r.detail ?? ''), href: String(r.href ?? ''),
     status: r.status as AlertStatus, assigneeUserId: (r.assignee_user_id as string | null) ?? null, assigneeName: (r.assignee_name as string | null) ?? null,
     snoozedUntil: r.snoozed_until ? String(r.snoozed_until).slice(0, 10) : null, note: (r.note as string | null) ?? null,
     firstSeenAt: String(r.first_seen_at), lastSeenAt: String(r.last_seen_at), resolvedAt: r.resolved_at ? String(r.resolved_at) : null,

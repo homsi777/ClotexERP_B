@@ -6,6 +6,9 @@ import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { getBranchOverview, periodFromQuery } from '../services/platformOverviewService.js';
 import { ALERT_TYPES, actOnAlert, branchSummary, getAlertSettings, listAlerts, listPendingDecisions, liquidityForecast, saveAlertSettings, syncAlerts, type AlertStatus } from '../services/alertCenterService.js';
+import { getPrefs, parsePrefs, resetPrefs, savePrefs } from '../services/dashboardPrefsService.js';
+import { getBranchAnalytics } from '../services/managementAnalyticsService.js';
+import { resolvePeriod } from '../services/managementMetricsService.js';
 import { administrativeExceptions, listUsersOversight, permissionChangeLog } from '../services/oversightService.js';
 
 /** من يرى لوحة إدارة الفرع: مدير النظام/المدير/المحاسب (وضع الدور)، أو من مُنح «عرض» وحدة الإدارة (وضع مخصّص يطبّقه الحارس المركزي). */
@@ -14,6 +17,8 @@ export function canSeeManagement(user: { role: string; customPerms?: boolean } |
   if (user.customPerms) return true; // الحارس المركزي تحقق من المصفوفة
   return ['admin', 'manager', 'accountant'].includes(user.role);
 }
+
+const periodObj = (q: Record<string, string>) => resolvePeriod((q.period as 'month') || 'month', { from: q.from, to: q.to });
 
 function handle(reply: FastifyReply, e: unknown) {
   const err = e as { code?: string; message?: string };
@@ -35,6 +40,20 @@ export const managementRoutes: FastifyPluginAsync = async (app) => {
     catch (e) { return handle(reply, e); }
   });
 
+  // الرسوم البيانية: تُحمَّل عند الطلب
+  app.get('/analytics', async (req, reply) => {
+    try { return { ok: true, data: await getBranchAnalytics(getPool(), req.user!.companyId, periodObj(req.query as Record<string, string>)) }; }
+    catch (e) { return handle(reply, e); }
+  });
+
+  // تفضيلات عرض اللوحة لهذا المستخدم (عرض فقط، لا صلاحيات)
+  app.get('/preferences', async (req) => ({ ok: true, data: await getPrefs(getPool(), req.user!.sub, 'branch') }));
+  app.put('/preferences', async (req, reply) => {
+    const prefs = parsePrefs(req.body); if (!prefs) return sendError(reply, 400, 'تخصيص غير صالح', 'VALIDATION');
+    await savePrefs(getPool(), req.user!.sub, 'branch', prefs); return { ok: true, data: prefs };
+  });
+  app.delete('/preferences', async (req) => { await resetPrefs(getPool(), req.user!.sub, 'branch'); return { ok: true }; });
+
   // ── مركز التنبيهات ──
   app.get('/alerts', async (req) => {
     const q = req.query as Record<string, string>;
@@ -51,7 +70,7 @@ export const managementRoutes: FastifyPluginAsync = async (app) => {
   });
   app.get('/alert-settings', async (req) => ({ ok: true, data: { settings: await getAlertSettings(getPool(), req.user!.companyId), types: ALERT_TYPES } }));
   app.put('/alert-settings', async (req, reply) => {
-    const parsed = z.object({ inactiveCustomerDays: z.number().int().optional(), slowStockDays: z.number().int().optional(), externalLateDays: z.number().int().optional(), draftAgeDays: z.number().int().optional(), chequeDueSoonDays: z.number().int().optional(), disabledTypes: z.array(z.string()).max(30).optional() }).strict().safeParse(req.body);
+    const parsed = z.object({ inactiveCustomerDays: z.number().int().optional(), slowStockDays: z.number().int().optional(), externalLateDays: z.number().int().optional(), draftAgeDays: z.number().int().optional(), chequeDueSoonDays: z.number().int().optional(), disabledTypes: z.array(z.string()).max(30).optional(), enabledOptionalTypes: z.array(z.string()).max(30).optional() }).strict().safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, 'بيانات غير صالحة', 'VALIDATION');
     try { return { ok: true, data: await saveAlertSettings(getPool(), req.user!.companyId, req.user!.sub, parsed.data) }; }
     catch (e) { return handle(reply, e); }
