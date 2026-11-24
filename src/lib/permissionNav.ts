@@ -55,7 +55,7 @@ export function canSeePath(user: Pick<AuthUser, 'role' | 'permMode' | 'permMatri
 }
 
 /** صفحات لا تتبع وحدة صلاحيات وتبقى متاحة لكل مستخدم (لها حمايتها الخاصة). */
-const OPEN_PATHS = ['/', '/login', '/approvals-center', '/permissions', '/settings'];
+const OPEN_PATHS = ['/', '/login', '/approvals-center', '/permissions', '/settings', '/platform'];
 
 /**
  * حارس المسار: للمستخدم بوضع «مخصّص» يُرفض كل مسار غير ممنوح، بما فيه المسارات غير المصنَّفة (رفض افتراضي)،

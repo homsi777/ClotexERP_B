@@ -182,6 +182,7 @@ import { CartelaDelivery } from './pages/cartela/CartelaDelivery';
 import { CartelaCustody } from './pages/cartela/CartelaCustody';
 import { CartelaStock } from './pages/cartela/CartelaStock';
 import { CartelaColorsIndex } from './pages/cartela/CartelaColorsIndex';
+import { PlatformOverview } from './pages/PlatformOverview';
 import { RollCut } from './pages/inventory/RollCut';
 import { BulkPricing } from './pages/inventory/BulkPricing';
 import { Warehouses } from './pages/inventory/Warehouses';
@@ -285,6 +286,7 @@ export default function App() {
             <Route path="cartela/custody" element={<CartelaCustody />} />
             <Route path="cartela/stock" element={<CartelaStock />} />
             <Route path="cartela/colors" element={<CartelaColorsIndex />} />
+            <Route path="platform" element={<PlatformOverview />} />
             <Route path="inventory/cartela" element={<Navigate to="/cartela" replace />} />
             <Route path="inventory/bulk-pricing" element={<BulkPricing />} />
             <Route path="inventory/warehouses" element={<Warehouses />} />

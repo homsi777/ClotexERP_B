@@ -14,7 +14,7 @@ import { findApprovedGrant } from '../services/editRequestService.js';
 /** جذور API التي لا تتبع وحدة صلاحيات وتبقى متاحة لكل مستخدم مسجَّل (لها فحوصاتها الداخلية). */
 export const CUSTOM_OPEN_API_ROOTS = [
   '/api/auth', '/api/health', '/api/chat', '/api/edit-requests', '/api/documents',
-  '/api/telegram', '/api/companies', '/api/activation', '/api/system',
+  '/api/telegram', '/api/companies', '/api/activation', '/api/system', '/api/platform',
 ];
 
 export type JwtPayload = {
