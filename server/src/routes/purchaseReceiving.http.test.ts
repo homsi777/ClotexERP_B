@@ -76,6 +76,10 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
 
     // ── المخزن يرى الفاتورة بلا أي بيانات مالية (على الخادم) ──
     assert.equal((await call('GET', '/api/purchase-receiving/invoices', tViewer)).statusCode, 403);
+    // المحاسب (وضع الدور) يعاين الاستلامات دون صلاحيات مخزون صريحة، ولا يسجّل استلاماً
+    const tAcc = tok(acc, 'acc', 'accountant', []);
+    assert.equal((await call('GET', '/api/purchase-receiving/invoices', tAcc)).statusCode, 200, 'المحاسب يعاين');
+    assert.equal((await call('POST', '/api/purchase-receiving/receipts', tAcc, { warehouseId: wh, lines: [] })).statusCode, 403, 'المحاسب لا يسجّل استلاماً');
     const list = await call('GET', '/api/purchase-receiving/invoices?search=SUP-77', tWk);
     assert.equal(list.statusCode, 200);
     const invoices = list.json().data as Array<{ id: string; supplierInvoiceNo: string; overall: string; lines: Array<{ id: string; lineNo: number; status: string; remaining: number; quantity: number; unit: string }> }>;

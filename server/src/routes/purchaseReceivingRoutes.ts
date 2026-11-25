@@ -6,7 +6,10 @@ import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { createReceipt, linkReceiptToInvoice, listReceipts, listReceivingInvoices } from '../services/purchaseReceivingService.js';
 
-const has = (u: { role: string; permissions: string[]; customPerms?: boolean }, codes: string[]) => u.role === 'admin' || Boolean(u.customPerms) || codes.some((c) => u.permissions.includes(c));
+const has = (u: { role: string; permissions: string[]; customPerms?: boolean }, codes: string[], roles: string[] = []) =>
+  u.role === 'admin' || Boolean(u.customPerms) || roles.includes(u.role) || codes.some((c) => u.permissions.includes(c));
+// وضع الدور: المحاسب والمدير يعاينان ويربطان الاستلام المعلّق بالفاتورة؛ تسجيل الاستلام للمخزن والمدير.
+const VIEW_ROLES = ['manager', 'accountant', 'inventory', 'warehouse'], WRITE_ROLES = ['manager', 'inventory', 'warehouse'], LINK_ROLES = [...WRITE_ROLES, 'accountant'];
 function handle(reply: FastifyReply, e: unknown) {
   const err = e as { code?: string; message?: string };
   if (err.code === 'VALIDATION') return sendError(reply, 400, err.message ?? 'بيانات غير صالحة', 'VALIDATION');
@@ -24,7 +27,11 @@ export const purchaseReceivingRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', async (req, reply) => {
     const u = req.user!;
     const isWrite = req.method !== 'GET';
-    if (!has(u, isWrite ? ['inventory.manage', 'purchases.manage'] : ['inventory.view', 'inventory.manage', 'purchases.view', 'purchases.manage'])) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const isLink = isWrite && /\/link$/.test(req.url.split('?')[0]);
+    const ok = isWrite
+      ? has(u, ['inventory.manage', 'purchases.manage'], isLink ? LINK_ROLES : WRITE_ROLES)
+      : has(u, ['inventory.view', 'inventory.manage', 'purchases.view', 'purchases.manage'], VIEW_ROLES);
+    if (!ok) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
     reply.header('Cache-Control', 'no-store');
   });
 
