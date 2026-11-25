@@ -94,6 +94,8 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     needsView: ['inventory.items', 'inventory.warehouses'], legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage') } },
   { code: 'inventory.yarn', name: 'مخزن الخيط (الدفعات والحركات)', group: 'yarn', actions: ['view', 'create', 'edit', 'delete', 'print', 'export', 'costView'], prefixes: ['/api/inventory/yarn-lots'], legacyAny: ['inventory.view', 'inventory.manage'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), delete: W('inventory.manage'), costView: W('inventory.yarn.cost.view') } },
+  { code: 'purchases.receiving', name: 'استلام المشتريات في المخازن (بلا أسعار)', group: 'inventory', actions: ['view', 'create', 'edit'], prefixes: ['/api/purchase-receiving'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['inventory.warehouses'],
+    legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage') } },
   { code: 'inventory.transfers', name: 'تحويلات المخزون', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve', 'print'], prefixes: ['/api/inventory/transfers'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['inventory.rolls', 'inventory.warehouses'],
     legacy: { view: W('inventory.view'), create: W('inventory.manage'), edit: W('inventory.manage'), approve: W('inventory.manage') } },
   { code: 'inventory.waste', name: 'الهالك والإتلاف', group: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'approve'], prefixes: ['/api/inventory/waste'], legacyAny: ['inventory.view', 'inventory.manage'], needsView: ['inventory.rolls'],

@@ -19,7 +19,8 @@ type SequentialDocumentKind =
   | 'OPERATING_EXPENSE'
   | 'EXTERNAL_JOB'
   | 'INTAKE_ORDER'
-  | 'INTAKE_DISPATCH_SLIP';
+  | 'INTAKE_DISPATCH_SLIP'
+  | 'PURCHASE_RECEIPT';
 
 const SEQUENTIAL_DOCUMENTS: Record<
   SequentialDocumentKind,
@@ -36,6 +37,7 @@ const SEQUENTIAL_DOCUMENTS: Record<
   EXTERNAL_JOB: { prefix: 'EJ', width: 7, table: 'external_jobs', column: 'job_no' },
   INTAKE_ORDER: { prefix: 'IN', width: 7, table: 'intake_operations', column: 'order_no' },
   INTAKE_DISPATCH_SLIP: { prefix: 'DS', width: 7, table: 'intake_dispatch_slips', column: 'slip_no' },
+  PURCHASE_RECEIPT: { prefix: 'RC', width: 7, table: 'purchase_receipts', column: 'receipt_no' },
 };
 
 /** أرقام طلبيات العملاء — أرقام فقط (1، 2، 3…) مع دعم التسلسل القديم CO0000001 */

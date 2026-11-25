@@ -4,6 +4,8 @@ import type { SalesInvoiceLinePayload, SalesInvoiceCreatePayload } from './sales
 export type PurchaseInvoiceLinePayload = SalesInvoiceLinePayload;
 
 export type PurchaseInvoiceCreatePayload = Omit<SalesInvoiceCreatePayload, 'customerId'> & {
+  /** «استلام عبر المخزن»: لا تُنشئ الفاتورة أتواباً/دفعات؛ يستلمها المخزن لاحقاً (كامل أو دفعات). */
+  receiveViaWarehouse?: boolean;
   supplierId: string;
   supplierInvoiceNo?: string | null;
 };

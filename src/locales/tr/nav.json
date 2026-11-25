@@ -26,6 +26,7 @@
   "invoices.purchases": "Alış Faturaları",
   "invoices.externalJobMatching": "Fason İrsaliye Mutabakatı",
   "invoices.externalJobs": "Harici İşler",
+  "invoices.purchaseReceiving": "Satın alma teslim alma",
   "invoices.exchange": "Değişim Faturaları",
   "invoices.returns": "İade Faturaları",
   "invoices.statement": "Fatura Özeti",

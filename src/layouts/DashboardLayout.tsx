@@ -218,6 +218,7 @@ const Topbar = () => {
         { labelKey: 'invoices.sales', to: '/invoices/sales' },
         { labelKey: 'invoices.purchases', to: '/invoices/purchases' },
         { labelKey: 'invoices.dispatchSlips', to: '/inventory/intake-dispatch-slips' },
+        { labelKey: 'invoices.purchaseReceiving', to: '/purchases/receiving' },
         { labelKey: 'invoices.externalJobs', to: '/purchases/external-jobs' },
         { labelKey: 'invoices.externalJobMatching', to: '/purchases/external-job-matching' },
         { labelKey: 'invoices.exchange', to: '/invoices/exchange' },

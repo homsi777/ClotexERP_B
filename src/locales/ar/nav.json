@@ -26,6 +26,7 @@
   "invoices.purchases": "فواتير الشراء",
   "invoices.externalJobMatching": "تسوية إرساليات المصنعية",
   "invoices.externalJobs": "مهام خارجية",
+  "invoices.purchaseReceiving": "استلام المشتريات",
   "invoices.exchange": "فواتير الصرف",
   "invoices.returns": "فواتير المرتجعات",
   "invoices.statement": "كشف فاتورة",

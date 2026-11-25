@@ -48,6 +48,7 @@ import { reportRoutes } from './routes/reportRoutes.js';
 import { financeRoutes } from './routes/financeRoutes.js';
 import { salesInvoiceRoutes } from './routes/salesInvoiceRoutes.js';
 import { purchaseInvoiceRoutes } from './routes/purchaseInvoiceRoutes.js';
+import { purchaseReceivingRoutes } from './routes/purchaseReceivingRoutes.js';
 import { externalJobRoutes } from './routes/externalJobRoutes.js';
 import { intakeOperationRoutes } from './routes/intakeOperationRoutes.js';
 import { intakeDispatchSlipRoutes } from './routes/intakeDispatchSlipRoutes.js';
@@ -194,6 +195,7 @@ export async function buildApp() {
   await app.register(financeRoutes, { prefix: '/api/finance' });
   await app.register(salesInvoiceRoutes, { prefix: '/api/sales-invoices' });
   await app.register(purchaseInvoiceRoutes, { prefix: '/api/purchase-invoices' });
+  await app.register(purchaseReceivingRoutes, { prefix: '/api/purchase-receiving' });
   await app.register(externalJobRoutes, { prefix: '/api/external-jobs' });
   await app.register(intakeOperationRoutes, { prefix: '/api/intake-operations' });
   await app.register(intakeDispatchSlipRoutes, { prefix: '/api/intake-dispatch-slips' });

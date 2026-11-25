@@ -14,6 +14,7 @@ const PATH_MODULES: [string, string[]][] = [
   ['/inventory/depreciation', ['inventory.waste']],
   ['/inventory', ['inventory.rolls', 'inventory.items']],
   ['/inventory-hub', ['inventory.rolls', 'inventory.items', 'inventory.warehouses', 'inventory.transfers', 'inventory.waste', 'inventory.yarn']],
+  ['/purchases/receiving', ['purchases.receiving']],
   ['/purchases/import-excel', ['purchases.import']],
   ['/purchases/import-batches', ['purchases.import']],
   ['/purchases/intake-operations', ['inventory.rolls']],

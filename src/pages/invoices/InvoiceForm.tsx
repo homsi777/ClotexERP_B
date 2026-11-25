@@ -628,6 +628,7 @@ export const InvoiceForm = () => {
   const [taxMode, setTaxMode] = useState<'PERCENT' | 'FIXED'>('PERCENT');
   const [headerNotes, setHeaderNotes] = useState('');
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
+  const [receiveViaWarehouse, setReceiveViaWarehouse] = useState(false);
   const [customerOrderId, setCustomerOrderId] = useState<string | null>(null);
   const [linkedOrderNumber, setLinkedOrderNumber] = useState('');
   const [importOrderInput, setImportOrderInput] = useState('');
@@ -654,6 +655,7 @@ export const InvoiceForm = () => {
     setStagedRoll(null);
     setHeaderNotes('');
     setSupplierInvoiceNo('');
+    setReceiveViaWarehouse(false);
     setCustomerOrderId(null);
     setLinkedOrderNumber('');
     setImportOrderInput('');
@@ -735,6 +737,7 @@ export const InvoiceForm = () => {
         setTaxValue(String(Number((h as { tax_total?: number }).tax_total ?? 0) || ''));
         setHeaderNotes(h.notes != null ? String(h.notes) : '');
         setSupplierInvoiceNo(!isSales && h.supplier_invoice_no != null ? String(h.supplier_invoice_no) : '');
+        setReceiveViaWarehouse(!isSales && h.receive_via_warehouse === true);
         if (isSales && h.customer_order_id) {
           setCustomerOrderId(String(h.customer_order_id));
           setLinkedOrderNumber('');
@@ -2834,12 +2837,14 @@ export const InvoiceForm = () => {
       ...invoicePersistCommon,
       supplierId: partyId,
       supplierInvoiceNo: supplierInvoiceNo.trim() || null,
+      receiveViaWarehouse,
     };
 
     const purchasePersistBodyUpdate: Partial<PurchaseInvoiceCreatePayload> = {
       ...invoicePersistCommon,
       supplierId: partyId,
       supplierInvoiceNo: supplierInvoiceNo.trim() || null,
+      receiveViaWarehouse,
       ...(isInvoiceNoUiPlaceholder || !trimmedInvoiceNo ? {} : { invoiceNo: trimmedInvoiceNo }),
     };
 
@@ -3462,6 +3467,10 @@ export const InvoiceForm = () => {
               className={inputClass()}
               dir="ltr"
             />
+            <label className="flex items-start gap-2 pt-2 text-sm font-bold text-slate-700">
+              <input type="checkbox" checked={receiveViaWarehouse} onChange={(e) => setReceiveViaWarehouse(e.target.checked)} className="mt-1" />
+              <span>استلام عبر المخزن<span className="block text-xs font-normal text-slate-500">لا تُنشئ الفاتورة أتواباً ولا دفعات؛ يسجّل المخزن الاستلام (كاملاً أو على دفعات) من «استلام المشتريات»، بلا قيد مالي ثانٍ.</span></span>
+            </label>
           </div>
         ) : null}
 

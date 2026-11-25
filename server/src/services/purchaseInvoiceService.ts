@@ -282,7 +282,16 @@ async function resolveWarehouseForPurchaseInvoice(
   return fallback.rows[0].id;
 }
 
+/** سطر فاتورة الشراء: الوحدات تشمل الطرد والقطعة، وmaterialKind يحدد نوع المادة (قماش/خيط/أخرى). */
+const purchaseLineSchema = invoiceLineSchema.extend({
+  unit: z.enum(['meter', 'yard', 'kg', 'package', 'piece']).default('meter'),
+  materialKind: z.enum(['FABRIC', 'YARN', 'OTHER']).optional().nullable(),
+});
+type PurchaseLine = z.infer<typeof purchaseLineSchema>;
+
 const purchaseInvoiceCreateBaseSchema = z.object({
+  /** «استلام عبر المخزن»: المخزن هو من ينشئ الأتواب/الدفعات عند الاستلام، والفاتورة مالية فقط. */
+  receiveViaWarehouse: z.boolean().optional(),
   invoiceNo: z.string().min(1),
   supplierInvoiceNo: z.string().optional().nullable(),
   invoiceDate: z.string().min(1),
@@ -307,7 +316,7 @@ const purchaseInvoiceCreateBaseSchema = z.object({
   paidAmountUsd: z.coerce.number().nonnegative().optional(),
   remainingAmountUsd: z.coerce.number().nonnegative().optional(),
   paymentStatus: z.enum(['unpaid', 'partial', 'paid']).default('unpaid'),
-  lines: z.array(invoiceLineSchema).min(1),
+  lines: z.array(purchaseLineSchema).min(1),
   confirm: z.boolean().optional().default(false),
   cashboxId: z.string().uuid().optional().nullable(),
   partyNameForVoucher: z.string().optional().nullable(),
@@ -336,15 +345,15 @@ export const purchaseInvoiceUpdateDraftSchema = purchaseInvoiceCreateBaseSchema
 export type PurchaseInvoiceCreateInput = z.infer<typeof purchaseInvoiceCreateSchema>;
 
 function preparePurchaseInvoiceLines(
-  lines: z.infer<typeof invoiceLineSchema>[],
+  lines: PurchaseLine[],
   discountTotal: number,
   subtotal: number,
   taxTotal: number,
   totalAmount: number,
-): z.infer<typeof invoiceLineSchema>[] {
+): PurchaseLine[] {
   const allocated = allocateHeaderDiscountToLines(lines, discountTotal);
   validateInvoiceLineAmounts(allocated, subtotal, discountTotal, taxTotal, totalAmount);
-  return allocated as z.infer<typeof invoiceLineSchema>[];
+  return allocated as PurchaseLine[];
 }
 
 async function assertSupplier(client: PoolClient, companyId: string, supplierId: string): Promise<{ name: string }> {
@@ -363,7 +372,7 @@ async function insertPurchaseLines(
   companyId: string,
   invoiceId: string,
   exchangeRateToUsd: number,
-  lines: z.infer<typeof invoiceLineSchema>[],
+  lines: PurchaseLine[],
 ): Promise<void> {
   let i = 0;
   for (const ln of lines) {
@@ -376,8 +385,8 @@ async function insertPurchaseLines(
       `INSERT INTO purchase_invoice_lines (
          company_id, invoice_id, line_no, fabric_roll_id, yarn_lot_id, fabric_item_id, variant_id, warehouse_id,
          description, quantity, unit, unit_cost, line_discount, line_tax, line_total,
-         unit_cost_usd, line_discount_usd, line_tax_usd, line_total_usd, metadata
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`,
+         unit_cost_usd, line_discount_usd, line_tax_usd, line_total_usd, metadata, material_kind
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)`,
       [
         companyId,
         invoiceId,
@@ -399,6 +408,7 @@ async function insertPurchaseLines(
         lineTaxUsd,
         lineTotalUsd,
         JSON.stringify(ln.metadata ?? {}),
+        ln.materialKind ?? (ln.unit === 'kg' && ln.commodityType === 'FABRIC' ? 'FABRIC' : null),
       ],
     );
   }
@@ -563,8 +573,8 @@ export async function createPurchaseInvoice(
        paid_amount, remaining_amount, payment_status, document_status,
        exchange_rate_to_usd, subtotal_usd, discount_total_usd, tax_total_usd, total_amount_usd,
        paid_amount_usd, remaining_amount_usd,
-       created_by_user_id, updated_by_user_id, usd_converted
-     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17,$18,$19,$20,$21,$22,$23,$24,$24,$25)
+       created_by_user_id, updated_by_user_id, usd_converted, receive_via_warehouse
+     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17,$18,$19,$20,$21,$22,$23,$24,$24,$25,$26)
      RETURNING id`,
     [
       companyId,
@@ -592,6 +602,7 @@ export async function createPurchaseInvoice(
       remainingUsd,
       userId,
       usdConverted,
+      d.receiveViaWarehouse === true,
     ],
   );
 
@@ -647,7 +658,7 @@ export async function updatePurchaseInvoiceDraft(
     throw Object.assign(new Error('لا يمكن تعديل فاتورة مؤكدة أو ملغاة'), { code: 'INVALID_STATE' });
   }
 
-  const d = parsed.data as Partial<PurchaseInvoiceCreateInput> & { lines?: z.infer<typeof invoiceLineSchema>[] };
+  const d = parsed.data as Partial<PurchaseInvoiceCreateInput> & { lines?: PurchaseLine[] };
   if (d.supplierId) await assertSupplier(client, companyId, d.supplierId);
 
   if (d.invoiceNo?.trim()) {
@@ -706,6 +717,7 @@ export async function updatePurchaseInvoiceDraft(
        paid_amount_usd = $23,
        remaining_amount_usd = $24,
        usd_converted = $25,
+       receive_via_warehouse = COALESCE($26, receive_via_warehouse),
        updated_by_user_id = $3,
        updated_at = now()
      WHERE id=$1 AND company_id=$2`,
@@ -735,6 +747,7 @@ export async function updatePurchaseInvoiceDraft(
       paidUsd,
       remainingUsd,
       nextUsdConverted,
+      d.receiveViaWarehouse ?? null,
     ],
   );
 
@@ -969,11 +982,15 @@ export async function confirmPurchaseInvoice(
   const targetWarehouseId = await resolveWarehouseForPurchaseInvoice(client, companyId, inv.warehouse_id ?? null);
 
   for (const ln of lines.rows) {
+    // «استلام عبر المخزن»: الفاتورة مالية فقط؛ يُنشئ المخزن الأتواب/الدفعات لاحقاً عند الاستلام (بلا قيد مالي مكرر).
+    if (inv.receive_via_warehouse) continue;
+    // طرد/قطعة: مواد غير قماش وغير خيط بالوزن؛ لا يُنشأ لها توب ولا دفعة (تُتبَّع كمياتها بالاستلام).
+    if (['package', 'piece'].includes(String(ln.unit || '').toLowerCase())) continue;
     // يُحدَّث داخل فرع إنشاء التوب الجديد أدناه إن أُنشئت خامة جديدة؛ يبقى
     // كما هو (القيمة الأصلية بسطر الفاتورة) إن كانت الخامة محدَّدة مسبقاً.
     let lineItemId = ln.fabric_item_id as string | null;
 
-    if (String(ln.unit || '').toLowerCase() === 'kg') {
+    if (String(ln.unit || '').toLowerCase() === 'kg' && ln.material_kind !== 'FABRIC') {
       let lotId = ln.yarn_lot_id as string | null;
       if (!lotId) {
         const meta = ((ln.metadata as Record<string, unknown> | null) || {}) as Record<string, unknown>;
@@ -1044,8 +1061,15 @@ export async function confirmPurchaseInvoice(
       const gsm = cleanNum(meta.gsm);
       const qty = Number(ln.quantity ?? 0);
       const unit = (String(ln.unit || 'meter').toLowerCase() === 'yard' ? 'yard' : 'meter') as 'meter' | 'yard';
-      const lengthM = Math.max(0, quantityToMeters(Number.isFinite(qty) ? qty : 0, unit));
-      const actualWeight = cleanNum(meta.weightKg ?? meta.weight);
+      const fabricByKg = String(ln.unit || '').toLowerCase() === 'kg';
+      // قماش بالكيلو: الطول = الوزن × 1000 ÷ (العرض بالمتر × gsm)، والوزن المُدخَل هو الوزن الفعلي للتوب.
+      if (fabricByKg && !(widthCm && widthCm > 0 && gsm && gsm > 0)) {
+        throw Object.assign(new Error('شراء القماش بالكيلو يتطلب عرض التوب والوزن النوعي (gsm) لحساب الطول'), { code: 'VALIDATION' });
+      }
+      const lengthM = fabricByKg
+        ? Math.max(0, Math.round(((qty * 1000) / ((widthCm as number) / 100 * (gsm as number))) * 1000) / 1000)
+        : Math.max(0, quantityToMeters(Number.isFinite(qty) ? qty : 0, unit));
+      const actualWeight = fabricByKg ? qty : cleanNum(meta.weightKg ?? meta.weight);
       const calcWt = calcWeight(lengthM, widthCm, gsm);
 
       const itemId = await findOrCreateFabricItem(client, companyId, materialName, designCode);
@@ -1091,7 +1115,7 @@ export async function confirmPurchaseInvoice(
           gsm,
           calcWt,
           actualWeight,
-          Number(ln.unit_cost ?? 0) || null,
+          (fabricByKg && lengthM > 0 ? (Number(ln.unit_cost ?? 0) * qty) / lengthM : Number(ln.unit_cost ?? 0)) || null,
           String(inv.currency_code || 'USD'),
           null,
           null,
@@ -1436,7 +1460,7 @@ async function createRollFromPurchaseLine(
   invoiceId: string,
   invoiceNo: string,
   inv: Record<string, unknown>,
-  ln: z.infer<typeof invoiceLineSchema>,
+  ln: PurchaseLine,
   targetWarehouseId: string,
 ): Promise<string> {
   const meta = ((ln.metadata as Record<string, unknown> | null | undefined) ?? {}) as Record<string, unknown>;
@@ -1523,7 +1547,7 @@ async function syncExistingPurchaseRoll(
   invoiceNo: string,
   inv: Record<string, unknown>,
   rollId: string,
-  ln: z.infer<typeof invoiceLineSchema>,
+  ln: PurchaseLine,
   targetWarehouseId: string,
 ): Promise<void> {
   const meta = ((ln.metadata as Record<string, unknown> | null | undefined) ?? {}) as Record<string, unknown>;
@@ -1662,7 +1686,7 @@ export async function updatePurchaseInvoiceConfirmed(
     });
   }
 
-  const d = parsed.data as Partial<PurchaseInvoiceCreateInput> & { lines: z.infer<typeof invoiceLineSchema>[] };
+  const d = parsed.data as Partial<PurchaseInvoiceCreateInput> & { lines: PurchaseLine[] };
   const currentPaid = Number(inv.paid_amount);
   const nextPaid = d.paidAmount ?? currentPaid;
   if (Math.abs(nextPaid - currentPaid) > EPS) {
@@ -2140,4 +2164,58 @@ export async function applyPurchaseInvoicePaymentOnVoucherConfirm(
      WHERE id=$1 AND company_id=$2`,
     [row.id, companyId, newPaid, pay.remaining, pay.paymentStatus, paidUsd, remainingUsd, voucher.voucherId, userId],
   );
+}
+
+/* ───── استلام المخزن (مرتبط بفاتورة شراء «استلام عبر المخزن»): إنشاء توب/دفعة خيط بلا أي قيد مالي ───── */
+export interface ReceiveRollInput {
+  receiptId: string; receiptNo: string; invoiceNo: string | null; supplierId: string | null; warehouseId: string; locationId?: string | null;
+  materialName: string; designCode?: string; colorName?: string; colorCode?: string; widthCm?: number | null; gsm?: number | null;
+  lengthM: number; weightKg?: number | null; barcode?: string; lotNo?: string | null;
+  unitCostPerMeter?: number | null; currency?: string | null; note?: string | null;
+}
+export async function receiveFabricRoll(client: PoolClient, companyId: string, userId: string | null, p: ReceiveRollInput): Promise<{ rollId: string; barcode: string; itemId: string }> {
+  const materialName = cleanText(p.materialName), designCode = cleanText(p.designCode), colorName = cleanText(p.colorName), colorCode = cleanText(p.colorCode);
+  const itemId = await findOrCreateFabricItem(client, companyId, materialName, designCode);
+  const colorId = await findOrCreateColor(client, companyId, colorName, colorCode);
+  await ensureFabricCategoryChain(client, companyId, materialName, designCode, colorName, colorCode);
+  let barcode = cleanText(p.barcode);
+  if (barcode && (await client.query('SELECT 1 FROM fabric_rolls WHERE company_id=$1 AND barcode=$2', [companyId, barcode])).rows.length) {
+    throw Object.assign(new Error(`الباركود ${barcode} مستخدم مسبقاً`), { code: 'VALIDATION' });
+  }
+  if (!barcode) barcode = await generateBarcode(client, companyId);
+  const lengthM = Math.max(0, Number(p.lengthM) || 0);
+  const ins = await client.query<{ id: string }>(
+    `INSERT INTO fabric_rolls (company_id, barcode, item_id, color_id, supplier_id, warehouse_id, location_id, length_m, width_cm, gsm,
+       calculated_weight_kg, actual_weight_kg, unit_cost, currency_code, lot_no, purchase_invoice_no, notes, created_by_user_id, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'AVAILABLE') RETURNING id`,
+    [companyId, barcode, itemId, colorId, p.supplierId, p.warehouseId, p.locationId ?? null, lengthM, p.widthCm ?? null, p.gsm ?? null,
+      calcWeight(lengthM, p.widthCm ?? null, p.gsm ?? null), p.weightKg ?? null, p.unitCostPerMeter && p.unitCostPerMeter > 0 ? p.unitCostPerMeter : null, p.currency ?? null,
+      cleanText(p.lotNo) || null, p.invoiceNo, cleanText(p.note) || null, userId]);
+  await client.query(
+    `INSERT INTO inventory_movements (company_id, roll_id, movement_type, length_delta_m, reference_type, reference_id, reference_no, notes, created_by_user_id)
+     VALUES ($1,$2,'PURCHASE_RECEIPT', NULL, 'PURCHASE_RECEIPT', $3, $4, $5, $6)`,
+    [companyId, ins.rows[0].id, p.receiptId, p.receiptNo, `استلام مخزني ${p.receiptNo}${p.invoiceNo ? ` — فاتورة ${p.invoiceNo}` : ' (معلّق)'}`, userId]);
+  return { rollId: ins.rows[0].id, barcode, itemId };
+}
+
+export interface ReceiveYarnInput {
+  receiptId: string; receiptNo: string; invoiceId: string | null; invoiceLineId: string | null; invoiceNo: string | null; supplierId: string | null; warehouseId: string; locationId?: string | null;
+  materialName: string; designCode?: string; colorName?: string; colorCode?: string; weightKg: number; lotNo?: string | null; batchNo?: string | null;
+  unitCostPerKg?: number | null; currency?: string | null; note?: string | null;
+}
+export async function receiveYarnLot(client: PoolClient, companyId: string, userId: string | null, p: ReceiveYarnInput): Promise<{ lotId: string; barcode: string }> {
+  const itemId = await findOrCreateYarnItem(client, companyId, cleanText(p.materialName), cleanText(p.designCode));
+  const colorId = await findOrCreateColor(client, companyId, cleanText(p.colorName), cleanText(p.colorCode));
+  const barcode = await generateYarnLotBarcode(companyId);
+  const ins = await client.query<{ id: string }>(
+    `INSERT INTO yarn_lots (company_id, lot_no, barcode, item_id, color_id, supplier_id, warehouse_id, location_id, weight_kg, unit_cost, currency_code, batch_no,
+       purchase_invoice_id, purchase_invoice_line_id, notes, created_by_user_id, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'AVAILABLE') RETURNING id`,
+    [companyId, cleanText(p.lotNo) || null, barcode, itemId, colorId, p.supplierId, p.warehouseId, p.locationId ?? null, p.weightKg, p.unitCostPerKg && p.unitCostPerKg > 0 ? p.unitCostPerKg : null,
+      p.currency || 'USD', cleanText(p.batchNo) || null, p.invoiceId, p.invoiceLineId, cleanText(p.note) || null, userId]);
+  await client.query(
+    `INSERT INTO yarn_lot_movements (company_id, yarn_lot_id, movement_type, weight_delta_kg, to_warehouse_id, reference_type, reference_id, notes, created_by_user_id)
+     VALUES ($1,$2,'PURCHASE_RECEIPT',$3,$4,'PURCHASE_RECEIPT',$5,$6,$7)`,
+    [companyId, ins.rows[0].id, p.weightKg, p.warehouseId, p.receiptId, `استلام خيط ${p.receiptNo}${p.invoiceNo ? ` — فاتورة ${p.invoiceNo}` : ' (معلّق)'}`, userId]);
+  return { lotId: ins.rows[0].id, barcode };
 }
