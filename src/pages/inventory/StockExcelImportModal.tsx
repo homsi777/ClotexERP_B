@@ -993,8 +993,12 @@ export const StockExcelImportModal: React.FC<Props> = ({ open, onClose, onImport
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 shrink-0">
+        <div className="px-5 py-3 border-t border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="text-xs text-slate-500 leading-snug">
+            {/* الخطأ/التقدم يظهر هنا أيضاً: على الهاتف تكون لوحة الأخطاء داخل المحتوى بعيدة عن عين المستخدم فيبدو الزر «لا يعمل» */}
+            {importError && !importResult && (
+              <div role="alert" className="mb-1 rounded-md bg-rose-50 px-2 py-1 text-sm font-bold text-rose-700">{importError}</div>
+            )}
             {importResult ? (
               <>
                 {t('footer.createdSummary', { count: fmtInt(importResult.createdRolls) })}{' '}

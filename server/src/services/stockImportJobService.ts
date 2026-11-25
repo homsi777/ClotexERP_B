@@ -300,7 +300,7 @@ export interface PreparedRow {
   wasClamped: boolean;
 }
 
-function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockImportLayout | string = 'unknown'): PreparedRow {
+export function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockImportLayout | string = 'unknown'): PreparedRow {
   const materialName = String(row.itemName || '').trim();
   if (!materialName) throw new Error(`الصف ${rowNo}: اسم الخامة مطلوب`);
 
@@ -308,8 +308,10 @@ function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockIm
   if (safeLengthM <= 0) throw new Error(`الصف ${rowNo}: الطول يجب أن يكون أكبر من صفر`);
 
   const safeUnitCost = clamp(Number(row.costPrice ?? row.price ?? 0), MAX_LEN_M);
-  const safeWidthCm = clamp(Number(row.widthCm ?? 0), MAX_WIDTH_CM);
-  const safeGsm = clamp(Number(row.gsm ?? 0), MAX_GSM);
+  // قيود الجدول: width_cm و gsm بدقة خانتين وأكبر من صفر؛ قيمة مثل 0.004 تُقرَّب إلى 0.00 فتفشل الدفعة كلها، فنقرّب هنا ونُسقط ما يصير صفراً.
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const safeWidthCm = round2(clamp(Number(row.widthCm ?? 0), MAX_WIDTH_CM));
+  const safeGsm = round2(clamp(Number(row.gsm ?? 0), MAX_GSM));
   // صنف بالوزن (وحدة kg) بلا عمود وزن صريح: الكمية بالملف هي الوزن الفعلي (مثل RASHEL بالكيلو).
   const isKgRow = String(row.unit ?? '').trim().toLowerCase() === 'kg';
   const explicitWeight = clamp(Number(row.actualWeightKg ?? 0), MAX_WEIGHT_KG);
@@ -357,8 +359,8 @@ function prepareRow(row: StockImportJobRow, rowNo: number, importLayout: StockIm
     wasClamped:
       safeLengthM !== (Number(row.quantity) || 0)
       || safeUnitCost !== (Number(row.costPrice ?? row.price ?? 0) || 0)
-      || safeWidthCm !== (Number(row.widthCm ?? 0) || 0)
-      || safeGsm !== (Number(row.gsm ?? 0) || 0)
+      || Math.abs(safeWidthCm - (Number(row.widthCm ?? 0) || 0)) > 0.0051
+      || Math.abs(safeGsm - (Number(row.gsm ?? 0) || 0)) > 0.0051
       || safeActualWeightKg !== (Number(row.actualWeightKg ?? 0) || 0),
   };
 }
