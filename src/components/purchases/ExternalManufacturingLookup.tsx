@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, Loader2 } from 'lucide-react';
 import { getExternalJob, listExternalJobs, type ExternalJob } from '../../lib/api/externalJobsApi';
 
-type Preview = { loading: boolean; error?: string; materials: Array<{ name: string; rolls: number; meters: number; remaining: number }>; prep?: string | null; desc?: string | null; notes?: string | null; supplierOrderNo?: number | null };
+type Preview = { loading: boolean; error?: string; materials: Array<{ name: string; rolls: number; meters: number; remaining: number; kg: number }>; prep?: string | null; desc?: string | null; notes?: string | null; supplierOrderNo?: number | null };
 const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function ExternalManufacturingLookup() {
@@ -22,11 +22,11 @@ export function ExternalManufacturingLookup() {
     if (previews[id]) { setPreviews((p) => ({ ...p, [id]: undefined })); return; }
     setPreviews((p) => ({ ...p, [id]: { loading: true, materials: [] } }));
     try {
-      const d = (await getExternalJob(id)).data as ExternalJob & { lines: Array<{ item_name?: string | null; sent_length_m: string | number | null; line_status: string }> };
-      const by = new Map<string, { name: string; rolls: number; meters: number; remaining: number }>();
+      const d = (await getExternalJob(id)).data as ExternalJob & { lines: Array<{ item_name?: string | null; sent_length_m: string | number | null; line_status: string; roll_weight_kg?: string | number | null }> };
+      const by = new Map<string, { name: string; rolls: number; meters: number; remaining: number; kg: number }>();
       for (const l of d.lines.filter((x) => x.line_status !== 'CANCELLED')) {
-        const k = l.item_name || '—'; const e = by.get(k) ?? { name: k, rolls: 0, meters: 0, remaining: 0 };
-        const len = Number(l.sent_length_m ?? 0); e.rolls += 1; e.meters += len; if (l.line_status === 'SENT') e.remaining += len; by.set(k, e);
+        const k = l.item_name || '—'; const e = by.get(k) ?? { name: k, rolls: 0, meters: 0, remaining: 0, kg: 0 };
+        const len = Number(l.sent_length_m ?? 0); e.rolls += 1; e.meters += len; e.kg += Number(l.roll_weight_kg ?? 0) || 0; if (l.line_status === 'SENT') e.remaining += len; by.set(k, e);
       }
       setPreviews((p) => ({ ...p, [id]: { loading: false, materials: [...by.values()], prep: d.preparation_type_name, desc: d.process_description, notes: d.notes, supplierOrderNo: d.supplier_order_no } }));
     } catch (e) { setPreviews((p) => ({ ...p, [id]: { loading: false, materials: [], error: manufacturingError(e, lifecycleT) } })); }
@@ -44,14 +44,14 @@ export function ExternalManufacturingLookup() {
         if(exact)navigate(`/inventory/create?externalJobId=${exact.id}`);else setError(lifecycleT('lifecycle.noExact'));
       }catch(err){if(generation===latest.current)setError(manufacturingError(err, lifecycleT));}
     }}/>{error&&<p role="alert" className="text-red-700">{error}</p>}
-    {jobs.map(j=>{const pv=previews[j.id];const tot=pv?.materials.reduce((a,x)=>({r:a.r+x.rolls,m:a.m+x.meters,k:a.k+x.remaining}),{r:0,m:0,k:0});return <div key={j.id} className="rounded border">
+    {jobs.map(j=>{const pv=previews[j.id];const tot=pv?.materials.reduce((a,x)=>({r:a.r+x.rolls,m:a.m+x.meters,k:a.k+x.remaining,w:a.w+x.kg}),{r:0,m:0,k:0,w:0});return <div key={j.id} className="rounded border">
       <div className="flex items-stretch"><button className="flex-1 p-2 text-right" onClick={()=>navigate(`/inventory/create?externalJobId=${j.id}`)}>{j.job_no} — {j.supplier_name} — {j.sent_date}</button>
         <button type="button" aria-label="معاينة" title="معاينة المهمة قبل اختيارها" className="border-s px-3 text-indigo-700" onClick={()=>void togglePreview(j.id)}><Eye className="h-4 w-4"/></button></div>
       {pv&&<div className="border-t bg-slate-50 p-3 text-sm space-y-2">
         {pv.loading&&<Loader2 className="h-4 w-4 animate-spin"/>}{pv.error&&<p className="text-red-700">{pv.error}</p>}
-        {!pv.loading&&!pv.error&&<><table className="w-full text-right text-xs"><thead className="text-slate-500"><tr><th className="p-1">الخامة</th><th className="p-1">أتواب</th><th className="p-1">الأمتار المسلَّمة</th><th className="p-1">المتبقي للاستلام</th></tr></thead><tbody>
-          {pv.materials.map(x=><tr key={x.name} className="border-t"><td className="p-1">{x.name}</td><td className="p-1">{x.rolls}</td><td className="p-1 font-mono">{m(x.meters)} م</td><td className="p-1 font-mono">{m(x.remaining)} م</td></tr>)}
-          {tot&&<tr className="border-t font-bold"><td className="p-1">المجموع الشامل</td><td className="p-1">{tot.r}</td><td className="p-1 font-mono">{m(tot.m)} م</td><td className="p-1 font-mono">{m(tot.k)} م</td></tr>}</tbody></table>
+        {!pv.loading&&!pv.error&&<><table className="w-full text-right text-xs"><thead className="text-slate-500"><tr><th className="p-1">الخامة</th><th className="p-1">أتواب</th><th className="p-1">الأمتار المسلَّمة</th><th className="p-1">الوزن (كغ)</th><th className="p-1">المتبقي للاستلام</th></tr></thead><tbody>
+          {pv.materials.map(x=><tr key={x.name} className="border-t"><td className="p-1">{x.name}</td><td className="p-1">{x.rolls}</td><td className="p-1 font-mono">{m(x.meters)} م</td><td className="p-1 font-mono">{x.kg>0?m(x.kg):'—'}</td><td className="p-1 font-mono">{m(x.remaining)} م</td></tr>)}
+          {tot&&<tr className="border-t font-bold"><td className="p-1">المجموع الشامل</td><td className="p-1">{tot.r}</td><td className="p-1 font-mono">{m(tot.m)} م</td><td className="p-1 font-mono">{tot.w>0?m(tot.w):'—'}</td><td className="p-1 font-mono">{m(tot.k)} م</td></tr>}</tbody></table>
           {(pv.prep||pv.desc||pv.notes)&&<div className="text-xs text-slate-700"><b>طلب التحضير:</b> {[pv.prep,pv.desc,pv.notes].filter(Boolean).join(' — ')}</div>}</>}
       </div>}</div>;})}
     <div className="flex gap-4"><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>{lifecycleT('lifecycle.prevPage')}</button><span>{page}</span><button disabled={page*30>=total} onClick={()=>setPage(p=>p+1)}>{lifecycleT('lifecycle.nextPage')}</button></div>

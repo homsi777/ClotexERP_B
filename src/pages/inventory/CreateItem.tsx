@@ -286,6 +286,8 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
   const [length, setLength] = useState<number | ''>('');
   const [weight, setWeight] = useState<number | ''>('');
   const [weightMultiplier, setWeightMultiplier] = useState<number | ''>(150);
+  /** طريقة إدخال الكمية: بالطول (الافتراضي) أو بالوزن بالكيلو (الطول يُحسب من الوزن والعرض والوزن النوعي gsm). */
+  const [qtyBasis, setQtyBasis] = useState<'length' | 'weight'>('length');
   
   const [widthUnit, setWidthUnit] = useState<'inch' | 'cm'>('cm');
   const [rollWidth, setRollWidth] = useState<number | ''>(150);
@@ -480,6 +482,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
   };
 
   useEffect(() => {
+    if (qtyBasis === 'weight') return;
     if (length !== '' && weightMultiplier !== '' && rollWidth !== '') {
       const lengthInMeters = lengthType === 'yard' ? Number(length) * 0.9144 : Number(length);
       const widthInMeters = widthUnit === 'inch' ? Number(rollWidth) * 0.0254 : Number(rollWidth) / 100;
@@ -489,7 +492,17 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     } else if (length === '') {
       setWeight('');
     }
-  }, [length, weightMultiplier, rollWidth, widthUnit, lengthType]);
+  }, [length, weightMultiplier, rollWidth, widthUnit, lengthType, qtyBasis]);
+
+  // الإدخال بالوزن: الطول = الوزن(كغ) × 1000 ÷ (العرض بالمتر × gsm)؛ بلا عرض/gsm لا يمكن اشتقاق الطول.
+  useEffect(() => {
+    if (qtyBasis !== 'weight') return;
+    const w = Number(weight), g = Number(weightMultiplier), rw = Number(rollWidth);
+    if (!(w > 0) || !(g > 0) || !(rw > 0)) { setLength(''); return; }
+    const widthM = widthUnit === 'inch' ? rw * 0.0254 : rw / 100;
+    const lenM = (w * 1000) / (widthM * g);
+    setLength(parseFloat((lengthType === 'yard' ? lenM / 0.9144 : lenM).toFixed(2)));
+  }, [qtyBasis, weight, weightMultiplier, rollWidth, widthUnit, lengthType]);
 
   const lengthEquivalentText = useMemo(() => {
     const value = Number(length);
@@ -777,6 +790,10 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     setSaveError('');
     setPrintWarning('');
 
+    if (qtyBasis === 'weight' && !(Number(weight) > 0 && Number(rollWidth) > 0 && Number(weightMultiplier) > 0)) {
+      setSaveError('الإدخال بالوزن يتطلب الوزن بالكيلو وعرض التوب والوزن النوعي (gsm) لاشتقاق الطول.');
+      return;
+    }
     if (isReceipt) {
       if (!name.trim() || !catL1Id || !catL2Id) { setSaveError(t('errors.selectNameAndCode')); return; }
       if (length === '' || !(Number(length) > 0)) { setSaveError(t('errors.lengthRequired')); return; }
@@ -1348,6 +1365,12 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
             
             {/* Right Side Cards (RTL) / Quick inputs */}
             <div className="lg:w-1/3 flex flex-col gap-6 order-1">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 text-sm font-bold" role="group" aria-label="طريقة إدخال الكمية">
+                <span className="text-slate-500 px-1">الإدخال بـ</span>
+                <button type="button" onClick={() => setQtyBasis('length')} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'length' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الطول</button>
+                <button type="button" onClick={() => setQtyBasis('weight')} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'weight' ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الوزن (كغ)</button>
+              </div>
+              {qtyBasis === 'weight' && <p className="-mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">أدخل الوزن بالكيلو؛ يُحسب الطول تلقائياً من العرض والوزن النوعي (gsm) ويُحفظ الوزن المُدخَل كوزن فعلي للتوب.</p>}
               <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-sm">
                  <label className="block text-lg font-bold text-indigo-900 mb-4">{t('lengthCard.title', { unit: lengthType === 'yard' ? t('units.yard') : t('units.meter') })}</label>
                   <input 
@@ -1355,6 +1378,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                     ref={lengthInputRef}
                     type="number" 
                     value={length}
+                    readOnly={qtyBasis === 'weight'}
                     onChange={e => setLength(e.target.value === '' ? '' : Number(e.target.value))}
                     onKeyDown={handleKeyDown}
                     onWheel={e => e.currentTarget.blur()}

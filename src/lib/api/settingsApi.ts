@@ -30,6 +30,9 @@ export interface ApiUser {
   perm_mode?: 'ROLE' | 'CUSTOM';
   created_at: string;
   updated_at?: string;
+  blocked?: boolean;
+  block_reason?: string | null;
+  deleted?: boolean;
 }
 
 export async function getSystemSettings(): Promise<SystemSettingsMap> {
@@ -101,8 +104,11 @@ export async function saveRolePermissions(
   });
 }
 
-export async function listSystemUsers(companyId?: string): Promise<ApiUser[]> {
-  const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+export async function listSystemUsers(companyId?: string, includeDeleted = false): Promise<ApiUser[]> {
+  const p = new URLSearchParams();
+  if (companyId) p.set('companyId', companyId);
+  if (includeDeleted) p.set('includeDeleted', '1');
+  const qs = p.toString() ? `?${p}` : '';
   const res = await apiFetch<{ ok: boolean; data: ApiUser[] }>(`/api/system/users${qs}`);
   return res.data;
 }
@@ -263,4 +269,28 @@ export async function getUserWarehouses(userId: string) {
 }
 export async function saveUserWarehouses(userId: string, warehouseIds: string[]) {
   return (await apiFetch<{ ok: boolean; data: { warehouseIds: string[] } }>(`/api/system/users/${userId}/warehouses`, { method: 'PUT', body: JSON.stringify({ warehouseIds }) })).data.warehouseIds;
+}
+
+// ── حظر/حذف المستخدمين وحالة الاتصال وسجل الدخول والخروج ──
+export const blockSystemUser = (id: string, reason?: string) => apiFetch<{ ok: boolean }>(`/api/system/users/${id}/block`, { method: 'POST', body: JSON.stringify({ reason: reason || undefined }) });
+export const unblockSystemUser = (id: string) => apiFetch<{ ok: boolean }>(`/api/system/users/${id}/unblock`, { method: 'POST' });
+export const deleteSystemUser = (id: string) => apiFetch<{ ok: boolean }>(`/api/system/users/${id}`, { method: 'DELETE' });
+export const restoreSystemUser = (id: string) => apiFetch<{ ok: boolean }>(`/api/system/users/${id}/restore`, { method: 'POST' });
+
+export interface PresenceRowDto { id: string; username: string; fullName: string | null; role: string; isActive: boolean; blocked: boolean; blockReason: string | null; deleted: boolean; online: boolean; lastLoginAt: string | null; lastSeenAt: string | null; sessionsInPeriod: number; secondsInPeriod: number }
+export async function fetchUsersPresence(p: { from?: string; to?: string; includeDeleted?: boolean } = {}): Promise<PresenceRowDto[]> {
+  const q = new URLSearchParams();
+  if (p.from) q.set('from', p.from);
+  if (p.to) q.set('to', p.to);
+  if (p.includeDeleted) q.set('includeDeleted', '1');
+  return (await apiFetch<{ ok: boolean; data: PresenceRowDto[] }>(`/api/system/users-presence${q.toString() ? `?${q}` : ''}`)).data;
+}
+export interface SessionLogRowDto { id: string; userId: string; username: string; fullName: string | null; ip: string | null; platform: string | null; connectedAt: string; lastSeenAt: string; endedAt: string | null; endReason: string | null; durationSec: number; live: boolean }
+export async function fetchSessionLog(p: { userId?: string; from?: string; to?: string; limit?: number } = {}): Promise<SessionLogRowDto[]> {
+  const q = new URLSearchParams();
+  if (p.userId) q.set('userId', p.userId);
+  if (p.from) q.set('from', p.from);
+  if (p.to) q.set('to', p.to);
+  if (p.limit) q.set('limit', String(p.limit));
+  return (await apiFetch<{ ok: boolean; data: SessionLogRowDto[] }>(`/api/system/session-log${q.toString() ? `?${q}` : ''}`)).data;
 }

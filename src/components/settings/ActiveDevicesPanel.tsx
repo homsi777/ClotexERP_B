@@ -7,6 +7,7 @@ import {
   type ActiveSessionDto,
 } from '../../lib/api/settingsApi';
 import { useToast } from '../NonBlockingToast';
+import { SessionLogDialog, UserActivityPanel } from './UserActivityPanel';
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -49,7 +50,8 @@ function platformBadgeClass(code: ActiveSessionDto['clientPlatform']): string {
   }
 }
 
-export const ActiveDevicesPanel: React.FC = () => {
+export const ActiveDevicesPanel: React.FC<{ selfId?: string }> = ({ selfId }) => {
+  const [view, setView] = useState<'devices' | 'users' | 'log'>('devices');
   const { t } = useTranslation('settings');
   const { showToast } = useToast();
   const [rows, setRows] = useState<ActiveSessionDto[]>([]);
@@ -110,8 +112,19 @@ export const ActiveDevicesPanel: React.FC = () => {
     }
   };
 
+  const tabs = (
+    <div className="flex flex-wrap gap-2" dir="rtl">
+      {([['devices', 'الأجهزة المتصلة الآن'], ['users', 'كل المستخدمين (نشط / غير نشط / حظر / حذف)'], ['log', 'سجل الدخول والخروج']] as const).map(([k, l]) => (
+        <button key={k} type="button" onClick={() => setView(k)} className={`rounded-full border px-4 py-1.5 text-sm font-black ${view === k ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-700'}`}>{l}</button>
+      ))}
+    </div>
+  );
+  if (view === 'users') return <div className="space-y-4">{tabs}<UserActivityPanel selfId={selfId} /></div>;
+  if (view === 'log') return <div className="space-y-4">{tabs}<SessionLogDialog /></div>;
+
   return (
     <div className="space-y-4" dir="rtl">
+      {tabs}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-xl font-black text-[var(--text-heading)]">{t('activeDevices.title')}</h3>

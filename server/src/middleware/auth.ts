@@ -94,11 +94,19 @@ export async function authenticateRequest(request: FastifyRequest, reply: Fastif
       is_platform_admin: boolean;
       role: string;
       perm_mode: string;
+      blocked_at: string | null;
+      deleted_at: string | null;
     }>(
-      'SELECT is_active, full_name, company_id, is_platform_admin, role, perm_mode FROM users WHERE id = $1',
+      'SELECT is_active, full_name, company_id, is_platform_admin, role, perm_mode, blocked_at, deleted_at FROM users WHERE id = $1',
       [payload.sub],
     );
-    if (userCheck.rows.length === 0 || !userCheck.rows[0].is_active) {
+    if (userCheck.rows.length === 0 || userCheck.rows[0].deleted_at) {
+      return sendError(reply, 401, ArabicErrors.userInactive, 'UNAUTHORIZED');
+    }
+    if (userCheck.rows[0].blocked_at) {
+      return sendError(reply, 401, 'هذا الحساب محظور. راجع مدير النظام.', 'USER_BLOCKED');
+    }
+    if (!userCheck.rows[0].is_active) {
       return sendError(reply, 401, ArabicErrors.userInactive, 'UNAUTHORIZED');
     }
 

@@ -8,11 +8,13 @@ import {
   authenticateRequest,
   signAuthToken,
   type JwtPayload,
+  verifyAuthToken,
 } from '../middleware/auth.js';
 import { runPostActivationBootstrap } from '../services/postActivationBootstrap.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { sendError } from '../middleware/errorHandler.js';
-import { touchActiveSession } from '../services/activeSessionsService.js';
+import { buildSessionKey, revokeActiveSession, touchActiveSession } from '../services/activeSessionsService.js';
+import { endSession } from '../services/sessionLogService.js';
 import { clientIp } from '../utils/clientIp.js';
 import { logPlatformAction } from '../services/platformAuditService.js';
 
@@ -66,10 +68,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         role: string;
         is_active: boolean;
         is_platform_admin: boolean;
+        blocked_at: string | null;
       }>(
-        `SELECT id, company_id, username, full_name, password_hash, role, is_active, is_platform_admin
+        `SELECT id, company_id, username, full_name, password_hash, role, is_active, is_platform_admin, blocked_at
          FROM users
-         WHERE lower(trim(username)) = lower(trim($1::text))`,
+         WHERE lower(trim(username)) = lower(trim($1::text)) AND deleted_at IS NULL`,
         [username],
       );
 
@@ -109,6 +112,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       return sendError(reply, 401, ArabicErrors.invalidCredentials, 'AUTH');
+    }
+    // الحظر يُكشف بعد التحقق من كلمة المرور فقط (لا نكشف حالة الحساب لمن لا يعرفها)
+    if (user.blocked_at) {
+      return sendError(reply, 401, 'هذا الحساب محظور. راجع مدير النظام.', 'USER_BLOCKED');
     }
 
     // اختيار الفرع (سوريا/تركيا) بشاشة الدخول — تحقق إضافي أن المستخدم فعلاً
@@ -166,7 +173,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.post('/logout', async (_request, reply) => {
+  // تسجيل الخروج: يُنهي الجلسة ويسجّل وقت الخروج (لو أُرسل التوكن؛ وإلا يبقى سلوكه القديم بلا أثر).
+  app.post('/logout', async (request, reply) => {
+    try {
+      const token = String(request.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      if (token) {
+        const p = verifyAuthToken(token);
+        revokeActiveSession(buildSessionKey(p.sub, token), p.companyId, 'LOGOUT');
+        await endSession(getPool(), p.companyId, buildSessionKey(p.sub, token), 'LOGOUT');
+      }
+    } catch { /* توكن منتهٍ أو غير صالح: لا شيء لإنهائه */ }
     return reply.send({ ok: true });
   });
 

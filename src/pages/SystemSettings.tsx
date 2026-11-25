@@ -42,6 +42,9 @@ import {
   saveSystemSetting,
   testTelegramBot,
   updateSystemUser,
+  blockSystemUser,
+  unblockSystemUser,
+  deleteSystemUser,
   type ApiPermission,
   type ApiRole,
   type ApiRolePermission,
@@ -965,7 +968,7 @@ export const SystemSettings = () => {
                           <tr key={user.id} className="border-t border-[var(--border-subtle)]">
                             <td className="p-3 font-bold text-[var(--text-heading)]">{user.full_name || user.username}<div className="text-xs text-[var(--text-muted)] font-mono">{user.username}</div></td>
                             <td className="p-3 text-[var(--text-heading)]">{roles.find((role) => role.code === user.role)?.name || user.role}</td>
-                            <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${user.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{user.is_active ? t('users.statusActive') : t('users.statusStopped')}</span></td>
+                            <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${user.blocked ? 'bg-rose-100 text-rose-700' : user.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{user.blocked ? 'محظور' : user.is_active ? t('users.statusActive') : t('users.statusStopped')}</span>{user.blocked && user.block_reason && <div className="text-[11px] text-rose-700">{user.block_reason}</div>}</td>
                             <td className="p-3">
                               <button
                                 type="button"
@@ -976,6 +979,28 @@ export const SystemSettings = () => {
                                 <Pencil className="w-3.5 h-3.5" />
                                 {t('users.edit')}
                               </button>
+                              {user.id !== currentUser?.id && (
+                                <>
+                                  <button type="button" className={`ms-1.5 inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold ${user.blocked ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}
+                                    onClick={async () => {
+                                      try {
+                                        if (user.blocked) { if (!window.confirm(`إلغاء حظر «${user.username}»؟`)) return; await unblockSystemUser(user.id); }
+                                        else { const reason = window.prompt(`سبب حظر «${user.username}» (اختياري)`); if (reason === null) return; await blockSystemUser(user.id, reason); }
+                                        await loadUsers(selectedBranchId || undefined);
+                                      } catch (e) { showToast({ type: 'error', message: e instanceof Error ? e.message : 'تعذر التنفيذ' }); }
+                                    }}>
+                                    {user.blocked ? 'إلغاء الحظر' : 'حظر'}
+                                  </button>
+                                  <button type="button" className="ms-1.5 inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700"
+                                    onClick={async () => {
+                                      if (!window.confirm(`حذف «${user.username}»؟ يُخفى ويُمنع من الدخول وتبقى كل سجلاته سليمة، ويمكن استعادته من «الأجهزة النشطة ← كل المستخدمين».`)) return;
+                                      try { await deleteSystemUser(user.id); await loadUsers(selectedBranchId || undefined); }
+                                      catch (e) { showToast({ type: 'error', message: e instanceof Error ? e.message : 'تعذر التنفيذ' }); }
+                                    }}>
+                                    حذف
+                                  </button>
+                                </>
+                              )}
                               {user.role !== 'admin' && (
                                 <button
                                   type="button"
@@ -1029,7 +1054,7 @@ export const SystemSettings = () => {
 
           {activeSection === 'activeDevices' && (
             <div className="bg-[var(--surface-header)] border border-[var(--border-default)] rounded-xl shadow-sm p-6 transition-colors">
-              <ActiveDevicesPanel />
+              <ActiveDevicesPanel selfId={currentUser?.id} />
             </div>
           )}
 

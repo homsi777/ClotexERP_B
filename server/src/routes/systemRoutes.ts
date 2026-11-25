@@ -2,7 +2,7 @@ import { ACTION_LABELS, PERMISSION_GROUPS, PERMISSION_MODULES } from '../service
 import { listUserWarehouses, saveUserWarehouses } from '../services/warehouseAccess.js';
 import { canGrantPermissions, deletePermissionTemplate, grantedMatrixCodes, listPermissionTemplates, savePermissionTemplate, saveUserPermissions } from '../services/userPermissionService.js';
 import bcrypt from 'bcryptjs';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import https from 'node:https';
 import { z } from 'zod';
 import { getPool } from '../db/pool.js';
@@ -10,7 +10,8 @@ import { authenticateRequest, requirePlatformAdmin } from '../middleware/auth.js
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
 import { purgeBusinessData } from '../services/purgeBusinessDataService.js';
-import { listActiveSessions, revokeActiveSession, buildSessionKey } from '../services/activeSessionsService.js';
+import { listActiveSessions, revokeActiveSession, revokeUserSessions, buildSessionKey } from '../services/activeSessionsService.js';
+import { endUserSessions, listPresence, listSessionLog } from '../services/sessionLogService.js';
 import {
   createDatabaseBackupFile,
   safeUnlink,
@@ -340,12 +341,74 @@ export const systemRoutes: FastifyPluginAsync = async (app) => {
     // لمدير المنصة فقط: عرض مستخدمي حساب آخر (فرع) دون تبديل الجلسة النشطة فعلياً.
     const targetCompanyId = requirePlatformAdmin(req.user) && q.companyId ? q.companyId : companyId;
 
+    // الافتراضي: كل النشط والموقوف والمحظور؛ المحذوفون (حذف منطقي) يظهرون عند طلبهم فقط.
+    const includeDeleted = (req.query as { includeDeleted?: string }).includeDeleted === '1';
     const rows = await getPool().query(
-      `SELECT id, username, full_name, role, is_active, notes, perm_mode, created_at, updated_at
-       FROM users WHERE company_id=$1 ORDER BY created_at DESC`,
-      [targetCompanyId],
+      `SELECT id, username, full_name, role, is_active, notes, perm_mode, created_at, updated_at,
+              (blocked_at IS NOT NULL) AS blocked, blocked_at, block_reason, (deleted_at IS NOT NULL) AS deleted, deleted_at
+       FROM users WHERE company_id=$1 AND ($2 OR deleted_at IS NULL) ORDER BY deleted_at NULLS FIRST, created_at DESC`,
+      [targetCompanyId, includeDeleted],
     );
     return reply.send({ ok: true, data: rows.rows });
+  });
+
+  // ───────── حظر/إلغاء حظر/حذف/استعادة المستخدمين + حالة الاتصال وسجل الجلسات ─────────
+  const guardTarget = async (req: FastifyRequest, reply: FastifyReply, allowSelf = false) => {
+    if (!requirePermission(req.user, 'users.manage')) { sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN'); return null; }
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) { sendError(reply, 400, ArabicErrors.validation, 'VALIDATION'); return null; }
+    const isPlatform = requirePlatformAdmin(req.user);
+    const row = (await getPool().query<{ id: string; company_id: string; role: string; is_platform_admin: boolean; deleted_at: string | null }>(
+      'SELECT id, company_id, role, is_platform_admin, deleted_at FROM users WHERE id=$1 AND ($2 OR company_id=$3)', [id, isPlatform, req.user!.companyId])).rows[0];
+    if (!row) { sendError(reply, 404, 'المستخدم غير موجود', 'NOT_FOUND'); return null; }
+    if (!allowSelf && row.id === req.user!.sub) { sendError(reply, 400, 'لا يمكنك تنفيذ هذا الإجراء على حسابك أنت', 'VALIDATION'); return null; }
+    // مدير المنصة وحسابات «مدير النظام» لا يُحظر/يُحذف إلا بيد مدير نظام (أو مالك المنصة للأول)
+    if (row.is_platform_admin && !isPlatform) { sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN'); return null; }
+    if (row.role === 'admin' && req.user!.role !== 'admin' && !isPlatform) { sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN'); return null; }
+    return row;
+  };
+  app.post('/users/:id/block', { preHandler: authenticateRequest }, async (req, reply) => {
+    const row = await guardTarget(req, reply); if (!row) return;
+    const parsed = z.object({ reason: z.string().trim().max(300).optional() }).strict().safeParse(req.body ?? {});
+    if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    await getPool().query('UPDATE users SET blocked_at=now(), blocked_by_user_id=$2, block_reason=$3, updated_at=now() WHERE id=$1', [row.id, req.user!.sub, parsed.data.reason || null]);
+    revokeUserSessions(row.id, row.company_id);
+    await endUserSessions(getPool(), row.company_id, row.id, 'BLOCKED');
+    return reply.send({ ok: true });
+  });
+  app.post('/users/:id/unblock', { preHandler: authenticateRequest }, async (req, reply) => {
+    const row = await guardTarget(req, reply); if (!row) return;
+    await getPool().query('UPDATE users SET blocked_at=NULL, blocked_by_user_id=NULL, block_reason=NULL, updated_at=now() WHERE id=$1', [row.id]);
+    return reply.send({ ok: true });
+  });
+  // «حذف» = حذف منطقي: يخفي المستخدم ويمنع دخوله ويحفظ كل تاريخه (فواتير/سندات/سجلات) سليماً، ويمكن استعادته.
+  app.delete('/users/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+    const row = await guardTarget(req, reply); if (!row) return;
+    await getPool().query('UPDATE users SET deleted_at=now(), deleted_by_user_id=$2, is_active=false, updated_at=now() WHERE id=$1', [row.id, req.user!.sub]);
+    revokeUserSessions(row.id, row.company_id);
+    await endUserSessions(getPool(), row.company_id, row.id, 'DELETED');
+    return reply.send({ ok: true });
+  });
+  app.post('/users/:id/restore', { preHandler: authenticateRequest }, async (req, reply) => {
+    const row = await guardTarget(req, reply); if (!row) return;
+    if (!row.deleted_at) return sendError(reply, 400, 'المستخدم غير محذوف', 'VALIDATION');
+    const clash = await getPool().query('SELECT 1 FROM users u WHERE u.deleted_at IS NULL AND u.username = (SELECT username FROM users WHERE id=$1)', [row.id]);
+    if (clash.rows.length) return sendError(reply, 409, 'اسم المستخدم صار مستخدماً لحساب آخر؛ غيّره أولاً', 'DUPLICATE');
+    await getPool().query('UPDATE users SET deleted_at=NULL, deleted_by_user_id=NULL, is_active=true, updated_at=now() WHERE id=$1', [row.id]);
+    return reply.send({ ok: true });
+  });
+  const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
+  app.get('/users-presence', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'settings.manage') && !requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const q = z.object({ from: dateOnly, to: dateOnly, includeDeleted: z.enum(['0', '1']).optional() }).safeParse(req.query);
+    if (!q.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    return reply.send({ ok: true, data: await listPresence(getPool(), req.user!.companyId, { from: q.data.from, to: q.data.to, includeDeleted: q.data.includeDeleted === '1' }) });
+  });
+  app.get('/session-log', { preHandler: authenticateRequest }, async (req, reply) => {
+    if (!requirePermission(req.user, 'settings.manage') && !requirePermission(req.user, 'users.manage')) return sendError(reply, 403, ArabicErrors.forbidden, 'FORBIDDEN');
+    const q = z.object({ userId: z.string().uuid().optional(), from: dateOnly, to: dateOnly, limit: z.coerce.number().int().min(1).max(1000).optional() }).safeParse(req.query);
+    if (!q.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    return reply.send({ ok: true, data: await listSessionLog(getPool(), req.user!.companyId, q.data) });
   });
 
   app.post('/users', { preHandler: authenticateRequest }, async (req, reply) => {
