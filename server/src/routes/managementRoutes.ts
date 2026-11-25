@@ -12,10 +12,12 @@ import { resolvePeriod } from '../services/managementMetricsService.js';
 import { administrativeExceptions, listUsersOversight, permissionChangeLog } from '../services/oversightService.js';
 
 /** من يرى لوحة إدارة الفرع: مدير النظام/المدير/المحاسب (وضع الدور)، أو من مُنح «عرض» وحدة الإدارة (وضع مخصّص يطبّقه الحارس المركزي). */
-export function canSeeManagement(user: { role: string; customPerms?: boolean } | undefined): boolean {
+export function canSeeManagement(user: { role: string; customPerms?: boolean; permissions?: string[] } | undefined): boolean {
   if (!user) return false;
-  if (user.customPerms) return true; // الحارس المركزي تحقق من المصفوفة
-  return ['admin', 'manager', 'accountant'].includes(user.role);
+  if (user.role === 'admin') return true;
+  if (user.customPerms) return true; // الحارس المركزي تحقق من مصفوفة «لوحة إدارة الفرع»
+  // وضع الدور: لا أحد غير المدير يراها تلقائياً؛ يمنحها المالك صراحةً بصلاحية management.view
+  return (user.permissions ?? []).includes('management.view');
 }
 
 const periodObj = (q: Record<string, string>) => resolvePeriod((q.period as 'month') || 'month', { from: q.from, to: q.to });

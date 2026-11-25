@@ -65,7 +65,7 @@ export const PERMISSION_GROUPS: { code: string; name: string }[] = [
 ];
 
 export const PERMISSION_MODULES: PermissionModule[] = [
-  { code: 'management', name: 'لوحة إدارة الفرع ومركز التنبيهات', group: 'general', financial: true, actions: ['view', 'edit'], prefixes: ['/api/management'] },
+  { code: 'management', name: 'لوحة إدارة الفرع ومركز التنبيهات', group: 'general', financial: true, actions: ['view', 'edit'], prefixes: ['/api/management'], legacyAny: ['management.view'], legacy: { view: W('management.view'), edit: W('management.view') } },
   { code: 'dashboard', name: 'لوحة التحكم', group: 'general', actions: ['view'], prefixes: [], legacy: { view: W('dashboard.view') } },
   { code: 'reports', name: 'التقارير', group: 'general', financial: true, actions: ['view', 'print', 'export'], prefixes: ['/api/reports'], openRoots: ['/api/reports/dashboard-summary'], legacy: { view: W('reports.view') } },
 

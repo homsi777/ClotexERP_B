@@ -47,6 +47,7 @@ test('management v2: analytics, preferences, optional location alert, owner-side
     const call = (method: 'GET' | 'PUT' | 'POST' | 'DELETE', path: string, token: string, payload?: unknown) => app.inject({ method, url: path, headers: { authorization: `Bearer ${token}` }, payload: payload as never });
     const tA = tok(mgrA, a, 'mgrA', 'admin'), tB = tok(mgrB, b, 'mgrB', 'admin'), tOwner = tok(owner, a, 'owner', 'admin', true), tAcc = tok(acc, a, 'acc', 'accountant');
 
+    const tAccGranted = signAuthToken({ sub: acc, companyId: a, username: 'acc', role: 'accountant', permissions: ['management.view'] });
     const wh = randomUUID(), item = randomUUID(), color = randomUUID(), r1 = randomUUID(), r2 = randomUUID(), r3 = randomUUID();
     await q("INSERT INTO warehouses(id,company_id,code,name) VALUES ($1,$2,'W','المستودع الرئيسي')", [wh, a]);
     await q("INSERT INTO fabric_items(id,company_id,internal_code,name) VALUES ($1,$2,'I1','قماش')", [item, a]);
@@ -98,7 +99,7 @@ test('management v2: analytics, preferences, optional location alert, owner-side
     assert.equal((await call('PUT', '/api/management/preferences', tA, { hidden: ['inventory.slow'], order: ['sales', 'cash'], defaultTab: 'alerts', defaultPeriod: 'week' })).statusCode, 200);
     assert.equal((await call('PUT', '/api/management/preferences', tA, { hidden: [], isAdmin: true })).statusCode, 400, 'لا حقول غريبة (لا تعديل صلاحيات)');
     assert.deepEqual((await call('GET', '/api/management/preferences', tA)).json().data.hidden, ['inventory.slow']);
-    assert.equal((await call('GET', '/api/management/preferences', tAcc)).json().data, null, 'تخصيص كل مستخدم منفصل');
+    assert.equal((await call('GET', '/api/management/preferences', tAccGranted)).json().data, null, 'تخصيص كل مستخدم منفصل');
     assert.equal((await call('DELETE', '/api/management/preferences', tA)).statusCode, 200);
     assert.equal((await call('GET', '/api/management/preferences', tA)).json().data, null, 'استعادة الافتراضي');
     assert.equal((await call('PUT', '/api/platform/preferences', tOwner, { hidden: ['x'], defaultTab: 'cost' })).statusCode, 200);
@@ -153,6 +154,14 @@ test('management v2: analytics, preferences, optional location alert, owner-side
     assert.deepEqual(p.breakdown.map((r) => r.label).sort(), ['R1', 'R5']);
     assert.ok(p.notes[0].includes('تقديرية'), 'توضيح أنها ليست صافي الربح المحاسبي');
     for (const by of ['item', 'color', 'customer', 'invoice', 'creator']) assert.equal((await call('GET', `/api/platform/admin-cost/profitability?branchId=${a}&period=month&by=${by}`, tOwner)).statusCode, 200, by);
+
+    // ── لوحة إدارة الفرع صلاحية يمنحها المالك: المحاسب بلا منح مرفوض، وبمنح management.view مقبول ──
+    assert.equal((await call('GET', '/api/management/overview?period=month', tAcc)).statusCode, 403, 'الدور وحده لا يكفي');
+    assert.equal((await call('GET', '/api/management/overview?period=month', tAccGranted)).statusCode, 200, 'بعد منح الصلاحية');
+    assert.equal((await call('GET', '/api/management/alerts', tAcc)).statusCode, 403);
+    // ── المبيعات بالمتر في التقرير: المتر والياردة محوّلة والكيلو منفصل ──
+    const ov = (await call('GET', '/api/management/overview?period=month', tA)).json().data.branches[0].metrics.sales.quantity as { current: { meters: number; kg: number; invoices: number } };
+    assert.deepEqual([ov.current.meters, ov.current.kg, ov.current.invoices], [40, 0, 3], '10 + 20 + 10 متراً في 3 فواتير معتمدة');
     await app.close();
   } finally {
     setPoolOverrideForTests(null);

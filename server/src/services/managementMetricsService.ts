@@ -7,6 +7,7 @@ type Db = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 export type PeriodKind = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom';
 export interface Period { kind: PeriodKind; from: string; to: string; prevFrom: string; prevTo: string; label: string }
 export interface Money { currency: string; total: number; count?: number }
+export interface SoldQty { meters: number; kg: number; invoices: number }
 
 const AR_LABEL: Record<PeriodKind, string> = { today: 'اليوم', yesterday: 'أمس', week: 'هذا الأسبوع', month: 'هذا الشهر', year: 'هذه السنة', custom: 'فترة مخصصة' };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -33,7 +34,8 @@ export function resolvePeriod(kind: PeriodKind, opts: { from?: string; to?: stri
 
 export interface BranchMetrics {
   period: Period;
-  sales: { current: Money[]; previous: Money[]; topCustomers: Array<{ name: string; currency: string; total: number }>; byItem: Array<{ name: string; currency: string; total: number; meters: number }>; byColor: Array<{ name: string; currency: string; total: number }>; byCreator: Array<{ name: string; currency: string; total: number; count: number }> };
+  /** كميات المبيعات المعتمدة: أمتار (المتر + الياردة محوّلة) والكيلو منفصلان، ولا يُجمعان. */
+  sales: { quantity: { current: SoldQty; previous: SoldQty }; current: Money[]; previous: Money[]; topCustomers: Array<{ name: string; currency: string; total: number }>; byItem: Array<{ name: string; currency: string; total: number; meters: number }>; byColor: Array<{ name: string; currency: string; total: number }>; byCreator: Array<{ name: string; currency: string; total: number; count: number }> };
   purchases: { current: Money[]; previous: Money[] };
   inactiveCustomers: { thresholdDays: number; count: number; items: Array<{ id: string; name: string; lastPurchase: string }> };
   orders: { inPreparation: number; awaitingDelivery: number; open: number; late: number };
@@ -76,6 +78,14 @@ export async function getBranchMetrics(db: Db, companyId: string, period: Period
     `SELECT currency_code AS currency, COALESCE(sum(total_amount),0)::text AS total, count(*)::text AS n FROM purchase_invoices
       WHERE company_id=$1 AND document_status='CONFIRMED' AND invoice_date BETWEEN $2::date AND $3::date GROUP BY 1 ORDER BY 1`, [f, t]);
 
+  const soldQty = async (f: string, t: string): Promise<SoldQty> => {
+    const r = await one<{ m: string; kg: string; n: string }>(
+      `SELECT COALESCE(sum(CASE l.unit WHEN 'meter' THEN l.quantity WHEN 'yard' THEN l.quantity * 0.9144 END),0)::text AS m,
+              COALESCE(sum(l.quantity) FILTER (WHERE l.unit='kg'),0)::text AS kg, count(DISTINCT si.id)::text AS n
+         FROM sales_invoice_lines l JOIN sales_invoices si ON si.id=l.invoice_id AND si.company_id=l.company_id
+        WHERE si.company_id=$1 AND si.document_status='CONFIRMED' AND si.invoice_date BETWEEN $2::date AND $3::date`, [f, t]);
+    return { meters: Math.round(Number(r.m) * 100) / 100, kg: Math.round(Number(r.kg) * 100) / 100, invoices: Number(r.n) };
+  };
   const topCust = await q<{ name: string; currency: string; total: string }>(
     `SELECT c.name, si.currency_code AS currency, sum(si.total_amount)::text AS total FROM sales_invoices si JOIN customers c ON c.id=si.customer_id AND c.company_id=si.company_id
       WHERE si.company_id=$1 AND si.document_status='CONFIRMED' AND si.invoice_date BETWEEN $2::date AND $3::date GROUP BY c.name, si.currency_code ORDER BY sum(si.total_amount) DESC LIMIT 10`, [from, to]);
@@ -152,6 +162,7 @@ export async function getBranchMetrics(db: Db, companyId: string, period: Period
   return {
     period,
     sales: {
+      quantity: { current: await soldQty(from, to), previous: await soldQty(prevFrom, prevTo) },
       current: m(await salesBy(from, to)), previous: m(await salesBy(prevFrom, prevTo)),
       topCustomers: topCust.map((r) => ({ name: r.name, currency: r.currency, total: Number(r.total) })),
       byItem: byItem.map((r) => ({ name: r.name, currency: r.currency, total: Number(r.total), meters: Number(r.meters) })),

@@ -2,6 +2,7 @@
 
 export const PERMISSIONS: { code: string; name: string; category: string }[] = [
   { code: 'dashboard.view', name: 'عرض لوحة التحكم', category: 'dashboard' },
+  { code: 'management.view', name: 'عرض لوحة إدارة الفرع ومركز التنبيهات', category: 'general' },
   { code: 'inventory.view', name: 'عرض المخزون', category: 'inventory' },
   { code: 'inventory.manage', name: 'إدارة المخزون', category: 'inventory' },
   {code:'inventory.yarn.cost.view',name:'عرض تكلفة الخيط',category:'inventory'},

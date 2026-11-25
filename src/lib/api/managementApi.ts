@@ -2,10 +2,11 @@ import {apiFetch} from './client';
 
 export type PeriodKind='today'|'yesterday'|'week'|'month'|'year'|'custom';
 export interface PeriodQuery{period:PeriodKind;from?:string;to?:string}
+export interface SoldQty{meters:number;kg:number;invoices:number}
 export interface Money{currency:string;total:number;count?:number}
 export interface BranchMetrics{
   period:{kind:PeriodKind;from:string;to:string;prevFrom:string;prevTo:string;label:string};
-  sales:{current:Money[];previous:Money[];topCustomers:Array<{name:string;currency:string;total:number}>;byItem:Array<{name:string;currency:string;total:number;meters:number}>;byColor:Array<{name:string;currency:string;total:number}>;byCreator:Array<{name:string;currency:string;total:number;count:number}>};
+  sales:{quantity:{current:SoldQty;previous:SoldQty};current:Money[];previous:Money[];topCustomers:Array<{name:string;currency:string;total:number}>;byItem:Array<{name:string;currency:string;total:number;meters:number}>;byColor:Array<{name:string;currency:string;total:number}>;byCreator:Array<{name:string;currency:string;total:number;count:number}>};
   purchases:{current:Money[];previous:Money[]};
   inactiveCustomers:{thresholdDays:number;count:number;items:Array<{id:string;name:string;lastPurchase:string}>};
   orders:{inPreparation:number;awaitingDelivery:number;open:number;late:number};
