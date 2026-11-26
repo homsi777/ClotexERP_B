@@ -95,3 +95,9 @@ test('thermal statement: rolls entered by weight show kg, not derived meters', (
   const s = renderInventoryRollsThermal78({ rolls: w, summary: true });
   assert.ok(!s.html.includes('4,444.44'));
 });
+
+test('auto-generated internal codes (AUTO-YARN-…) are never shown as material code', async () => {
+  const { resolveDisplayMaterialCode } = await import('../importDisplay');
+  assert.equal(resolveDisplayMaterialCode({ internalCode: 'AUTO-YARN-xdff29c12' }), '');
+  assert.equal(resolveDisplayMaterialCode({ internalCode: 'K22' }), 'K22');
+});

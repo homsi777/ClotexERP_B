@@ -17,9 +17,8 @@ const UNITS: Record<Kind, Unit[]> = { FABRIC: ['meter', 'yard', 'kg'], YARN: ['k
 const UNIT_LABEL: Record<Unit, string> = { meter: 'متر', yard: 'ياردة', kg: 'كيلوغرام', package: 'طرد', piece: 'قطعة' };
 const CURRENCIES = ['EGP', 'USD', 'TRY', 'SYP'];
 
-interface Line { catalogItemId: string; whName: string; kind: Kind; unit: Unit; name: string; designCode: string; colorName: string; colorCode: string; widthCm: string; gsm: string; qty: string; price: string; warehouseId: string }
-const fromCatalog = (c: CatalogItem): Line => ({ catalogItemId: c.id, whName: c.operatingWarehouseName ?? '', kind: c.materialKind, unit: c.defaultUnit, name: c.name, designCode: c.designCode ?? '', colorName: c.colorName ?? '', colorCode: c.colorCode ?? '', widthCm: c.widthCm ? String(c.widthCm) : '', gsm: c.gsm ? String(c.gsm) : '', qty: '', price: '', warehouseId: '' });
-const unusedBlank = (kind: Kind = 'FABRIC'): Line => ({ catalogItemId: '', whName: '', kind, unit: UNITS[kind][0], name: '', designCode: '', colorName: '', colorCode: '', widthCm: '', gsm: '', qty: '', price: '', warehouseId: '' });
+interface Line { catalogItemId: string; whName: string; opWhId: string; kind: Kind; unit: Unit; name: string; designCode: string; colorName: string; colorCode: string; widthCm: string; gsm: string; qty: string; price: string; warehouseId: string }
+const fromCatalog = (c: CatalogItem): Line => ({ catalogItemId: c.id, whName: c.operatingWarehouseName ?? '', opWhId: c.operatingWarehouseId ?? '', kind: c.materialKind, unit: c.defaultUnit, name: c.name, designCode: c.designCode ?? '', colorName: c.colorName ?? '', colorCode: c.colorCode ?? '', widthCm: c.widthCm ? String(c.widthCm) : '', gsm: c.gsm ? String(c.gsm) : '', qty: '', price: '', warehouseId: '' });
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const nf = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const inp = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
@@ -35,7 +34,7 @@ export function PurchaseInvoiceCreate() {
   const [warehouseId, setWarehouseId] = useState(''), [notes, setNotes] = useState(''), [viaWarehouse, setViaWarehouse] = useState(true);
   const [lines, setLines] = useState<Line[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]), [opWhs, setOpWhs] = useState<OperatingWarehouse[]>([]), [newItem, setNewItem] = useState(false);
-  const [payMethod, setPayMethod] = useState<'CASH' | 'CREDIT'>('CREDIT');
+  const [payMethod, setPayMethod] = useState<'CASH' | 'CREDIT'>('CREDIT'), [opWhDefault, setOpWhDefault] = useState('');
   const [discount, setDiscount] = useState(''), [tax, setTax] = useState(''), [cashboxId, setCashboxId] = useState('');
   const [busy, setBusy] = useState(false), [err, setErr] = useState('');
 
@@ -67,6 +66,7 @@ export function PurchaseInvoiceCreate() {
         if (!l.name.trim()) throw new Error(`البند ${i + 1}: اسم المادة مطلوب`);
         if (!(Number(l.qty) > 0)) throw new Error(`البند ${i + 1}: الكمية مطلوبة`);
         if (!(Number(l.price) >= 0) || l.price === '') throw new Error(`البند ${i + 1}: سعر الوحدة مطلوب`);
+        if (l.kind === 'OTHER' && !(l.opWhId || opWhDefault) && opWhs.length > 0) throw new Error(`البند ${i + 1}: اختر المستودع التشغيلي`);
         if (l.kind === 'FABRIC' && l.unit === 'kg' && !(Number(l.widthCm) > 0 && Number(l.gsm) > 0)) throw new Error(`البند ${i + 1}: القماش بالكيلو يتطلب العرض والوزن النوعي (gsm)`);
       }
       if (!viaWarehouse && valid.some((l) => l.unit === 'package' || l.unit === 'piece')) throw new Error('وحدة الطرد/القطعة تتطلب «استلام عبر المخزن»');
@@ -83,7 +83,7 @@ export function PurchaseInvoiceCreate() {
         lines: valid.map((l) => ({
           description: l.name.trim(), quantity: Number(l.qty), unit: l.unit as 'meter', unitPrice: Number(l.price), lineDiscount: 0, lineTax: 0, lineTotal: lineTotal(l),
           catalogItemId: l.catalogItemId, warehouseId: l.warehouseId || null, commodityType: l.kind === 'FABRIC' ? 'FABRIC' : 'YARN',
-          metadata: { materialKind: l.kind, materialName: l.name.trim(), designCode: l.designCode || undefined, colorName: l.colorName || undefined, colorCode: l.colorCode || undefined, widthCm: Number(l.widthCm) || undefined, gsm: Number(l.gsm) || undefined },
+          metadata: { operatingWarehouseId: l.kind === 'OTHER' ? (l.opWhId || opWhDefault || undefined) : undefined, materialKind: l.kind, materialName: l.name.trim(), designCode: l.designCode || undefined, colorName: l.colorName || undefined, colorCode: l.colorCode || undefined, widthCm: Number(l.widthCm) || undefined, gsm: Number(l.gsm) || undefined },
           // نوع المادة يُحفظ على السطر نفسه (يميّز القماش بالكيلو عن الخيط)
           ...({ materialKind: l.kind } as object),
         })),
@@ -121,7 +121,7 @@ export function PurchaseInvoiceCreate() {
       {lines.map((l, i) => <div key={l.catalogItemId} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
         <div className="flex items-center justify-between gap-2"><div className="min-w-0"><span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-black text-indigo-700 ring-1 ring-indigo-100">{i + 1} · {KIND[l.kind]}</span>
           <b className="mr-2 text-sm text-slate-900">{l.name}</b><span className="text-xs text-slate-500" dir="ltr">{[l.designCode, l.colorName, l.colorCode, l.widthCm && `${l.widthCm}cm`, l.gsm && `${l.gsm}gsm`].filter(Boolean).join(' · ')}</span>
-          {l.kind === 'OTHER' && <span className="mr-2 text-xs text-slate-500">المستودع التشغيلي: {l.whName || 'غير محدد'}</span>}</div>
+          </div>
           <button type="button" aria-label="حذف البند" onClick={() => setLines(lines.filter((_, j) => j !== i))} className="rounded-lg border bg-white p-1.5 text-rose-600"><Trash2 className="h-4 w-4" /></button></div>
         {l.kind === 'FABRIC' && l.unit === 'kg' && (!l.widthCm || !l.gsm) && <div className="grid gap-2 sm:grid-cols-2">
           <label className="text-xs font-bold text-slate-600">عرض التوب (سم) *<input type="number" min="0" value={l.widthCm} onChange={(e) => set(i, { widthCm: e.target.value })} className={`${inp} mt-1 font-normal`} dir="ltr" /></label>
@@ -130,7 +130,7 @@ export function PurchaseInvoiceCreate() {
           <label className="text-xs font-bold text-slate-600">وحدة القياس<select value={l.unit} onChange={(e) => set(i, { unit: e.target.value as Unit })} className={`${inp} mt-1 font-normal`}>{UNITS[l.kind].map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}</select></label>
           <label className="text-xs font-bold text-slate-600">الكمية<input type="number" min="0" step="0.001" value={l.qty} onChange={(e) => set(i, { qty: e.target.value })} className={`${inp} mt-1 font-normal`} dir="ltr" /></label>
           <label className="text-xs font-bold text-slate-600">{l.unit === 'kg' ? 'سعر الكيلو' : 'سعر الوحدة'} ({currency})<input type="number" min="0" step="0.0001" value={l.price} onChange={(e) => set(i, { price: e.target.value })} className={`${inp} mt-1 font-normal`} dir="ltr" /></label>
-          {l.kind === 'OTHER' ? <div className="text-xs font-bold text-slate-600">المخزن<div className="mt-1 rounded-lg bg-white px-3 py-2 text-xs font-normal ring-1 ring-slate-200">{l.whName || 'يُحدَّد عند الاستلام'}</div></div>
+          {l.kind === 'OTHER' ? <label className="text-xs font-bold text-slate-600">المستودع التشغيلي<select value={l.opWhId} onChange={(e) => set(i, { opWhId: e.target.value })} className={`${inp} mt-1 font-normal`}><option value="">{opWhDefault ? '— افتراضي الفاتورة —' : '— اختر —'}</option>{opWhs.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
             : <label className="text-xs font-bold text-slate-600">المخزن<select value={l.warehouseId} onChange={(e) => set(i, { warehouseId: e.target.value })} className={`${inp} mt-1 font-normal`}><option value="">— الافتراضي —</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
           <div className="text-xs font-bold text-slate-600">إجمالي البند<div className="mt-1 rounded-lg bg-white px-3 py-2 text-sm font-black text-slate-900 ring-1 ring-slate-200" dir="ltr">{nf(lineTotal(l))} {currency}</div></div>
         </div>
@@ -145,6 +145,7 @@ export function PurchaseInvoiceCreate() {
       <label className="text-xs font-bold text-slate-600">تاريخ الفاتورة<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inp} mt-1 font-normal`} /></label>
       <label className="text-xs font-bold text-slate-600">العملة<select value={currency} onChange={(e) => setCurrency(e.target.value)} className={`${inp} mt-1 font-normal`}>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select></label>
       <label className="text-xs font-bold text-slate-600">المخزن الافتراضي<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className={`${inp} mt-1 font-normal`}><option value="">— حسب البند —</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+      {lines.some((l) => l.kind === 'OTHER') && <label className="text-xs font-bold text-slate-600">المستودع التشغيلي الافتراضي (للمواد الأخرى)<select value={opWhDefault} onChange={(e) => setOpWhDefault(e.target.value)} className={`${inp} mt-1 font-normal`}><option value="">— حسب البند —</option>{opWhs.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>{!opWhs.length && <span className="mt-1 block font-normal text-amber-700">لا مستودعات تشغيلية بعد — أنشئ من «المستودعات التشغيلية».</span>}</label>}
       {currency !== 'USD' && <div className="text-xs font-bold text-slate-600"><label className="flex items-center gap-2"><input type="checkbox" checked={manualRate} onChange={(e) => setManualRate(e.target.checked)} />معادل بالدولار (سعر صرف يدوي)</label>{manualRate ? <input type="number" min="0" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} placeholder={`${currency} لكل 1 USD`} className={`${inp} mt-1 font-normal`} dir="ltr" /> : <p className="mt-1 font-normal text-slate-500">مطفأ: تُسجَّل الفاتورة بعملتها {currency} فقط.</p>}</div>}
       <label className="flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs font-bold text-indigo-900 sm:col-span-2"><input type="checkbox" checked={viaWarehouse} onChange={(e) => setViaWarehouse(e.target.checked)} className="mt-0.5" /><span>استلام عبر المخزن<span className="block font-normal text-indigo-700">لا تُنشئ الفاتورة أتواباً ولا دفعات؛ يسجّلها المخزن عند الاستلام. أطفئه فقط لسلوك الاستلام التلقائي القديم.</span></span></label>
     </section>

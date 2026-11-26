@@ -224,7 +224,8 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
       if (catalogItemId) {
         const ci = (await client.query<{ operating_warehouse_id: string | null }>('SELECT operating_warehouse_id FROM purchase_catalog_items WHERE id=$1 AND company_id=$2', [catalogItemId, companyId])).rows[0];
         if (!ci) throw fail('البند المرجعي غير موجود', 'NOT_FOUND');
-        opWhId = ln.operatingWarehouseId ?? ci.operating_warehouse_id;
+        const metaWh = typeof meta.operatingWarehouseId === 'string' ? meta.operatingWarehouseId : null;
+        opWhId = ln.operatingWarehouseId ?? metaWh ?? ci.operating_warehouse_id;
       }
       if (opWhId && catalogItemId) {
         if (!(await client.query('SELECT 1 FROM operating_warehouses WHERE id=$1 AND company_id=$2 AND is_active', [opWhId, companyId])).rows.length) throw fail('المستودع التشغيلي غير موجود أو غير فعّال', 'NOT_FOUND');

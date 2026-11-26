@@ -1,4 +1,4 @@
-const GENERATED_IMPORT_INTERNAL_CODE_RE = /^IMP-/i;
+const GENERATED_IMPORT_INTERNAL_CODE_RE = /^(IMP|AUTO)-/i;
 
 function isGeneratedImportInternalCode(value: string | null | undefined): boolean {
   return GENERATED_IMPORT_INTERNAL_CODE_RE.test(String(value ?? '').trim());
