@@ -3,30 +3,30 @@
 
 /* قيم افتراضية قبل تهيئة React — مطابقة ثيم إنديجو / نهاري */
 :root {
-  --ui-accent: #4f46e5;
-  --ui-accent-hover: #4338ca;
-  --ui-accent-muted: #6366f1;
-  --ui-accent-soft-bg: #eef2ff;
-  --ui-accent-soft-bg-strong: #e0e7ff;
-  --ui-accent-border: #c7d2fe;
-  --ui-logo-bg: #4f46e5;
-  --ui-nav-active-bg: #eef2ff;
-  --ui-nav-active-text: #3730a3;
-  --ui-nav-active-border: #c7d2fe;
-  --ui-nav-active-icon: #4f46e5;
-  --ui-dropdown-hover-bg: #eef2ff;
-  --ui-mobile-accent-border: #4f46e5;
+  --ui-accent: #5b34a3;
+  --ui-accent-hover: #4c2a8a;
+  --ui-accent-muted: #7a4dc7;
+  --ui-accent-soft-bg: #f1ebfb;
+  --ui-accent-soft-bg-strong: #e6dcf8;
+  --ui-accent-border: #d8c9f3;
+  --ui-logo-bg: #5b34a3;
+  --ui-nav-active-bg: #ece4fa;
+  --ui-nav-active-text: #3e1f78;
+  --ui-nav-active-border: #cdb8ef;
+  --ui-nav-active-icon: #5b34a3;
+  --ui-dropdown-hover-bg: #f1ebfb;
+  --ui-mobile-accent-border: #5b34a3;
   --surface-header: #ffffff;
-  --surface-muted-nav: #f8fafc;
-  --surface-mobile-shell: #f8fafc;
-  --border-default: #e2e8f0;
-  --border-subtle: #f1f5f9;
-  --page-bg: #f8fafc;
-  --text-primary: #0f172a;
-  --text-muted: #64748b;
-  --text-heading: #1e293b;
-  --scrollbar-track: #f1f5f9;
-  --scrollbar-thumb: #cbd5e1;
+  --surface-muted-nav: #f8f6ff;
+  --surface-mobile-shell: #f8f6ff;
+  --border-default: #e6e0f5;
+  --border-subtle: #f0ecfa;
+  --page-bg: #f5f3fe;
+  --text-primary: #1b1238;
+  --text-muted: #6b6485;
+  --text-heading: #1f1442;
+  --scrollbar-track: #f0ecfa;
+  --scrollbar-thumb: #c9bde6;
   --ui-font-family: "Cairo", ui-sans-serif, system-ui, sans-serif;
   --ui-font-weight: 450;
   --ui-letter-spacing: 0em;
@@ -41,6 +41,18 @@
 
 @theme {
   --font-sans: var(--ui-font-family), ui-sans-serif, system-ui, sans-serif;
+  /* الهوية البصرية الجديدة: سلّم «indigo» صار بنفسجي CLOTEX (يشمل كل الواجهات تلقائياً)؛ لوحات الإدارة تستخدم متغيراتها الخاصة (.cx-dash) فلا تتأثر */
+  --color-indigo-50: #f6f2fd;
+  --color-indigo-100: #ebe3f9;
+  --color-indigo-200: #d9cbf3;
+  --color-indigo-300: #bda5ea;
+  --color-indigo-400: #9b78da;
+  --color-indigo-500: #7a4dc7;
+  --color-indigo-600: #5b34a3;
+  --color-indigo-700: #4c2a8a;
+  --color-indigo-800: #3d2170;
+  --color-indigo-900: #2e1856;
+  --color-indigo-950: #1d0e45;
 }
 
 @layer base {

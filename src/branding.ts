@@ -1,15 +1,15 @@
 /**
  * Single source of truth for the project's brand identity.
  *
- * Master logo file: `logo.png` (repo root).
- * Favicon / static copy: `public/clotex-logo.png` — keep identical (see `npm run extract:logo`).
- *
- * To rebrand, replace logo.png then run: npm run extract:logo
+ * الهوية البصرية الجديدة (نوفمبر 2026): الشعار متجه في src/assets/brand/clotex-mark-{purple,white,black}.svg
+ * ومنه نُسخت: logo.png (بنفسجي)، logo-thermal.png (أسود للحراري واللصاقة)، public/clotex-logo.png (أيقونة)، logo-white.png (للخلفيات الداكنة).
+ * الألوان مستخرجة من التصاميم المعتمدة.
  */
 
 import brandMarkUrl from '../logo.png?url';
 import brandMarkInline from '../logo.png?inline';
 import brandMarkThermalInline from '../logo-thermal.png?inline';
+import brandMarkWhiteInline from './assets/brand/logo-white.png?inline';
 
 export const BRAND = {
   /** Primary product/brand mark (the big word in the logo). */
@@ -23,14 +23,20 @@ export const BRAND = {
   /** Long English descriptor used in metadata and installers. */
   descriptionEn: 'CLOTEX — Clothes Textile Warehouse ERP',
   /** Brand color tokens (matches the navy in the logo image). */
-  primaryColor: '#2C405A',
-  primaryColorSoft: '#5B6B82',
+  primaryColor: '#4C3890',
+  primaryColorSoft: '#7060A4',
+  /** الذهبي الثانوي (خط الفاصل في الترويسات). */
+  accentColor: '#B89854',
+  /** سطر الشعار في ترويسة المطبوعات. */
+  taglineDocs: 'Textile Industry Solutions',
   /** Resolved asset URLs (Vite `?url` — works with Electron `file://` and `base: './'). */
   logoPng: brandMarkUrl,
   /** Inline data URI for print/PDF HTML contexts where file URLs may fail. */
   logoInline: brandMarkInline,
   /** Black-on-transparent logo for thermal label/sticker printing (no CSS filter). */
   logoThermalInline: brandMarkThermalInline,
+  /** نسخة بيضاء للخلفيات الداكنة (تسجيل الدخول). */
+  logoWhiteInline: brandMarkWhiteInline,
   logoSvg: brandMarkUrl,
   /** Copyright holder shown in footers. */
   copyrightHolder: 'CLOTEX',

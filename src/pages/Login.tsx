@@ -142,7 +142,7 @@ export const Login = () => {
       <button
         type="button"
         onClick={() => setActivationModalOpen(true)}
-        className={`fixed left-6 top-6 z-[60] flex items-center gap-2 rounded-full border px-3 py-2 shadow-lg backdrop-blur-md transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0820] ${
+        className={`fixed left-6 top-[72px] sm:left-40 sm:top-6 z-[60] flex items-center gap-2 rounded-full border px-3 py-2 shadow-lg backdrop-blur-md transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0820] ${
           !activationChecked
             ? 'border-white/15 bg-white/10 text-slate-200'
             : isActivated
@@ -176,11 +176,23 @@ export const Login = () => {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(1200px 700px at 85% 15%, rgba(99,102,241,0.32), transparent 60%),' +
-            'radial-gradient(900px 600px at 10% 90%, rgba(139,92,246,0.22), transparent 65%),' +
-            'linear-gradient(160deg, #0b0820 0%, #120a36 55%, #1a0d4d 100%)',
+            'radial-gradient(1200px 700px at 85% 15%, rgba(122,77,199,0.34), transparent 60%),' +
+            'radial-gradient(900px 600px at 10% 90%, rgba(91,52,163,0.30), transparent 65%),' +
+            'linear-gradient(160deg, #160b36 0%, #1d0e45 50%, #2e1856 100%)',
         }}
       />
+      {/* أقواس ذهبية ناعمة (الهوية الجديدة) */}
+      <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 1600 900">
+        <defs>
+          <linearGradient id="clx-gold" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="#b89854" stopOpacity="0" />
+            <stop offset="0.5" stopColor="#e8c27a" stopOpacity="0.55" />
+            <stop offset="1" stopColor="#b89854" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d="M-40 330 C 140 120, 330 40, 620 20" fill="none" stroke="url(#clx-gold)" strokeWidth="2" />
+        <path d="M1000 900 C 1250 820, 1450 700, 1640 560" fill="none" stroke="url(#clx-gold)" strokeWidth="2" />
+      </svg>
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-[0.18]"
@@ -197,20 +209,14 @@ export const Login = () => {
       {/* ── Top utility bar ───────────────────────────────────────────────── */}
       <header className="relative z-10 flex items-center justify-between px-8 py-5">
         <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">
-          <div className="grid h-12 w-12 place-items-center rounded-xl bg-white shadow-lg shadow-indigo-500/20">
-            <img
-              src={BRAND.logoPng}
-              alt={BRAND.name}
-              className="h-10 w-10 object-contain"
-              draggable={false}
-            />
-          </div>
-          <div className="text-[13px] leading-tight">
-            <div className="font-bold text-white tracking-wider">{BRAND.name}</div>
-            <div className="text-[10px] uppercase text-slate-300 tracking-[0.2em]">
-              {BRAND.tagline}
-            </div>
-          </div>
+          <div className="text-[13px] font-bold leading-tight tracking-wider text-white" dir="ltr">{BRAND.name} <span className="font-medium text-violet-200">ERP</span></div>
+          <span aria-hidden className="h-6 w-px bg-white/20" />
+          <img
+            src={BRAND.logoWhiteInline}
+            alt={BRAND.name}
+            className="h-9 w-auto select-none"
+            draggable={false}
+          />
         </div>
         <div className="flex items-center gap-2">
           <LanguageSwitcher variant="dark" />
@@ -399,11 +405,11 @@ export const Login = () => {
         {/* ── Right: brand identity + feature highlights ──────────────────── */}
         <section className="order-1 lg:order-2">
           <div className="relative max-w-xl lg:ms-auto">
-            <div className="mb-7 inline-flex items-center gap-4 rounded-2xl bg-white px-6 py-5 shadow-2xl shadow-indigo-950/40 ring-1 ring-white/10">
+            <div className="mb-7">
               <img
-                src={BRAND.logoPng}
+                src={BRAND.logoWhiteInline}
                 alt={BRAND.name}
-                className="h-20 w-auto select-none"
+                className="h-32 w-auto select-none sm:h-40"
                 draggable={false}
               />
             </div>
@@ -419,7 +425,7 @@ export const Login = () => {
             <h2 className="mt-6 text-4xl font-black leading-[1.15] text-white sm:text-5xl">
               {t('heroTitle1')}
               <br />
-              <span className="bg-gradient-to-l from-indigo-300 via-violet-300 to-fuchsia-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-l from-violet-300 via-violet-200 to-amber-300 bg-clip-text text-transparent">
                 {t('heroTitle2')}
               </span>
             </h2>
@@ -427,7 +433,7 @@ export const Login = () => {
               {t('heroDescription')}
             </p>
 
-            <div className="mt-10 grid gap-3">
+            <div className="mt-10 grid gap-3 sm:grid-cols-2">
               {features.map((feature) => {
                 const Icon = feature.icon;
                 return (
@@ -456,7 +462,7 @@ export const Login = () => {
 
       {/* ── Footer line ───────────────────────────────────────────────────── */}
       <footer className="relative z-10 px-8 pb-6 text-center text-[11.5px] text-slate-500">
-        © {new Date().getFullYear()} {BRAND.copyrightHolder} — {BRAND.tagline}. {t('footerRights')}
+        © {new Date().getFullYear()} {BRAND.copyrightHolder} — {BRAND.taglineDocs}. {t('footerRights')}
       </footer>
 
       {/* ── Activation modal ──────────────────────────────────────────────── */}
