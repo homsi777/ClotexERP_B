@@ -132,12 +132,13 @@ export async function cutAndSellRoll(
   // قفل التوب الأصلي أولاً لمنع أي بيع/قص متزامن عليه.
   const rollRes = await client.query<OriginalRollRow>(
     `SELECT id, barcode, item_id, color_id, variant_id, warehouse_id, location_id,
-            length_m, width_cm, gsm, unit_cost, currency_code, status
+            length_m, width_cm, gsm, unit_cost, currency_code, status, entry_basis
        FROM fabric_rolls WHERE id=$1 AND company_id=$2 FOR UPDATE`,
     [d.originalRollId, companyId],
   );
   if (!rollRes.rows.length) throw err('التوب غير موجود', 'NOT_FOUND');
   const roll = rollRes.rows[0];
+  if ((roll as { entry_basis?: string }).entry_basis === 'WEIGHT') throw err('هذا التوب مُدخل بالوزن (كيلو) — لا يُقصّ بالمتر؛ يُباع كاملاً بالكيلو', 'VALIDATION');
   if (opts.warehouseScope && !opts.warehouseScope.includes(String(roll.warehouse_id).toLowerCase())) {
     throw err('هذا المستودع غير مخصّص لحسابك', 'VALIDATION');
   }

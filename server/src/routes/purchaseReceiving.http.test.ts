@@ -109,7 +109,7 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     const r3 = await call('POST', '/api/purchase-receiving/receipts', tWk, { invoiceId: inv.id, warehouseId: wh, lines: [{ invoiceLineId: lKg.id, unit: 'kg', rolls: [{ weightKg: 25, barcode: 'RC-KG' }] }] });
     assert.equal(r3.statusCode, 201, r3.body);
     const kgRoll = (await q("SELECT length_m::float AS len, actual_weight_kg::float AS kg, unit_cost::float AS cost FROM fabric_rolls WHERE barcode='RC-KG'"))[0];
-    assert.ok(Math.abs(kgRoll.len - 111.111) < 0.01, 'طول = 25×1000÷(1.5×150)'); assert.equal(kgRoll.kg, 25); assert.ok(Math.abs(kgRoll.cost - 2.25) < 0.001, 'تكلفة المتر = 10×25÷111.11');
+    assert.equal(kgRoll.len, 25, 'كمية التوب بالكيلو نفسه (لا اشتقاق متر)'); assert.equal(kgRoll.kg, 25); assert.equal(kgRoll.cost, 10, 'التكلفة للكيلو = سعر بند الفاتورة');
     d = (await call('GET', `/api/purchase-receiving/invoices/${inv.id}`, tWk)).json().data.invoice.lines;
     assert.deepEqual([d[1].status, d[1].received, d[1].remaining], ['PARTIAL', 25, 25]);
     assert.equal((await call('POST', '/api/purchase-receiving/receipts', tWk, { invoiceId: inv.id, warehouseId: wh, lines: [{ invoiceLineId: lKg.id, unit: 'kg', rolls: [{ lengthM: 50 }] }] })).statusCode, 400, 'بند بالكيلو يتطلب وزن كل توب');
@@ -163,7 +163,7 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
       lines: [line('قماش بالكيلو', 22.5, 'kg', 4, 'FABRIC', { materialName: 'مخمل', designCode: 'V1', widthCm: 150, gsm: 150 })],
     } as never);
     const kgAuto = (await q("SELECT length_m::float AS len, actual_weight_kg::float AS kg, unit_cost::float AS cost FROM fabric_rolls WHERE purchase_invoice_no=(SELECT invoice_no FROM purchase_invoices WHERE id=$1)", [inv4.id]))[0];
-    assert.deepEqual([kgAuto.len, kgAuto.kg, Math.round(kgAuto.cost * 1000) / 1000], [100, 22.5, 0.9], 'قماش بالكيلو: 22.5×1000÷(1.5×150)=100م وتكلفة 4×22.5÷100');
+    assert.deepEqual([kgAuto.len, kgAuto.kg, Math.round(kgAuto.cost * 1000) / 1000], [22.5, 22.5, 4], 'قماش بالكيلو: الكمية 22.5 كغ وتكلفة 4 للكيلو');
     assert.equal((await q("SELECT count(*)::int AS n FROM yarn_lots WHERE purchase_invoice_id=$1", [inv4.id]))[0].n, 0, 'ليس خيطاً');
 
     // ── البحث والتصفية ──

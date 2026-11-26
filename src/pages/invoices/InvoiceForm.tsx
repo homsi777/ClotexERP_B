@@ -1513,6 +1513,11 @@ export const InvoiceForm = () => {
       }
       return false;
     }
+    // توب مُدخل بالوزن: كميته كيلوغرامات (لا أمتار) فيُباع بوضع «قماش بالكيلو» فقط
+    if (isSales && isFabricRollStockRow(row) && row.entry_basis === 'WEIGHT' && (invoiceUnitMode !== 'kg' || isYarnMode)) {
+      showToast({ type: 'warning', message: 'هذا التوب مُدخل بالوزن (كيلو): غيّر وحدة الفاتورة إلى «كيلو — قماش» لبيعه، لأن كميته بالكيلوغرام وليست بالمتر.' });
+      return false;
+    }
     const lengthM = stock.length_m ?? stock.meters ?? stock.length ?? '';
     setItems((prev) => {
       const dup = prev.some((line) =>

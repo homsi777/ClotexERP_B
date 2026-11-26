@@ -498,15 +498,12 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     }
   }, [length, weightMultiplier, rollWidth, widthUnit, lengthType, qtyBasis]);
 
-  // الإدخال بالوزن: الطول = الوزن(كغ) × 1000 ÷ (العرض بالمتر × gsm)؛ بلا عرض/gsm لا يمكن اشتقاق الطول.
+  // الإدخال بالوزن: كمية التوب هي الكيلوغرامات نفسها (لا اشتقاق متر)؛ العرض/gsm معلومات فقط
   useEffect(() => {
     if (qtyBasis !== 'weight') return;
-    const w = Number(weight), g = Number(weightMultiplier), rw = Number(rollWidth);
-    if (!(w > 0) || !(g > 0) || !(rw > 0)) { setLength(''); return; }
-    const widthM = widthUnit === 'inch' ? rw * 0.0254 : rw / 100;
-    const lenM = (w * 1000) / (widthM * g);
-    setLength(parseFloat((lengthType === 'yard' ? lenM / 0.9144 : lenM).toFixed(2)));
-  }, [qtyBasis, weight, weightMultiplier, rollWidth, widthUnit, lengthType]);
+    const w = Number(weight);
+    setLength(w > 0 ? w : '');
+  }, [qtyBasis, weight]);
 
   const lengthEquivalentText = useMemo(() => {
     const value = Number(length);
@@ -795,8 +792,8 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     setSaveError('');
     setPrintWarning('');
 
-    if (qtyBasis === 'weight' && !(Number(weight) > 0 && Number(rollWidth) > 0 && Number(weightMultiplier) > 0)) {
-      setSaveError('الإدخال بالوزن يتطلب الوزن بالكيلو وعرض التوب والوزن النوعي (gsm) لاشتقاق الطول.');
+    if (qtyBasis === 'weight' && !(Number(weight) > 0)) {
+      setSaveError('الإدخال بالوزن يتطلب الوزن بالكيلو.');
       return;
     }
     if (isReceipt) {
@@ -844,11 +841,11 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
         setSaveError(t('errors.lengthRequired'));
         return;
       }
-      if (rollWidth === '' || Number(rollWidth) <= 0) {
+      if (qtyBasis !== 'weight' && (rollWidth === '' || Number(rollWidth) <= 0)) {
         setSaveError(t('errors.rollWidthRequired'));
         return;
       }
-      if (weightMultiplier === '' || Number(weightMultiplier) <= 0) {
+      if (qtyBasis !== 'weight' && (weightMultiplier === '' || Number(weightMultiplier) <= 0)) {
         setSaveError(t('errors.gsmRequired'));
         return;
       }
@@ -1376,7 +1373,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                 <button type="button" onClick={() => setQtyBasis('length')} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'length' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الطول</button>
                 <button type="button" onClick={() => { setQtyBasis('weight'); setLengthType('meter'); }} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'weight' ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الوزن (كغ)</button>
               </div>
-              {qtyBasis === 'weight' && <p className="-mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">أدخل الوزن بالكيلو؛ يُحسب الطول تلقائياً من العرض والوزن النوعي (gsm) ويُحفظ الوزن المُدخَل كوزن فعلي للتوب.</p>}
+              {qtyBasis === 'weight' && <p className="-mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">أدخل الوزن بالكيلو؛ كمية التوب هي الكيلوغرامات نفسها (لا أمتار ولا اشتقاق)، وسعر التكلفة للكيلو. العرض والوزن النوعي (gsm) معلومات للتوب فقط وليست معادلة.</p>}
               {/* الإدخال بالوزن: خانة المتر مخفية تماماً (الطول يُحسب تلقائياً ويظهر في الجدول) */}
               <div className={`bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-sm ${qtyBasis === 'weight' ? 'hidden' : ''}`}>
                  <label className="block text-lg font-bold text-indigo-900 mb-4">{t('lengthCard.title', { unit: lengthType === 'yard' ? t('units.yard') : t('units.meter') })}</label>
@@ -1440,7 +1437,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                     className="w-full bg-white border border-emerald-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition shadow-sm font-mono text-center text-3xl py-4 font-black text-emerald-700"
                     dir="ltr"
                   />
-                  {qtyBasis === 'weight' && <p className="mt-2 text-center text-xs font-bold text-emerald-700">السعر يُحسب بالكيلوغرام (وليس بالمتر) · الطول يُشتق تلقائياً ويظهر في جدول الأتواب</p>}
+                  {qtyBasis === 'weight' && <p className="mt-2 text-center text-xs font-bold text-emerald-700">السعر يُحسب بالكيلوغرام (وليس بالمتر) · لا يُسجَّل متر لهذا التوب</p>}
                </div>
 
                <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-4">

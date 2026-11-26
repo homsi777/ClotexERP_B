@@ -181,20 +181,21 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
       let totalIn = 0;
       for (const r of ln.rolls) {
         const width = r.widthCm ?? num(meta.widthCm), gsm = r.gsm ?? num(meta.gsm);
+        const byWeight = unit === 'kg';
         let lengthM = r.lengthM ?? 0;
-        // الاستلام بالكيلو: الطول = الوزن × 1000 ÷ (العرض بالمتر × gsm)
-        if (!(lengthM > 0) && r.weightKg && width && gsm) lengthM = (r.weightKg * 1000) / ((width / 100) * gsm);
-        if (!(lengthM > 0)) throw fail('كل توب يتطلب الطول، أو الوزن مع العرض والوزن النوعي (gsm) لاشتقاق الطول');
+        // الاستلام بالكيلو: الكمية هي الوزن نفسه (لا اشتقاق متر)؛ العرض/gsm معلومات فقط
+        if (byWeight) { if (!(Number(r.weightKg) > 0)) throw fail('بند الفاتورة بالكيلو: سجّل وزن كل توب'); lengthM = Number(r.weightKg); }
+        if (!(lengthM > 0)) throw fail('كل توب يتطلب الطول أو الوزن');
         lengthM = Math.round(lengthM * 1000) / 1000;
         let costPerM: number | null = null;
         if (il && lineUnitCost && lineUnitCost > 0) {
           if (il.unit === 'meter') costPerM = lineUnitCost; else if (il.unit === 'yard') costPerM = lineUnitCost / YARD;
-          else if (il.unit === 'kg' && r.weightKg) costPerM = (lineUnitCost * r.weightKg) / lengthM;
+          else if (il.unit === 'kg' && r.weightKg) costPerM = lineUnitCost; // للكيلو
         }
         const made = await receiveFabricRoll(client, companyId, userId, {
           receiptId, receiptNo, invoiceNo: inv?.invoice_no ?? null, supplierId, warehouseId: d.warehouseId as string, locationId: r.locationId ?? ln.locationId ?? null,
           materialName: r.materialName ?? text(meta.materialName ?? meta.fabricName ?? description), designCode: r.designCode ?? text(meta.designCode ?? meta.dsamNumber), colorName: r.colorName ?? text(meta.colorName), colorCode: r.colorCode ?? text(meta.colorCode),
-          widthCm: width, gsm, lengthM, weightKg: r.weightKg ?? null, barcode: r.barcode, lotNo: r.lotNo ?? text(meta.lotNo), unitCostPerMeter: costPerM, currency: ccy, note: description,
+          widthCm: width, gsm, lengthM, weightKg: r.weightKg ?? null, barcode: r.barcode, lotNo: r.lotNo ?? text(meta.lotNo), byWeight, unitCostPerMeter: costPerM, currency: ccy, note: description,
         });
         rollIds.push(made.rollId);
         if (unit === 'kg' && !r.weightKg) throw fail('بند الفاتورة بالكيلو: سجّل وزن كل توب');
@@ -273,10 +274,10 @@ export async function linkReceiptToInvoice(client: PoolClient, companyId: string
     const cost = Number(il.unit_cost);
     if (cost > 0) {
       for (const rid of rl.roll_ids) {
-        const roll = (await client.query<{ length_m: string; actual_weight_kg: string | null }>('SELECT length_m::text, actual_weight_kg::text FROM fabric_rolls WHERE id=$1 AND company_id=$2', [rid, companyId])).rows[0];
+        const roll = (await client.query<{ length_m: string; actual_weight_kg: string | null; entry_basis: string }>('SELECT length_m::text, actual_weight_kg::text, entry_basis FROM fabric_rolls WHERE id=$1 AND company_id=$2', [rid, companyId])).rows[0];
         if (!roll) continue;
         const len = Number(roll.length_m);
-        const perM = il.unit === 'meter' ? cost : il.unit === 'yard' ? cost / YARD : il.unit === 'kg' && roll.actual_weight_kg && len > 0 ? (cost * Number(roll.actual_weight_kg)) / len : null;
+        const perM = roll.entry_basis === 'WEIGHT' ? cost : il.unit === 'meter' ? cost : il.unit === 'yard' ? cost / YARD : il.unit === 'kg' && roll.actual_weight_kg && len > 0 ? (cost * Number(roll.actual_weight_kg)) / len : null;
         await client.query('UPDATE fabric_rolls SET unit_cost=COALESCE($3, unit_cost), currency_code=COALESCE(currency_code,$4), purchase_invoice_no=$5, updated_at=now() WHERE id=$1 AND company_id=$2', [rid, companyId, perM, inv.currency_code, inv.invoice_no]);
       }
       if (il.unit === 'kg') for (const lid of rl.yarn_lot_ids) await client.query('UPDATE yarn_lots SET unit_cost=$3, currency_code=$4, purchase_invoice_id=$5, purchase_invoice_line_id=$6, updated_at=now() WHERE id=$1 AND company_id=$2', [lid, companyId, cost, inv.currency_code, invoiceId, il.id]);

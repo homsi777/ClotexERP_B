@@ -1071,15 +1071,12 @@ export async function confirmPurchaseInvoice(
       const qty = Number(ln.quantity ?? 0);
       const unit = (String(ln.unit || 'meter').toLowerCase() === 'yard' ? 'yard' : 'meter') as 'meter' | 'yard';
       const fabricByKg = String(ln.unit || '').toLowerCase() === 'kg';
-      // قماش بالكيلو: الطول = الوزن × 1000 ÷ (العرض بالمتر × gsm)، والوزن المُدخَل هو الوزن الفعلي للتوب.
-      if (fabricByKg && !(widthCm && widthCm > 0 && gsm && gsm > 0)) {
-        throw Object.assign(new Error('شراء القماش بالكيلو يتطلب عرض التوب والوزن النوعي (gsm) لحساب الطول'), { code: 'VALIDATION' });
-      }
+      // قماش بالكيلو: كمية التوب هي الكيلوغرامات نفسها (لا اشتقاق متر)، والعرض/gsm معلومات فقط، وتكلفته للكيلو.
       const lengthM = fabricByKg
-        ? Math.max(0, Math.round(((qty * 1000) / ((widthCm as number) / 100 * (gsm as number))) * 1000) / 1000)
+        ? Math.max(0, qty)
         : Math.max(0, quantityToMeters(Number.isFinite(qty) ? qty : 0, unit));
       const actualWeight = fabricByKg ? qty : cleanNum(meta.weightKg ?? meta.weight);
-      const calcWt = calcWeight(lengthM, widthCm, gsm);
+      const calcWt = fabricByKg ? null : calcWeight(lengthM, widthCm, gsm);
 
       const itemId = await findOrCreateFabricItem(client, companyId, materialName, designCode);
       lineItemId = itemId;
@@ -1106,8 +1103,8 @@ export async function confirmPurchaseInvoice(
             warehouse_id, location_id, length_m, width_cm, gsm,
             calculated_weight_kg, actual_weight_kg, unit_cost, currency_code,
             batch_no, container_no, purchase_invoice_no, supplier_roll_ref,
-            notes, created_by_user_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'AVAILABLE')
+            notes, created_by_user_id, status, entry_basis)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'AVAILABLE',$23)
          RETURNING id`,
         [
           companyId,
@@ -1124,7 +1121,7 @@ export async function confirmPurchaseInvoice(
           gsm,
           calcWt,
           actualWeight,
-          (fabricByKg && lengthM > 0 ? (Number(ln.unit_cost ?? 0) * qty) / lengthM : Number(ln.unit_cost ?? 0)) || null,
+          Number(ln.unit_cost ?? 0) || null,
           String(inv.currency_code || 'USD'),
           null,
           null,
@@ -1132,6 +1129,7 @@ export async function confirmPurchaseInvoice(
           cleanText(meta.supplierBarcode ?? meta.supplierRollRef) || null,
           cleanText(meta.note ?? ln.description) || null,
           userId,
+          fabricByKg ? 'WEIGHT' : 'LENGTH',
         ],
       );
       rollId = rollIns.rows[0].id;
@@ -2180,6 +2178,8 @@ export interface ReceiveRollInput {
   receiptId: string; receiptNo: string; invoiceNo: string | null; supplierId: string | null; warehouseId: string; locationId?: string | null;
   materialName: string; designCode?: string; colorName?: string; colorCode?: string; widthCm?: number | null; gsm?: number | null;
   lengthM: number; weightKg?: number | null; barcode?: string; lotNo?: string | null;
+  /** مُستلم بالكيلو: كمية التوب = الوزن، والتكلفة للكيلو (unitCostPerMeter تحمل سعر الكيلو). */
+  byWeight?: boolean;
   unitCostPerMeter?: number | null; currency?: string | null; note?: string | null;
 }
 export async function receiveFabricRoll(client: PoolClient, companyId: string, userId: string | null, p: ReceiveRollInput): Promise<{ rollId: string; barcode: string; itemId: string }> {
@@ -2192,14 +2192,14 @@ export async function receiveFabricRoll(client: PoolClient, companyId: string, u
     throw Object.assign(new Error(`الباركود ${barcode} مستخدم مسبقاً`), { code: 'VALIDATION' });
   }
   if (!barcode) barcode = await generateBarcode(client, companyId);
-  const lengthM = Math.max(0, Number(p.lengthM) || 0);
+  const lengthM = p.byWeight ? Math.max(0, Number(p.weightKg) || 0) : Math.max(0, Number(p.lengthM) || 0);
   const ins = await client.query<{ id: string }>(
     `INSERT INTO fabric_rolls (company_id, barcode, item_id, color_id, supplier_id, warehouse_id, location_id, length_m, width_cm, gsm,
-       calculated_weight_kg, actual_weight_kg, unit_cost, currency_code, lot_no, purchase_invoice_no, notes, created_by_user_id, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'AVAILABLE') RETURNING id`,
+       calculated_weight_kg, actual_weight_kg, unit_cost, currency_code, lot_no, purchase_invoice_no, notes, created_by_user_id, status, entry_basis)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'AVAILABLE',$19) RETURNING id`,
     [companyId, barcode, itemId, colorId, p.supplierId, p.warehouseId, p.locationId ?? null, lengthM, p.widthCm ?? null, p.gsm ?? null,
-      calcWeight(lengthM, p.widthCm ?? null, p.gsm ?? null), p.weightKg ?? null, p.unitCostPerMeter && p.unitCostPerMeter > 0 ? p.unitCostPerMeter : null, p.currency ?? null,
-      cleanText(p.lotNo) || null, p.invoiceNo, cleanText(p.note) || null, userId]);
+      p.byWeight ? null : calcWeight(lengthM, p.widthCm ?? null, p.gsm ?? null), p.weightKg ?? null, p.unitCostPerMeter && p.unitCostPerMeter > 0 ? p.unitCostPerMeter : null, p.currency ?? null,
+      cleanText(p.lotNo) || null, p.invoiceNo, cleanText(p.note) || null, userId, p.byWeight ? 'WEIGHT' : 'LENGTH']);
   await client.query(
     `INSERT INTO inventory_movements (company_id, roll_id, movement_type, length_delta_m, reference_type, reference_id, reference_no, notes, created_by_user_id)
      VALUES ($1,$2,'PURCHASE_RECEIPT', NULL, 'PURCHASE_RECEIPT', $3, $4, $5, $6)`,

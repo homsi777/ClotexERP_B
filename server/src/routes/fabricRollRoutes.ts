@@ -1207,6 +1207,11 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     const parsed = createRollSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
     const d = parsed.data;
+    // توب مُدخل بالوزن: كميته الكيلوغرامات نفسها (عمود length_m يحمل الكمية بوحدة التوب = كغ)، والعرض/gsm معلومات فقط لا معادلة
+    if (d.entryBasis === 'WEIGHT') {
+      if (!(Number(d.actualWeightKg) > 0)) return sendError(reply, 400, 'الوزن مطلوب للتوب المُدخل بالوزن', 'VALIDATION');
+      d.lengthM = Number(d.actualWeightKg);
+    }
 
     const pool = getPool();
 
@@ -1295,7 +1300,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Calculate weight
-    const calcWt = calcWeight(d.lengthM, d.widthCm ?? null, d.gsm ?? null);
+    const calcWt = d.entryBasis === 'WEIGHT' ? null : calcWeight(d.lengthM, d.widthCm ?? null, d.gsm ?? null);
 
     const client = await pool.connect();
     try {
