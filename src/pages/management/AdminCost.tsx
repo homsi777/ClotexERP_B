@@ -3,6 +3,7 @@ import * as api from '../../lib/api/managementApi';
 import type { CostGroup, CostRoll, PeriodQuery, ProfitDimension, Profitability, RateHistoryRow } from '../../lib/api/managementApi';
 import { ChartCard, CurrencyTabs, HBars } from './charts';
 import { ErrorLine, errMsg, nf } from './kit';
+import { useCurrencyWithBranchDefault } from '../../hooks/useDefaultCurrency';
 
 const DIMS: Array<[ProfitDimension, string]> = [['item', 'الخامة'], ['color', 'اللون'], ['roll', 'التوب'], ['customer', 'العميل'], ['invoice', 'الفاتورة'], ['creator', 'المندوب (منشئ الفاتورة)']];
 type Sub = 'profit' | 'pricing' | 'delegates';
@@ -48,7 +49,7 @@ function ProfitView({ branchId, period }: { branchId: string; period: PeriodQuer
 function PricingView({ branchId }: { branchId: string }) {
   const [groups, setGroups] = useState<CostGroup[]>([]), [err, setErr] = useState(''), [ok, setOk] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(true), [search, setSearch] = useState('');
-  const [cur, setCur] = useState('USD'), [basis, setBasis] = useState<'METER' | 'KG'>('METER'), [edit, setEdit] = useState<Record<string, string>>({}), [sel, setSel] = useState<Set<string>>(new Set()), [bulk, setBulk] = useState('');
+  const [cur, setCur] = useCurrencyWithBranchDefault<string>(), [basis, setBasis] = useState<'METER' | 'KG'>('METER'), [edit, setEdit] = useState<Record<string, string>>({}), [sel, setSel] = useState<Set<string>>(new Set()), [bulk, setBulk] = useState('');
   const [drill, setDrill] = useState<CostGroup | null>(null);
   const gk = (g: CostGroup) => `${g.itemId}|${g.colorId ?? ''}`;
   const load = useCallback(async () => { setErr(''); try { setGroups(await api.fetchCostGroups(branchId, { onlyMissing, search })); } catch (e) { setErr(errMsg(e)); } }, [branchId, onlyMissing, search]);

@@ -71,7 +71,12 @@ export function renderInventoryRollsAuditA4Html(opts: {
   scopeLabel: string;
   warehouseLabel: string;
   printedAt?: Date;
+  /** A4 أفقي افتراضياً لكثرة الأعمدة؛ تتكرر عناوين الأعمدة في كل صفحة ولا يُقص شيء. */
+  orientation?: 'landscape' | 'portrait';
 }): string {
+  const landscape = (opts.orientation ?? 'landscape') === 'landscape';
+  const pageW = landscape ? 297 : 210;
+  const pageH = landscape ? 210 : 297;
   const rolls = opts.rolls ?? [];
   const printedAt = opts.printedAt ?? new Date();
   const searchQuery = String(opts.searchQuery ?? '').trim();
@@ -208,11 +213,11 @@ export function renderInventoryRollsAuditA4Html(opts: {
   <meta name="format-detection" content="telephone=no,email=no,address=no" />
   <title>${t('inventoryAudit.title')}</title>
   <style>
-    @page { size: A4 portrait; margin: 0; }
+    @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width: 210mm;
-      max-width: 210mm;
+      width: ${pageW}mm;
+      max-width: ${pageW}mm;
       margin: 0 auto;
       font-family: ${FONT};
       color: #111;
@@ -223,8 +228,8 @@ export function renderInventoryRollsAuditA4Html(opts: {
       print-color-adjust: exact;
     }
     .page {
-      width: 210mm;
-      min-height: 297mm;
+      width: ${pageW}mm;
+      min-height: ${pageH}mm;
       display: flex;
       flex-direction: column;
       padding: 7mm 8mm 5mm;
@@ -297,7 +302,7 @@ export function renderInventoryRollsAuditA4Html(opts: {
     .data-table thead th {
       background: ${NAVY};
       color: #fff;
-      font-size: 9.5px;
+      font-size: ${landscape ? 11 : 9.5}px;
       font-weight: 900;
       padding: 6px 3px;
       text-align: center;
@@ -310,7 +315,7 @@ export function renderInventoryRollsAuditA4Html(opts: {
     .data-table thead th:last-child { border-left: none; }
     .data-table tbody .cell {
       padding: 4px 3px;
-      font-size: 9.2px;
+      font-size: ${landscape ? 10.5 : 9.2}px;
       font-weight: 700;
       color: #000;
       border-bottom: 1px solid ${CELL_LINE};
@@ -334,9 +339,9 @@ export function renderInventoryRollsAuditA4Html(opts: {
       border-bottom: 1px solid #a8afb8;
       color: #263244;
       text-align: center;
-      font-size: 8px;
+      font-size: ${landscape ? 10 : 8}px;
       font-weight: 700;
-      line-height: 1.15;
+      line-height: 1.25;
     }
     .color-summary-cell strong {
       font-weight: 900;

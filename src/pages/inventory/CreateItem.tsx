@@ -1,3 +1,4 @@
+import { useDefaultCurrency } from '../../hooks/useDefaultCurrency';
 import { createItemCreationSlip } from '../../lib/api/intakeDispatchSlipsApi';
 import { fetchMe, type AuthUser } from '../../lib/api/authApi';
 import { canPriceUser } from '../../lib/priceAccess';
@@ -170,6 +171,7 @@ export const CreateItem = () => {
 };
 
 const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
+  const { defaultCurrency: branchCurrency } = useDefaultCurrency();
   const { t } = useTranslation('createItem');
   const { t: tj } = useTranslation('externalJobs');
   const isReceipt = Boolean(receiptJobId);
@@ -705,7 +707,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       gsm: gsmNum,
       actualWeightKg: Number(draft.weight) || null,
       unitCost: Number(draft.costPrice) || null,
-      currencyCode: 'USD',
+      currencyCode: branchCurrency,
       notes: draft.imageUrl ? 'تم إرفاق صورة للمادة في واجهة النظام.' : null,
       intakeOperationId: intakeOperationId || null,
     });

@@ -1,3 +1,4 @@
+import { useDefaultCurrency } from '../../hooks/useDefaultCurrency';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams,useSearchParams } from 'react-router-dom';
@@ -20,6 +21,7 @@ import i18n from '../../i18n/config';
 import { ExternalManufacturingLifecycle } from '../../components/purchases/ExternalManufacturingLifecycle';
 
 export const ExternalJobReceipt = () => {
+  const { defaultCurrency } = useDefaultCurrency();
   const { t } = useTranslation('externalJobs');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -64,7 +66,7 @@ export const ExternalJobReceipt = () => {
       const res = await getExternalJob(id);
       setJob(res.data);
       setFeeAmount(res.data.fee_amount != null ? String(res.data.fee_amount) : '');
-      setFeeCurrencyCode(res.data.fee_currency_code ?? 'USD');
+      setFeeCurrencyCode(res.data.fee_currency_code ?? defaultCurrency);
       setEditDescription(res.data.process_description ?? '');
       setEditNotes(res.data.notes ?? '');
       if (res.data.job_kind === 'PROCESSING') {

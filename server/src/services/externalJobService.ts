@@ -159,7 +159,7 @@ export async function createExternalJob(
 export async function listExternalJobs(
   db: DbQuery,
   companyId: string,
-  opts: { search?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string; jobKind?: string; page?: number; pageSize?: number },
+  opts: { search?: string; supplierId?: string; documentStatus?: string; dateFrom?: string; dateTo?: string; jobKind?: string; lifecycle?: string; page?: number; pageSize?: number },
 ): Promise<{ rows: unknown[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 20));
@@ -198,6 +198,9 @@ export async function listExternalJobs(
     params.push(opts.dateTo);
     p++;
   }
+  // السارية (لم تُقفل دورتها) للاستلام، والمقفلة تبقى في الأرشيف للعرض.
+  if (opts.lifecycle === 'OPEN') conds.push('ej.lifecycle_closed_at IS NULL');
+  else if (opts.lifecycle === 'CLOSED') conds.push('ej.lifecycle_closed_at IS NOT NULL');
   if (opts.jobKind && ['GENERAL', 'PROCESSING'].includes(opts.jobKind)) {
     conds.push(`ej.job_kind = $${p}`);
     params.push(opts.jobKind);

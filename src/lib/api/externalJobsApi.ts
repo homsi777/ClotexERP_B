@@ -144,6 +144,8 @@ export async function listExternalJobs(params: {
   dateFrom?: string;
   dateTo?: string;
   jobKind?: ExternalJobKind;
+  /** OPEN = سارية للاستلام، CLOSED = مقفلة (أرشيف). */
+  lifecycle?: 'OPEN' | 'CLOSED';
   page?: number;
   pageSize?: number;
 } = {}) {
@@ -154,6 +156,7 @@ export async function listExternalJobs(params: {
   if (params.dateFrom) q.set('dateFrom', params.dateFrom);
   if (params.dateTo) q.set('dateTo', params.dateTo);
   if (params.jobKind) q.set('jobKind', params.jobKind);
+  if (params.lifecycle) q.set('lifecycle', params.lifecycle);
   if (params.page) q.set('page', String(params.page));
   if (params.pageSize) q.set('pageSize', String(params.pageSize));
   const qs = q.toString() ? `?${q}` : '';

@@ -22,6 +22,7 @@ import {
 } from '../../lib/printing/renderCartelaColorBarcode';
 import { renderInventoryRollsAuditA4Html } from '../../lib/printing/renderInventoryRollsAuditA4';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
+import { InventoryPrintOptionsModal, type InventoryPrintContext } from '../inventory/InventoryPrintOptionsModal';
 import { getPrintAdapter } from '../../lib/printing/printAdapters';
 import { useToast } from '../NonBlockingToast';
 import { CartelaColorLabelPrintModal } from './CartelaColorLabelPrintModal';
@@ -57,6 +58,7 @@ export const CartelaColorScanPanel: React.FC<Props> = ({ onOpenCartela, onPrintC
   const [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]);
   const [auditWarehouseId, setAuditWarehouseId] = useState('');
   const [auditShowAllColors, setAuditShowAllColors] = useState(false);
+  const [printCtx, setPrintCtx] = useState<InventoryPrintContext | null>(null);
   const [auditSummary, setAuditSummary] = useState<{
     scope: 'material' | 'color';
     label: string;
@@ -276,19 +278,23 @@ export const CartelaColorScanPanel: React.FC<Props> = ({ onOpenCartela, onPrintC
     }
   };
 
+  /** يفتح شاشة خيارات الطباعة الموحّدة (الكشف A4/حراري + الستيكر) بدل نافذة A4 مباشرة. */
   const printAuditSummary = () => {
-    if (!auditSummary) return;
-    const html = renderInventoryRollsAuditA4Html({
+    if (!auditSummary || !result) return;
+    const code = result.art_code.trim();
+    setPrintCtx({
       rolls: auditSummary.rolls,
       searchQuery: auditSummary.searchQuery,
-      scopeLabel: auditSummary.scopeLabel,
       warehouseLabel: auditSummary.warehouseLabel,
-      printedAt: new Date(),
+      scopeLabel: auditSummary.scopeLabel,
+      scope: auditSummary.scope === 'color' ? 'color' : 'cartela',
+      materialName: result.art_code || result.title,
+      baseCode: result.design_no || '',
+      cartelaCode: result.serial_no || '',
+      loadAllColorRolls: async () => (result.fabric_item_id
+        ? await listFabricRolls({ itemId: result.fabric_item_id, variantId: result.fabric_variant_id || undefined, onlyAvailable: true, warehouseId: auditWarehouseId || undefined, pageSize: 500 })
+        : await listFabricRolls({ search: code, onlyAvailable: true, warehouseId: auditWarehouseId || undefined, pageSize: 500 })).data,
     });
-    const ok = openDocumentPrintWindow(html, auditSummary.scopeLabel);
-    if (!ok) {
-      showToast({ type: 'error', message: t('colorPanels.scan.auditPrintPopupBlocked') });
-    }
   };
 
   return (
@@ -408,7 +414,7 @@ export const CartelaColorScanPanel: React.FC<Props> = ({ onOpenCartela, onPrintC
                 className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
               >
                 {auditBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
-                {t('colorPanels.scan.auditMaterial')}
+                {result.color ? `عرض باقي ألوان الكارتيلة ${result.serial_no || result.art_code}` : t('colorPanels.scan.auditMaterial')}
               </button>
               {result.color && (
                 <button
@@ -483,6 +489,7 @@ export const CartelaColorScanPanel: React.FC<Props> = ({ onOpenCartela, onPrintC
           </div>
         )}
       </div>
+    {printCtx && <InventoryPrintOptionsModal ctx={printCtx} onClose={() => setPrintCtx(null)} />}
     </section>
   );
 };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link2, Loader2, PackagePlus, RefreshCw, X } from 'lucide-react';
+import { FilePlus2, Link2, Loader2, PackagePlus, RefreshCw, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import * as api from '../../lib/api/purchaseReceivingApi';
 import type { LotInput, ReceiptLineInput, ReceiptView, ReceivingInvoice, ReceivingLine, RollInput } from '../../lib/api/purchaseReceivingApi';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
@@ -36,7 +37,7 @@ export function PurchaseReceiving() {
   return <div className="space-y-4" dir="rtl">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-black text-slate-900">استلام المشتريات في المخازن</h1><p className="text-sm text-slate-500">ابحث عن فاتورة المورد وسجّل الاستلام كاملاً أو على دفعات. لا تظهر هنا الأسعار ولا إجماليات الفاتورة.</p></div>
-      <div className="flex gap-2"><button type="button" onClick={() => setDraft({ pending: true })} className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold"><PackagePlus className="h-4 w-4" />استلام قبل وصول الفاتورة</button>
+      <div className="flex flex-wrap gap-2"><Link to="/purchases/new-invoice" className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white"><FilePlus2 className="h-4 w-4" />فاتورة شراء جديدة</Link><button type="button" onClick={() => setDraft({ pending: true })} className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold"><PackagePlus className="h-4 w-4" />استلام قبل وصول الفاتورة</button>
         <button type="button" onClick={() => void load()} className="rounded-xl border bg-white px-3 py-2"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button></div>
     </div>
     <div className="flex gap-2">{([['invoices', 'فواتير الشراء'], ['pending', `استلامات معلّقة (${pending.length})`]] as const).map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={`rounded-full border px-4 py-1.5 text-sm font-black ${tab === k ? 'border-slate-800 bg-slate-800 text-white' : 'bg-white text-slate-700'}`}>{l}</button>)}</div>

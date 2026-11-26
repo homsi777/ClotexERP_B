@@ -1,3 +1,4 @@
+import { useDefaultCurrency } from '../../hooks/useDefaultCurrency';
 import { manufacturingError } from '../../lib/externalManufacturingI18n';
 import {ExternalMixedCostPanel} from './ExternalMixedCostPanel';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +25,7 @@ const targetRefOf = (key: string) => {
 };
 
 export function ExternalManufacturingLifecycle({ jobId, receiving = false, initialTab }: { jobId: string; receiving?: boolean; initialTab?: 'quality' }) {
+  const { defaultCurrency } = useDefaultCurrency();
   const [query]=useSearchParams();
   const manufacturingOrigin=query.get('from')==='manufacturing';
   const { t: lifecycleT, i18n: lifecycleI18n } = useTranslation('externalJobs');
@@ -55,7 +57,7 @@ export function ExternalManufacturingLifecycle({ jobId, receiving = false, initi
   useEffect(() => { let active = true; getManufacturing(jobId).then(result => {
     if (!active) return; setResponse(result);
     setServices(result.data.services.map(s => ({ name: s.name, quantity: s.quantity, basis: s.basis })));
-    setPrices(result.data.services.map(s => ({ serviceId: s.id, unitPrice: s.unit_price ?? '', currencyCode: s.currency_code ?? 'USD', basis: s.basis, approvedQuantity: s.approved_quantity ?? (s.basis === 'FIXED' ? '1' : s.quantity) })));
+    setPrices(result.data.services.map(s => ({ serviceId: s.id, unitPrice: s.unit_price ?? '', currencyCode: s.currency_code ?? defaultCurrency, basis: s.basis, approvedQuantity: s.approved_quantity ?? (s.basis === 'FIXED' ? '1' : s.quantity) })));
   }).catch(e => { if (active) setError(manufacturingError(e, lifecycleT)); }); listWarehouses({ status: 'active' }).then(r => { if (active) setWarehouses(r); }).catch(e => { if (active) setError(manufacturingError(e, lifecycleT)); }); return () => { active = false; }; }, [jobId]);
   useEffect(() => { setLocationId(''); setLocations([]); if (!warehouseId) return; let active = true;
     listLocations(warehouseId).then(r => { if (active) setLocations(r.filter(l => l.is_active)); }).catch(e => { if (active) setError(manufacturingError(e, lifecycleT)); }); return () => { active = false; };

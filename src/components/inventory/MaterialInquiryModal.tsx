@@ -5,8 +5,7 @@ import { listFabricRolls, type FabricRollDto } from '../../lib/api/fabricRollsAp
 import { getFabricItem, listFabricItems, type ApiFabricItem } from '../../lib/api/fabricItemsApi';
 import { ApiRequestError } from '../../lib/api/client';
 import { lookupCartelaScan, type CartelaColorLookupResult } from '../../lib/api/cartelaColorApi';
-import { renderInventoryRollsAuditA4Html } from '../../lib/printing/renderInventoryRollsAuditA4';
-import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
+import { InventoryPrintOptionsModal, type InventoryPrintContext } from './InventoryPrintOptionsModal';
 
 type Props = {
   open: boolean;
@@ -230,17 +229,15 @@ export const MaterialInquiryModal: React.FC<Props> = ({ open, onClose }) => {
     return rolls.some((r) => (r.item_name ?? '').trim().toLocaleLowerCase() === art);
   }, [cartela, rolls]);
 
+  const [printCtx, setPrintCtx] = useState<InventoryPrintContext | null>(null);
+  /** شاشة خيارات الطباعة الموحّدة: الكشف (A4/حراري) والستيكر. */
   const handlePrint = () => {
     if (visibleRolls.length === 0) return;
-    const html = renderInventoryRollsAuditA4Html({
-      rolls: visibleRolls,
-      searchQuery: query.trim(),
-      scopeLabel: t('print.scopeLabel'),
-      warehouseLabel: '',
-      printedAt: new Date(),
+    const first = visibleRolls[0];
+    setPrintCtx({
+      rolls: visibleRolls, searchQuery: query.trim(), warehouseLabel: '', scopeLabel: t('print.scopeLabel'), scope: 'cartela',
+      materialName: String(first.item_name ?? ''), baseCode: String(first.internal_code ?? ''), cartelaCode: '',
     });
-    const ok = openDocumentPrintWindow(html, t('print.scopeLabel'));
-    if (!ok) window.alert(t('print.popupBlocked'));
   };
 
   if (!open) return null;
@@ -254,6 +251,7 @@ export const MaterialInquiryModal: React.FC<Props> = ({ open, onClose }) => {
       role="dialog"
       aria-modal="true"
     >
+    {printCtx && <InventoryPrintOptionsModal ctx={printCtx} onClose={() => setPrintCtx(null)} />}
       <div className="my-6 w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-emerald-50 p-4">
           <div className="flex items-start gap-2">

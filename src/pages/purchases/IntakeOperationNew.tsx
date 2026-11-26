@@ -13,7 +13,7 @@ import { PreparationTypesModal } from '../../components/purchases/PreparationTyp
 import { ExternalManufacturingLookup } from '../../components/purchases/ExternalManufacturingLookup';
 
 const ACTION_TYPES: { value: IntakeActionType; labelKey: string }[] = [
-  { value: 'PROCESSING', labelKey: 'actionProcessing' },
+  // «مصنعية» مخفي من هنا: يتشابه مع «استلام من مصنعية خارجية» (نفس المهام)، وبقي الخادم يدعمه.
   { value: 'STOCK', labelKey: 'actionStock' },
   { value: 'RETURN', labelKey: 'actionReturn' },
   { value: 'PURCHASE', labelKey: 'actionPurchase' },

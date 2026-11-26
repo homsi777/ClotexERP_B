@@ -1,3 +1,4 @@
+import { useDefaultCurrency } from '../../hooks/useDefaultCurrency';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -42,6 +43,7 @@ const fmtPriceOrDash = (value: string | number | null | undefined, digits = 4) =
 };
 
 export const BulkPricing = () => {
+  const { defaultCurrency } = useDefaultCurrency();
   const { t } = useTranslation('bulkPricing');
   const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
@@ -233,7 +235,7 @@ export const BulkPricing = () => {
           batchTag,
           supplierId,
           warehouseId: warehouseId || undefined,
-          currencyCode: 'USD',
+          currencyCode: defaultCurrency,
         });
         setMessage((current) =>
           `${current} · ${t('finalizedInvoiceSummary', { invoiceNo: invoice.invoiceNo, supplierName: invoice.supplierName, amount: fmt(invoice.totalAmount) })}`,

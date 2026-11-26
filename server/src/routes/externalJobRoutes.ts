@@ -154,6 +154,7 @@ export const externalJobRoutes: FastifyPluginAsync = async (app) => {
       dateFrom: q.dateFrom,
       dateTo: q.dateTo,
       jobKind: q.jobKind,
+      lifecycle: q.lifecycle,
       page: q.page ? parseInt(q.page, 10) : undefined,
       pageSize: q.pageSize ? parseInt(q.pageSize, 10) : undefined,
     });

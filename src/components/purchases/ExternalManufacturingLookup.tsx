@@ -6,6 +6,12 @@ import { Eye, Loader2 } from 'lucide-react';
 import { getExternalJob, listExternalJobs, type ExternalJob } from '../../lib/api/externalJobsApi';
 
 type Preview = { loading: boolean; error?: string; materials: Array<{ name: string; rolls: number; meters: number; remaining: number; kg: number }>; prep?: string | null; desc?: string | null; notes?: string | null; supplierOrderNo?: number | null };
+const stateOf = (j: ExternalJob): { label: string; cls: string } => {
+  if (j.lifecycle_closed_at) return { label: 'مقفلة', cls: 'bg-slate-200 text-slate-700' };
+  const sent = Number(j.sent_m ?? 0), back = Number(j.returned_m ?? 0), lost = Number(j.shortage_m ?? 0);
+  if (back <= 0 && !(Number(j.received_count ?? 0) > 0)) return { label: 'غير مستلمة', cls: 'bg-rose-100 text-rose-800' };
+  return sent - back - lost > 0.0005 ? { label: 'مستلمة جزئياً', cls: 'bg-amber-100 text-amber-800' } : { label: 'اكتمل استلامها', cls: 'bg-emerald-100 text-emerald-800' };
+};
 const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function ExternalManufacturingLookup() {
@@ -14,6 +20,7 @@ export function ExternalManufacturingLookup() {
   const [search, setSearch] = useState('');
   const [jobs, setJobs] = useState<ExternalJob[]>([]);
   const [page, setPage] = useState(1);
+  const [view, setView] = useState<'open' | 'archive'>('open');
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
   const latest = useRef(0);
@@ -32,20 +39,22 @@ export function ExternalManufacturingLookup() {
     } catch (e) { setPreviews((p) => ({ ...p, [id]: { loading: false, materials: [], error: manufacturingError(e, lifecycleT) } })); }
   };
   useEffect(() => { const generation = ++latest.current; const timer = window.setTimeout(() => {
-    listExternalJobs({ search: search.trim(), jobKind: 'PROCESSING', documentStatus: 'CONFIRMED', page, pageSize: 30 }).then(r => {
+    listExternalJobs({ search: search.trim(), jobKind: 'PROCESSING', documentStatus: 'CONFIRMED', lifecycle: view === 'open' ? 'OPEN' : 'CLOSED', page, pageSize: 30 }).then(r => {
       if (generation === latest.current) { setJobs(r.rows); setTotal(r.total); setError(''); }
     }).catch(e => { if (generation === latest.current) setError(manufacturingError(e, lifecycleT)); });
-  }, 200); return () => { ++latest.current; window.clearTimeout(timer); }; }, [search, page]);
+  }, 200); return () => { ++latest.current; window.clearTimeout(timer); }; }, [search, page, view]);
   return <section className="border rounded p-4 space-y-3" dir={lifecycleI18n.dir()}><h3 className="font-bold">{lifecycleT('lifecycle.lookupTitle')}</h3>
+    <div className="flex gap-2">{(['open', 'archive'] as const).map((k) => <button key={k} type="button" onClick={() => { setView(k); setPage(1); }} className={`rounded-full border px-4 py-1.5 text-sm font-bold ${view === k ? 'border-slate-800 bg-slate-800 text-white' : 'bg-white text-slate-700'}`}>{k === 'open' ? 'السارية للاستلام' : 'الأرشيف (المقفلة)'}</button>)}</div>
     <input className="border rounded p-2 w-full" placeholder={lifecycleT('lifecycle.search')} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} onKeyDown={async e => {
       if (e.key !== 'Enter') return; e.preventDefault(); const query=search.trim(); const generation=++latest.current;
-      try { const result=await listExternalJobs({search:query,jobKind:'PROCESSING',documentStatus:'CONFIRMED',pageSize:100}); if(generation!==latest.current)return;
+      try { const result=await listExternalJobs({search:query,jobKind:'PROCESSING',documentStatus:'CONFIRMED',lifecycle:view==='open'?'OPEN':'CLOSED',pageSize:100}); if(generation!==latest.current)return;
         const exact=result.rows.find(j=>j.job_no.toLocaleLowerCase()===query.toLocaleLowerCase());
         if(exact)navigate(`/inventory/create?externalJobId=${exact.id}`);else setError(lifecycleT('lifecycle.noExact'));
       }catch(err){if(generation===latest.current)setError(manufacturingError(err, lifecycleT));}
     }}/>{error&&<p role="alert" className="text-red-700">{error}</p>}
+    {!jobs.length&&<p className="rounded border p-4 text-center text-sm text-slate-500">{view==='open'?'لا مهام سارية للاستلام.':'لا مهام مقفلة في الأرشيف.'}</p>}
     {jobs.map(j=>{const pv=previews[j.id];const tot=pv?.materials.reduce((a,x)=>({r:a.r+x.rolls,m:a.m+x.meters,k:a.k+x.remaining,w:a.w+x.kg}),{r:0,m:0,k:0,w:0});return <div key={j.id} className="rounded border">
-      <div className="flex items-stretch"><button className="flex-1 p-2 text-right" onClick={()=>navigate(`/inventory/create?externalJobId=${j.id}`)}>{j.job_no} — {j.supplier_name} — {j.sent_date}</button>
+      <div className="flex items-stretch"><button className="flex-1 p-2 text-right" onClick={()=>navigate(`/inventory/create?externalJobId=${j.id}`)}>{j.job_no} — {j.supplier_name} — {j.sent_date} <span className={`mr-2 rounded-full px-2 py-0.5 text-xs font-bold ${stateOf(j).cls}`}>{stateOf(j).label}</span></button>
         <button type="button" aria-label="معاينة" title="معاينة المهمة قبل اختيارها" className="border-s px-3 text-indigo-700" onClick={()=>void togglePreview(j.id)}><Eye className="h-4 w-4"/></button></div>
       {pv&&<div className="border-t bg-slate-50 p-3 text-sm space-y-2">
         {pv.loading&&<Loader2 className="h-4 w-4 animate-spin"/>}{pv.error&&<p className="text-red-700">{pv.error}</p>}
