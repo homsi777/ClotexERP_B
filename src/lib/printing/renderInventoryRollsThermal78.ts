@@ -27,6 +27,8 @@ export interface ThermalStatementOptions {
   rolls: FabricRollDto[]; title?: string; searchQuery?: string; warehouseLabel?: string; printedAt?: Date;
   /** معامل حجم الخط (1 = الافتراضي)؛ يتغير به المطبوع فعلاً مع ارتفاع الصفوف والمسافات. */
   fontScale?: number; rollWidthMm?: number;
+  /** ملخص: سطر واحد لكل لون (عدد الأتواب والمجموع) بلا أتواب مفردة؛ الافتراضي تفصيلي. */
+  summary?: boolean;
   /** شعار CLOTEX (data-URI) واسم العلامة؛ يمرّرهما المستدعي كي يبقى المُصيّر نقياً وقابلاً للاختبار. */
   logoSrc?: string; brandName?: string;
 }
@@ -44,7 +46,12 @@ export function renderInventoryRollsThermal78(o: ThermalStatementOptions): { htm
   const totalM = o.rolls.reduce((a, r) => a + getRollLengthMeters(r), 0);
   const totalKg = o.rolls.reduce((a, r) => a + kgOf(r), 0);
   const warehouses = new Set(o.rolls.map((r) => String(r.warehouse_name ?? '')));
-  const rollsHtml = groups.map((g) => {
+  const summary = o.summary === true;
+  const summaryHtml = `<div class="sh"><span>اللون</span><span>الأتواب</span><span>الأمتار</span></div>` + groups.map((g) => {
+    const gm = g.rows.reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0);
+    return `<div class="srow"><div class="sn">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div><div class="sc">${g.rows.length.toLocaleString('en')}</div><div class="sm">${fmt(gm)}${gk > 0 ? `<small>${fmt(gk, 1)} كغ</small>` : ''}</div></div>`;
+  }).join('');
+  const rollsHtml = summary ? summaryHtml : groups.map((g) => {
     const gm = g.rows.reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0);
     const cells = g.rows.map((r, i) => {
       const extra = [r.kg > 0 ? `${fmt(r.kg, 1)} كغ` : '', r.status, warehouses.size > 1 ? r.warehouse : ''].filter(Boolean).join(' · ');
@@ -58,8 +65,10 @@ export function renderInventoryRollsThermal78(o: ThermalStatementOptions): { htm
 
   // ارتفاع تقديري يتبع المحتوى (لا فراغ كبير ولا قص): الرأس + مجموعات + الإجمالي
   const rowMm = 12.5 * s, ghMm = 7 * s, totMm = 7 * s;
-  const heightMm = Math.ceil(46 * s + groups.reduce((a, g) => a + ghMm + Math.ceil(g.rows.length / 2) * rowMm + totMm + 2, 0) + 16 * s + 8);
-  const title = o.title ?? 'كشف جرد الأتواب';
+  const heightMm = summary
+    ? Math.ceil(46 * s + 8 * s + groups.length * 10 * s + 16 * s + 8)
+    : Math.ceil(46 * s + groups.reduce((a, g) => a + ghMm + Math.ceil(g.rows.length / 2) * rowMm + totMm + 2, 0) + 16 * s + 8);
+  const title = o.title ?? (summary ? 'كشف جرد ملخص' : 'كشف جرد الأتواب');
   const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>
 @page { size: ${rollW}mm ${heightMm}mm; margin: 0; }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -87,6 +96,12 @@ h1{text-align:center;font-size:${11 * s}pt;font-weight:900;margin-bottom:${1 * s
 .grand .t{font-size:${8 * s}pt;font-weight:900}
 .grand .v{font-size:${14 * s}pt;font-weight:900;font-family:Consolas,'Courier New',monospace;direction:ltr;unicode-bidi:embed}
 .grand .k{font-size:${8 * s}pt;font-weight:700}
+.sh{display:flex;justify-content:space-between;font-size:${7 * s}pt;font-weight:900;border-bottom:.35mm solid #000;padding:${.6 * s}mm 0}
+.srow{display:flex;align-items:center;gap:1.5mm;border-bottom:.15mm dotted #888;padding:${1.2 * s}mm 0;page-break-inside:avoid;break-inside:avoid}
+.sn{flex:1;font-size:${9 * s}pt;font-weight:900;line-height:1.2}
+.sc{width:12mm;text-align:center;font-size:${9 * s}pt;font-weight:700;font-family:Consolas,'Courier New',monospace}
+.sm{width:26mm;text-align:left;font-size:${12 * s}pt;font-weight:900;font-family:Consolas,'Courier New',monospace;direction:ltr;unicode-bidi:embed;line-height:1.1}
+.sm small{display:block;font-size:${6.5 * s}pt;font-weight:700;color:#222}
 .foot{text-align:center;font-size:${6.5 * s}pt;margin-top:${2 * s}mm}
 </style></head><body><div class="page">
 ${o.logoSrc ? `<img class="logo" src="${o.logoSrc}" alt="${esc(o.brandName ?? 'CLOTEX')}"/>` : ''}

@@ -67,3 +67,14 @@ test('print settings are saved per device and printer', () => {
   (globalThis as Record<string, unknown>).window = { fabricApp: { isElectron: true } };
   assert.equal(loadInventoryPrintSettings().mode, 'A4', 'إعدادات الكمبيوتر مستقلة عن المتصفح/الموبايل');
 });
+
+test('thermal summary: one line per color with roll count and totals, no individual rolls, shorter than detail', () => {
+  const sum = renderInventoryRollsThermal78({ rolls, summary: true });
+  const det = renderInventoryRollsThermal78({ rolls });
+  assert.equal((sum.html.match(/class="srow"/g) ?? []).length, 2, 'سطر لكل لون');
+  assert.ok(!sum.html.includes('000675') && !sum.html.includes('class="cell"'), 'بلا أتواب مفردة');
+  assert.ok(sum.html.includes('198.00') && sum.html.includes('100.00') && sum.html.includes('298.00'), 'مجاميع الألوان والإجمالي');
+  assert.match(sum.html, /<div class="sc">3<\/div>/, 'عدد أتواب خاكي');
+  assert.match(sum.html, /كشف جرد ملخص/);
+  assert.ok(sum.heightMm < det.heightMm);
+});

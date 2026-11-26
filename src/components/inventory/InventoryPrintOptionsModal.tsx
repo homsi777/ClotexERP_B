@@ -37,6 +37,8 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
   const changePrinter = (name: string) => { const loaded = loadInventoryPrintSettings(name); setS(loaded); saveInventoryPrintSettings(loaded); };
 
   const thermal = useMemo(() => renderInventoryRollsThermal78({ rolls: ctx.rolls, title: 'كشف جرد الأتواب', searchQuery: ctx.searchQuery, warehouseLabel: ctx.warehouseLabel, fontScale: s.thermalFontScale, rollWidthMm: s.rollWidthMm, logoSrc: BRAND.logoInline, brandName: BRAND.name }), [ctx, s.thermalFontScale, s.rollWidthMm]);
+  const thermalSummary = useMemo(() => renderInventoryRollsThermal78({ rolls: ctx.rolls, summary: true, searchQuery: ctx.searchQuery, warehouseLabel: ctx.warehouseLabel, fontScale: s.thermalFontScale, rollWidthMm: s.rollWidthMm, logoSrc: BRAND.logoInline, brandName: BRAND.name }), [ctx, s.thermalFontScale, s.rollWidthMm]);
+  const [thermalKind, setThermalKind] = useState<'detail' | 'summary'>('detail');
   const totalM = ctx.rolls.reduce((a, r) => a + getRollLengthMeters(r), 0);
 
   /** طباعة مباشرة: بالتطبيق المكتبي مع اسم طابعة تُرسَل صامتة؛ وإلا نافذة الطباعة (حفظ PDF ممكن منها). */
@@ -50,7 +52,7 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
     } finally { setBusy(false); }
   };
   const printA4 = () => { update({ mode: 'A4' }); void send(renderInventoryRollsAuditA4Html({ rolls: ctx.rolls, searchQuery: ctx.searchQuery, scopeLabel: ctx.scopeLabel, warehouseLabel: ctx.warehouseLabel, printedAt: new Date(), orientation: s.a4Orientation }), ctx.scopeLabel, null); };
-  const printThermal = () => { update({ mode: 'THERMAL' }); void send(thermal.html, ctx.scopeLabel, { widthMm: s.rollWidthMm, heightMm: thermal.heightMm }); };
+  const printThermal = (kind: 'detail' | 'summary') => { update({ mode: 'THERMAL' }); setThermalKind(kind); const t = kind === 'summary' ? thermalSummary : thermal; void send(t.html, ctx.scopeLabel, { widthMm: s.rollWidthMm, heightMm: t.heightMm }); };
   const printSticker = async (colors: AuditStickerColor[]) => {
     const st = renderInventoryAuditSticker({ materialName: ctx.materialName, baseCode: ctx.baseCode, cartelaCode: ctx.cartelaCode, colors, widthMm: s.stickerWidthMm });
     await send(st.html, 'ستيكر جرد', { widthMm: st.widthMm, heightMm: st.heightMm });
@@ -68,7 +70,9 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
           <button type="button" disabled={busy || !ctx.rolls.length} onClick={printA4} className={`${btn} w-full bg-slate-900 text-white`}><Printer className="h-4 w-4" />طباعة A4 عادي</button>
           <label className="flex items-center justify-between gap-2 text-xs font-bold text-slate-600">اتجاه A4
             <select value={s.a4Orientation} onChange={(e) => update({ a4Orientation: e.target.value as 'landscape' | 'portrait' })} className="rounded-lg border px-2 py-1 font-normal"><option value="landscape">أفقي (الافتراضي)</option><option value="portrait">عمودي</option></select></label>
-          <button type="button" disabled={busy || !ctx.rolls.length} onClick={printThermal} className={`${btn} w-full bg-emerald-700 text-white`}><Printer className="h-4 w-4" />طباعة حراري 7.8 سم</button>
+          <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => printThermal('detail')} className={`${btn} w-full bg-emerald-700 text-white`}><Printer className="h-4 w-4" />طباعة حراري 7.8 سم — تفصيلي</button>
+          <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => printThermal('summary')} className={`${btn} w-full border border-emerald-700 bg-white text-emerald-800`}><Printer className="h-4 w-4" />طباعة حراري 7.8 سم — ملخص (لكل لون سطر)</button>
+          <div className="flex rounded-lg border text-xs font-bold" role="group" aria-label="نوع المعاينة"><button type="button" onClick={() => setThermalKind('detail')} className={`flex-1 rounded-r-lg px-2 py-1 ${thermalKind === 'detail' ? 'bg-slate-800 text-white' : 'bg-white'}`}>معاينة التفصيلي</button><button type="button" onClick={() => setThermalKind('summary')} className={`flex-1 rounded-l-lg px-2 py-1 ${thermalKind === 'summary' ? 'bg-slate-800 text-white' : 'bg-white'}`}>معاينة الملخص</button></div>
 
           <div className="rounded-xl border bg-slate-50 p-3">
             <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-700"><span>حجم الخط الحراري ({Math.round(s.thermalFontScale * 100)}%)</span>
@@ -76,7 +80,7 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
                 <button type="button" aria-label="تصغير الخط" onClick={() => update({ thermalFontScale: clampFontScale(s.thermalFontScale - FONT_SCALE_STEP) })} className="rounded-lg border bg-white px-2 py-1"><Minus className="inline h-3.5 w-3.5" />A</button>
                 <button type="button" aria-label="تكبير الخط" onClick={() => update({ thermalFontScale: clampFontScale(s.thermalFontScale + FONT_SCALE_STEP) })} className="rounded-lg border bg-white px-2 py-1"><Plus className="inline h-3.5 w-3.5" />A</button>
                 <button type="button" aria-label="الحجم الافتراضي" onClick={() => update({ thermalFontScale: 1 })} className="rounded-lg border bg-white px-2 py-1"><RotateCcw className="inline h-3.5 w-3.5" /></button></span></div>
-            <div className="max-h-64 overflow-auto rounded-lg border bg-white"><iframe title="معاينة الكشف الحراري" srcDoc={thermal.html} sandbox="" className="mx-auto block border-0" style={{ width: `${s.rollWidthMm}mm`, height: `${Math.min(thermal.heightMm, 400)}mm` }} /></div>
+            <div className="max-h-64 overflow-auto rounded-lg border bg-white"><iframe title="معاينة الكشف الحراري" srcDoc={(thermalKind === 'summary' ? thermalSummary : thermal).html} sandbox="" className="mx-auto block border-0" style={{ width: `${s.rollWidthMm}mm`, height: `${Math.min((thermalKind === 'summary' ? thermalSummary : thermal).heightMm, 400)}mm` }} /></div>
             <p className="mt-1 text-[11px] text-slate-500">المعاينة هي نفس المطبوع (الحجم الأدنى 80% والأقصى 160%؛ الصفوف تتسع تلقائياً). عرض الطباعة الفعلي 72 مم على رول 78 مم.</p>
           </div>
         </section>
