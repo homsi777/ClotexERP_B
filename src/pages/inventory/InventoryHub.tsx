@@ -9,7 +9,6 @@ import {
   FolderTree,
   History,
   PackagePlus,
-  PlusSquare,
   Scissors,
   Settings2,
   Trash2,
@@ -33,7 +32,7 @@ const SECTIONS: Section[] = [
     descKey: 'hub.stock.desc',
     cards: [
       { to: '/inventory', icon: Boxes, labelKey: 'inventory.rolls' },
-      { to: '/inventory/create', icon: PlusSquare, labelKey: 'inventory.createItem' },
+      // «إنشاء مادة جديدة» مخفي من الواجهة: تحلّ محلّه «عملية إدخال خامة جديدة» (المسار /inventory/create يبقى لأنها تستخدمه داخلياً)
       { to: '/purchases/intake-operations/new', icon: PackagePlus, labelKey: 'inventory.intakeOperationNew' },
       { to: '/inventory/movements-log', icon: History, labelKey: 'inventory.movementsLog' },
       { to: '/inventory/roll-cut', icon: Scissors, labelKey: 'inventory.rollCut' },
