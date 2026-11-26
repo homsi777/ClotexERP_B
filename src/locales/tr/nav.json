@@ -28,6 +28,7 @@
   "invoices.externalJobs": "Harici İşler",
   "invoices.purchaseReceiving": "Satın alma teslim alma",
   "invoices.purchaseNew": "Yeni satın alma faturası",
+  "invoices.operatingWarehouses": "Operasyon depoları",
   "invoices.exchange": "Değişim Faturaları",
   "invoices.returns": "İade Faturaları",
   "invoices.statement": "Fatura Özeti",

@@ -286,12 +286,16 @@ async function resolveWarehouseForPurchaseInvoice(
 const purchaseLineSchema = invoiceLineSchema.extend({
   unit: z.enum(['meter', 'yard', 'kg', 'package', 'piece']).default('meter'),
   materialKind: z.enum(['FABRIC', 'YARN', 'OTHER']).optional().nullable(),
+  /** البند المرجعي من كتالوج المشتريات. */
+  catalogItemId: z.string().uuid().optional().nullable(),
 });
 type PurchaseLine = z.infer<typeof purchaseLineSchema>;
 
 const purchaseInvoiceCreateBaseSchema = z.object({
   /** «استلام عبر المخزن»: المخزن هو من ينشئ الأتواب/الدفعات عند الاستلام، والفاتورة مالية فقط. */
   receiveViaWarehouse: z.boolean().optional(),
+  /** طريقة الدفع: نقدي أو آجل (للعرض والتقارير). */
+  paymentMethod: z.enum(['CASH', 'CREDIT']).optional().nullable(),
   invoiceNo: z.string().min(1),
   supplierInvoiceNo: z.string().optional().nullable(),
   invoiceDate: z.string().min(1),
@@ -385,8 +389,8 @@ async function insertPurchaseLines(
       `INSERT INTO purchase_invoice_lines (
          company_id, invoice_id, line_no, fabric_roll_id, yarn_lot_id, fabric_item_id, variant_id, warehouse_id,
          description, quantity, unit, unit_cost, line_discount, line_tax, line_total,
-         unit_cost_usd, line_discount_usd, line_tax_usd, line_total_usd, metadata, material_kind
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)`,
+         unit_cost_usd, line_discount_usd, line_tax_usd, line_total_usd, metadata, material_kind, catalog_item_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22)`,
       [
         companyId,
         invoiceId,
@@ -409,6 +413,7 @@ async function insertPurchaseLines(
         lineTotalUsd,
         JSON.stringify(ln.metadata ?? {}),
         ln.materialKind ?? (ln.unit === 'kg' && ln.commodityType === 'FABRIC' ? 'FABRIC' : null),
+        (ln as { catalogItemId?: string | null }).catalogItemId ?? null,
       ],
     );
   }
@@ -573,8 +578,8 @@ export async function createPurchaseInvoice(
        paid_amount, remaining_amount, payment_status, document_status,
        exchange_rate_to_usd, subtotal_usd, discount_total_usd, tax_total_usd, total_amount_usd,
        paid_amount_usd, remaining_amount_usd,
-       created_by_user_id, updated_by_user_id, usd_converted, receive_via_warehouse
-     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17,$18,$19,$20,$21,$22,$23,$24,$24,$25,$26)
+       created_by_user_id, updated_by_user_id, usd_converted, receive_via_warehouse, payment_method
+     ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'DRAFT',$17,$18,$19,$20,$21,$22,$23,$24,$24,$25,$26,$27)
      RETURNING id`,
     [
       companyId,
@@ -603,6 +608,7 @@ export async function createPurchaseInvoice(
       userId,
       usdConverted,
       d.receiveViaWarehouse === true,
+      d.paymentMethod ?? null,
     ],
   );
 
@@ -979,7 +985,10 @@ export async function confirmPurchaseInvoice(
     [invoiceId, companyId],
   );
 
-  const targetWarehouseId = await resolveWarehouseForPurchaseInvoice(client, companyId, inv.warehouse_id ?? null);
+  // «استلام عبر المخزن»: لا مخزون يُنشأ هنا فلا حاجة لمستودع أقمشة (مواد تشغيلية فقط مثلاً)
+  const targetWarehouseId = inv.receive_via_warehouse
+    ? ((inv.warehouse_id as string | null) ?? '')
+    : await resolveWarehouseForPurchaseInvoice(client, companyId, inv.warehouse_id ?? null);
 
   for (const ln of lines.rows) {
     // «استلام عبر المخزن»: الفاتورة مالية فقط؛ يُنشئ المخزن الأتواب/الدفعات لاحقاً عند الاستلام (بلا قيد مالي مكرر).

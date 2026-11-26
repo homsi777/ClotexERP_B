@@ -37,6 +37,8 @@ export const IntakeDispatchSlips: React.FC = () => {
   // تسعير بالخامة (أساسي) وباللون (اختياري) بدل سعر لكل توب؛ يُحوَّل عند الحفظ إلى سعر لكل سطر.
   const [itemPrice, setItemPrice] = useState<Record<string, string>>({});
   const [colorPrice, setColorPrice] = useState<Record<string, string>>({});
+  /** أساس السعر لكل خامة: للمتر أو للكيلو (الخامة المُدخلة بالوزن تُسعَّر بالكيلو). */
+  const [basis, setBasis] = useState<Record<string, 'METER' | 'KG'>>({});
   const [colorOpen, setColorOpen] = useState<Record<string, boolean>>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,7 @@ export const IntakeDispatchSlips: React.FC = () => {
         if (vals.size === 1) seed[g] = [...vals][0];
       }
       setItemPrice(seed); setColorPrice({}); setColorOpen({});
+      setBasis(Object.fromEntries([...new Set(ls.map((l) => l.item_name))].map((g) => [g, ls.filter((l) => l.item_name === g).every((l) => l.price_basis === 'KG') ? 'KG' : 'METER'])));
     } catch (e) {
       showToast({ type: 'error', message: e instanceof ApiRequestError ? e.message : t('loadFailed') });
       setOpenSlipId(null);
@@ -119,7 +122,7 @@ export const IntakeDispatchSlips: React.FC = () => {
     };
     const payload = lines
       .filter((l) => effective(l) !== '')
-      .map((l) => ({ lineId: l.id, unitPrice: Number(effective(l)) || 0 }));
+      .map((l) => ({ lineId: l.id, unitPrice: Number(effective(l)) || 0, basis: basis[l.item_name] ?? 'METER' }));
     if (payload.length === 0) {
       showToast({ type: 'warning', message: t('enterAtLeastOnePrice') });
       return;
@@ -338,14 +341,25 @@ export const IntakeDispatchSlips: React.FC = () => {
                     const gl = lines.filter((l) => l.item_name === g);
                     const colors = [...new Set(gl.map((l) => l.color_name_ar ?? ''))];
                     const meters = gl.reduce((a, l) => a + Number(l.length_m), 0);
+                    const kgTotal = gl.reduce((a, l) => a + (Number(l.weight_kg) || 0), 0);
+                    const b = basis[g] ?? 'METER';
+                    const price = Number(itemPrice[g]) || 0;
+                    const estimate = price * (b === 'KG' ? kgTotal : meters);
                     return (
                       <div key={g} className="rounded-xl border border-slate-200 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div><b>{g}</b> <span className="text-xs text-slate-500">· {gl.length} توب · {meters.toFixed(2)} م</span></div>
-                          <label className="flex items-center gap-2 text-sm">سعر الخامة
+                          <div><b>{g}</b> <span className="text-xs text-slate-500">· {gl.length} توب · {meters.toFixed(2)} م{kgTotal > 0 ? ` · ${kgTotal.toFixed(1)} كغ` : ''}</span></div>
+                          <div className="flex rounded-lg border border-slate-200 text-xs font-bold" role="group" aria-label="أساس السعر">
+                            <button type="button" onClick={() => setBasis((p) => ({ ...p, [g]: 'METER' }))} className={`rounded-r-lg px-3 py-1 ${b === 'METER' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700'}`}>سعر المتر</button>
+                            <button type="button" disabled={kgTotal <= 0} onClick={() => setBasis((p) => ({ ...p, [g]: 'KG' }))} className={`rounded-l-lg px-3 py-1 disabled:opacity-40 ${b === 'KG' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}>سعر الكيلو</button>
+                          </div>
+                          <label className="flex items-center gap-2 text-sm">{b === 'KG' ? 'سعر الكيلو' : 'سعر المتر'}
                             <input type="number" min={0} step="0.01" value={itemPrice[g] ?? ''} onChange={(e) => setItemPrice((p) => ({ ...p, [g]: e.target.value }))} className="w-24 rounded border border-slate-200 px-2 py-1 text-sm font-mono" dir="ltr" />
                           </label>
                         </div>
+                        {b === 'KG'
+                          ? <p className="mt-2 rounded-lg bg-emerald-50 p-2 text-xs font-bold text-emerald-800">انتبه: السعر هنا للكيلوغرام الواحد (وليس للمتر)؛ الإجمالي = السعر × الوزن{price > 0 ? ` ≈ ${estimate.toLocaleString('en', { maximumFractionDigits: 2 })}` : ''}.</p>
+                          : kgTotal > 0 && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">السعر للمتر الواحد. إن كانت الخامة مُدخلة بالوزن فاختر «سعر الكيلو».</p>}
                         {colors.length > 1 && (
                           <div className="mt-2">
                             <button type="button" className="text-xs font-bold text-indigo-700" onClick={() => setColorOpen((o) => ({ ...o, [g]: !o[g] }))}>{colorOpen[g] ? 'إخفاء' : 'تسعير حسب اللون (اختياري)'}</button>

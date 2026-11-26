@@ -5,6 +5,7 @@ import * as api from '../../lib/api/purchaseReceivingApi';
 import type { LotInput, ReceiptLineInput, ReceiptView, ReceivingInvoice, ReceivingLine, RollInput } from '../../lib/api/purchaseReceivingApi';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { listSuppliers, type ApiSupplier } from '../../lib/api/suppliersApi';
+import { listCatalog, listOperatingWarehouses, type CatalogItem, type OperatingWarehouse } from '../../lib/api/purchaseCatalogApi';
 
 const nf = (n: number, d = 3) => n.toLocaleString('en-US', { maximumFractionDigits: d });
 const UNIT: Record<string, string> = { meter: 'م', yard: 'ياردة', kg: 'كغ', package: 'طرد', piece: 'قطعة' };
@@ -95,19 +96,23 @@ function ReceiveDialog({ draft, warehouses, suppliers, onClose, onDone }: { draf
   const [kind, setKind] = useState<api.MaterialKind>(line?.materialKind ?? 'FABRIC'), [unit, setUnit] = useState<api.ReceiveUnit>((line?.unit as api.ReceiveUnit) ?? 'meter'), [description, setDescription] = useState(line?.description ?? '');
   const [rolls, setRolls] = useState<RollInput[]>([{}]), [lots, setLots] = useState<LotInput[]>([{ weightKg: 0 }]), [qty, setQty] = useState(''), [factor, setFactor] = useState('');
   const [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  // المواد الأخرى تدخل مستودعاً تشغيلياً (منفصل عن مستودعات الأقمشة)
+  const [opWhs, setOpWhs] = useState<OperatingWarehouse[]>([]), [opWhId, setOpWhId] = useState(''), [catalog, setCatalog] = useState<CatalogItem[]>([]), [catalogId, setCatalogId] = useState('');
+  useEffect(() => { if (kind === 'OTHER') { void listOperatingWarehouses().then(setOpWhs).catch(() => undefined); if (!line) void listCatalog('OTHER').then(setCatalog).catch(() => undefined); } }, [kind, line]);
   const byWeight = kind === 'FABRIC' && unit === 'kg';
   const sameUnit = !line || unit === line.unit || (['meter', 'yard'].includes(unit) && ['meter', 'yard'].includes(line.unit));
 
   const submit = async () => {
     setBusy(true); setErr('');
     try {
-      if (!warehouseId) throw new Error('اختر المخزن');
+      if (kind !== 'OTHER' && !warehouseId) throw new Error('اختر المخزن');
+      if (kind === 'OTHER' && !line && !catalogId) throw new Error('اختر البند من القائمة المرجعية');
       if (!draft.invoice && !supplierId) throw new Error('اختر المورد للاستلام المعلّق');
       const l: ReceiptLineInput = { invoiceLineId: line?.id ?? null, description: description || undefined, materialKind: kind, unit };
       if (kind === 'FABRIC') l.rolls = rolls.filter((r) => r.lengthM || r.weightKg).map((r) => ({ ...r }));
       else if (kind === 'YARN') l.lots = lots.filter((x) => x.weightKg > 0);
-      else { l.quantity = Number(qty); if (!sameUnit) l.conversionFactor = Number(factor) || undefined; }
-      await api.createReceipt({ invoiceId: draft.invoice?.id ?? null, supplierId: draft.invoice ? undefined : supplierId, warehouseId, notes: notes || undefined, lines: [l] });
+      else { l.quantity = Number(qty); if (!sameUnit) l.conversionFactor = Number(factor) || undefined; l.catalogItemId = catalogId || null; l.operatingWarehouseId = opWhId || null; }
+      await api.createReceipt({ invoiceId: draft.invoice?.id ?? null, supplierId: draft.invoice ? undefined : supplierId, warehouseId: kind === 'OTHER' ? null : warehouseId, notes: notes || undefined, lines: [l] });
       onDone();
     } catch (e) { setErr(msg(e)); } finally { setBusy(false); }
   };
@@ -118,7 +123,7 @@ function ReceiveDialog({ draft, warehouses, suppliers, onClose, onDone }: { draf
     <div className="mb-3 flex items-center justify-between"><b className="text-lg">{draft.pending ? 'استلام قبل وصول الفاتورة' : `استلام: ${line?.description}`}</b><button type="button" onClick={onClose} className="rounded-lg border px-2 py-1"><X className="h-4 w-4" /></button></div>
     {line && <p className="mb-2 rounded-lg bg-slate-50 p-2 text-sm">المطلوب {nf(line.quantity)} {UNIT[line.unit]} · المستلم {nf(line.received)} · المتبقي <b>{nf(line.remaining)}</b></p>}
     <div className="grid gap-2 sm:grid-cols-2">
-      <label className="text-sm font-bold">المخزن<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal"><option value="">— اختر —</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+      {kind !== 'OTHER' && <label className="text-sm font-bold">المخزن<select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal"><option value="">— اختر —</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
       {!draft.invoice && <label className="text-sm font-bold">المورد<select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal"><option value="">— اختر —</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
       {!line && <label className="text-sm font-bold">نوع المادة<select value={kind} onChange={(e) => { const k = e.target.value as api.MaterialKind; setKind(k); setUnit(k === 'FABRIC' ? 'meter' : k === 'YARN' ? 'kg' : 'piece'); }} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal">{Object.entries(KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>}
       {!line && <label className="text-sm font-bold">وصف المادة<input value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-normal" /></label>}
@@ -151,6 +156,10 @@ function ReceiveDialog({ draft, warehouses, suppliers, onClose, onDone }: { draf
       </div>)}
       <button type="button" onClick={() => setLots([...lots, { weightKg: 0 }])} className="rounded-lg border px-3 py-1 text-xs font-bold">+ دفعة</button></div>}
 
+    {kind === 'OTHER' && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {!line && <label className="text-sm font-bold">البند (القائمة المرجعية)<select value={catalogId} onChange={(e) => { setCatalogId(e.target.value); const c = catalog.find((x) => x.id === e.target.value); if (c) { setDescription(c.name); setUnit(c.defaultUnit); if (c.operatingWarehouseId) setOpWhId(c.operatingWarehouseId); } }} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal"><option value="">— اختر —</option>{catalog.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+      <label className="text-sm font-bold">المستودع التشغيلي<select value={opWhId} onChange={(e) => setOpWhId(e.target.value)} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal"><option value="">{line ? '— الافتراضي للبند —' : '— اختر —'}</option>{opWhs.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+    </div>}
     {kind === 'OTHER' && <div className="mt-3 grid gap-2 sm:grid-cols-3">
       <label className="text-sm font-bold">الكمية المستلمة<input type="number" min="0" step="0.001" value={qty} onChange={(e) => setQty(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-normal" dir="ltr" /></label>
       <label className="text-sm font-bold">الوحدة<select value={unit} onChange={(e) => setUnit(e.target.value as api.ReceiveUnit)} className="mt-1 w-full rounded-lg border px-2 py-2 text-sm font-normal"><option value="piece">قطعة</option><option value="package">طرد</option><option value="kg">كغ</option><option value="meter">متر</option></select></label>

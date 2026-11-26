@@ -185,6 +185,7 @@ import { CartelaColorsIndex } from './pages/cartela/CartelaColorsIndex';
 import { PlatformOverview } from './pages/PlatformOverview';
 import { BranchManagement } from './pages/BranchManagement';
 import { PurchaseReceiving } from './pages/purchases/PurchaseReceiving';
+import { OperatingWarehouses } from './pages/purchases/OperatingWarehouses';
 import { PurchaseInvoiceCreate } from './pages/purchases/PurchaseInvoiceCreate';
 import { PartyBalancesPage } from './pages/PartyBalances';
 import { RollCut } from './pages/inventory/RollCut';
@@ -310,6 +311,7 @@ export default function App() {
             <Route path="purchases/import-excel" element={<ImportExcel />} />
             <Route path="purchases/import-batches" element={<ImportBatches />} />
             <Route path="purchases/receiving" element={<PurchaseReceiving />} />
+            <Route path="purchases/operating-warehouses" element={<OperatingWarehouses />} />
             <Route path="purchases/new-invoice" element={<PurchaseInvoiceCreate />} />
             <Route path="purchases/external-jobs" element={<ExternalJobs />} />
             <Route path="purchases/external-jobs/processing/new" element={<ExternalJobProcessingNew />} />

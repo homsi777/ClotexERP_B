@@ -28,6 +28,7 @@
   "invoices.externalJobs": "مهام خارجية",
   "invoices.purchaseReceiving": "استلام المشتريات",
   "invoices.purchaseNew": "فاتورة شراء جديدة",
+  "invoices.operatingWarehouses": "المستودعات التشغيلية",
   "invoices.exchange": "فواتير الصرف",
   "invoices.returns": "فواتير المرتجعات",
   "invoices.statement": "كشف فاتورة",

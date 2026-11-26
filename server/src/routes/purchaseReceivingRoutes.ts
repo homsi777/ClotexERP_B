@@ -4,6 +4,7 @@ import { getPool } from '../db/pool.js';
 import { authenticateRequest } from '../middleware/auth.js';
 import { sendError } from '../middleware/errorHandler.js';
 import { ArabicErrors } from '../utils/arabicErrors.js';
+import { createOperatingWarehouse, disposeOperatingStock, listOperatingMovements, listOperatingStock, listOperatingWarehouses } from '../services/purchaseCatalogService.js';
 import { createReceipt, linkReceiptToInvoice, listReceipts, listReceivingInvoices } from '../services/purchaseReceivingService.js';
 
 const has = (u: { role: string; permissions: string[]; customPerms?: boolean }, codes: string[], roles: string[] = []) =>
@@ -14,6 +15,7 @@ function handle(reply: FastifyReply, e: unknown) {
   const err = e as { code?: string; message?: string };
   if (err.code === 'VALIDATION') return sendError(reply, 400, err.message ?? 'بيانات غير صالحة', 'VALIDATION');
   if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message ?? 'غير موجود', 'NOT_FOUND');
+  if (err.code === 'DUPLICATE') return sendError(reply, 409, err.message ?? 'مكرر', 'DUPLICATE');
   if (err.code === 'FORBIDDEN') return sendError(reply, 403, err.message ?? ArabicErrors.forbidden, 'FORBIDDEN');
   throw e;
 }
@@ -75,6 +77,30 @@ export const purchaseReceivingRoutes: FastifyPluginAsync = async (app) => {
       await linkReceiptToInvoice(client, req.user!.companyId, req.user!.sub, id, body.data.invoiceId, body.data.map);
       await client.query('COMMIT');
       return { ok: true };
+    } catch (e) { await client.query('ROLLBACK'); return handle(reply, e); } finally { client.release(); }
+  });
+
+  // المستودعات التشغيلية (للمواد فقط، منفصلة عن مستودعات الأقمشة)
+  app.get('/operating/warehouses', async (req) => ({ ok: true, data: await listOperatingWarehouses(getPool(), req.user!.companyId, (req.query as Record<string, string>).all === '1') }));
+  app.post('/operating/warehouses', async (req, reply) => { try { return reply.status(201).send({ ok: true, data: await createOperatingWarehouse(getPool(), req.user!.companyId, req.body) }); } catch (e) { return handle(reply, e); } });
+  app.get('/operating/warehouses/:id/stock', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!z.string().uuid().safeParse(id).success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    return { ok: true, data: await listOperatingStock(getPool(), req.user!.companyId, id) };
+  });
+  app.get('/operating/warehouses/:id/movements', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const item = (req.query as Record<string, string>).catalogItemId;
+    if (!z.string().uuid().safeParse(id).success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    return { ok: true, data: await listOperatingMovements(getPool(), req.user!.companyId, id, z.string().uuid().safeParse(item).success ? item : undefined) };
+  });
+  app.post('/operating/dispose', async (req, reply) => {
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const r = await disposeOperatingStock(client, req.user!.companyId, req.user!.sub, req.body);
+      await client.query('COMMIT');
+      return { ok: true, data: r };
     } catch (e) { await client.query('ROLLBACK'); return handle(reply, e); } finally { client.release(); }
   });
 };

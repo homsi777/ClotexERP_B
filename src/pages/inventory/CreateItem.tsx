@@ -779,7 +779,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       setName('');
       void generateBarcode();
     }
-    if (lengthInputRef.current) lengthInputRef.current.focus();
+    (qtyBasis === 'weight' ? document.getElementById('weight') : lengthInputRef.current)?.focus();
   };
 
   /**
@@ -1182,7 +1182,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
     }
     setEditingDraftId(localId);
     setSaveError('');
-    if (lengthInputRef.current) lengthInputRef.current.focus();
+    (qtyBasis === 'weight' ? document.getElementById('weight') : lengthInputRef.current)?.focus();
   };
 
   const handleDeleteDraft = (localId: string) => {
@@ -1370,10 +1370,11 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 text-sm font-bold" role="group" aria-label="طريقة إدخال الكمية">
                 <span className="text-slate-500 px-1">الإدخال بـ</span>
                 <button type="button" onClick={() => setQtyBasis('length')} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'length' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الطول</button>
-                <button type="button" onClick={() => setQtyBasis('weight')} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'weight' ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الوزن (كغ)</button>
+                <button type="button" onClick={() => { setQtyBasis('weight'); setLengthType('meter'); }} className={`flex-1 rounded-lg px-3 py-1.5 ${qtyBasis === 'weight' ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-700'}`}>الوزن (كغ)</button>
               </div>
               {qtyBasis === 'weight' && <p className="-mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">أدخل الوزن بالكيلو؛ يُحسب الطول تلقائياً من العرض والوزن النوعي (gsm) ويُحفظ الوزن المُدخَل كوزن فعلي للتوب.</p>}
-              <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-sm">
+              {/* الإدخال بالوزن: خانة المتر مخفية تماماً (الطول يُحسب تلقائياً ويظهر في الجدول) */}
+              <div className={`bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-sm ${qtyBasis === 'weight' ? 'hidden' : ''}`}>
                  <label className="block text-lg font-bold text-indigo-900 mb-4">{t('lengthCard.title', { unit: lengthType === 'yard' ? t('units.yard') : t('units.meter') })}</label>
                   <input 
                     id="length"
@@ -1430,10 +1431,12 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                     onChange={e => setWeight(e.target.value === '' ? '' : Number(e.target.value))}
                     onKeyDown={handleKeyDown}
                     onWheel={e => e.currentTarget.blur()}
-                    placeholder="0.00" 
-                    className="w-full bg-white border border-emerald-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition shadow-sm font-mono text-center text-3xl py-4 font-black text-emerald-700" 
+                    placeholder="0.00"
+                    autoFocus={qtyBasis === 'weight'}
+                    className="w-full bg-white border border-emerald-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 transition shadow-sm font-mono text-center text-3xl py-4 font-black text-emerald-700"
                     dir="ltr"
                   />
+                  {qtyBasis === 'weight' && <p className="mt-2 text-center text-xs font-bold text-emerald-700">السعر يُحسب بالكيلوغرام (وليس بالمتر) · الطول يُشتق تلقائياً ويظهر في جدول الأتواب</p>}
                </div>
 
                <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-4">
@@ -1778,7 +1781,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
                 </>
               )}
 
-              <div className="space-y-3">
+              <div className={`space-y-3 ${qtyBasis === 'weight' ? 'hidden' : ''}`}>
               <label className="block text-sm font-bold text-slate-700">{t('form.lengthTypeLabel')}</label>
               <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                 <button

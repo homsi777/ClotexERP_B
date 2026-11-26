@@ -26,6 +26,8 @@ export interface ApiIntakeDispatchSlipLine {
   fabric_roll_id: string;
   unit_price: string | null;
   line_total: string | null;
+  price_basis?: 'METER' | 'KG';
+  weight_kg?: string | null;
   barcode: string;
   length_m: string;
   item_name: string;
@@ -48,7 +50,7 @@ export async function getIntakeDispatchSlip(
 
 export async function updateIntakeDispatchSlipLinePrices(
   id: string,
-  lines: { lineId: string; unitPrice: number }[],
+  lines: { lineId: string; unitPrice: number; basis?: 'METER' | 'KG' }[],
 ): Promise<void> {
   await apiFetch(`/api/intake-dispatch-slips/${id}/lines`, {
     method: 'PATCH',

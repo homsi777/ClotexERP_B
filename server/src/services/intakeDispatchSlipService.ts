@@ -31,6 +31,8 @@ export type IntakeDispatchSlipLineRow = {
   fabric_roll_id: string;
   unit_price: string | null;
   line_total: string | null;
+  price_basis?: 'METER' | 'KG';
+  weight_kg?: string | null;
   barcode: string;
   length_m: string;
   item_name: string;
@@ -79,7 +81,8 @@ export async function getDispatchSlipWithLines(
   if (!slip) return null;
 
   const linesRes = await pool.query<IntakeDispatchSlipLineRow>(
-    `SELECT l.id, l.slip_id, l.fabric_roll_id, l.unit_price, l.line_total,
+    `SELECT l.id, l.slip_id, l.fabric_roll_id, l.unit_price, l.line_total, l.price_basis,
+            COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg) AS weight_kg,
             fr.barcode, fr.length_m, fi.name AS item_name, fc.name_ar AS color_name_ar
      FROM intake_dispatch_slip_lines l
      JOIN fabric_rolls fr ON fr.id = l.fabric_roll_id
@@ -96,6 +99,8 @@ const priceLinesSchema = z.object({
   lines: z.array(z.object({
     lineId: z.string().uuid(),
     unitPrice: z.number().min(0),
+    /** METER: السعر للمتر (الافتراضي)؛ KG: السعر للكيلو والإجمالي = السعر × وزن التوب. */
+    basis: z.enum(['METER', 'KG']).optional(),
   })).min(1),
 });
 
@@ -112,12 +117,24 @@ export async function updateDispatchSlipLinePrices(
   if (!slipCheck.rows.length) throw Object.assign(new Error('الإرسالية غير موجودة'), { code: 'NOT_FOUND' });
 
   for (const line of parsed.data.lines) {
+    const basis = line.basis ?? 'METER';
+    if (basis === 'KG') {
+      const w = await pool.query<{ kg: string | null }>(
+        `SELECT COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg)::text AS kg
+           FROM intake_dispatch_slip_lines l JOIN fabric_rolls fr ON fr.id = l.fabric_roll_id
+          WHERE l.id = $1 AND l.slip_id = $2`,
+        [line.lineId, slipId],
+      );
+      if (!(Number(w.rows[0]?.kg) > 0)) throw Object.assign(new Error('التسعير بالكيلو يتطلب وزناً مسجلاً لكل توب'), { code: 'VALIDATION' });
+    }
     await pool.query(
       `UPDATE intake_dispatch_slip_lines l
-       SET unit_price = $1, line_total = ROUND($1 * fr.length_m, 2), updated_at = now()
+       SET unit_price = $1, price_basis = $4,
+           line_total = ROUND($1 * CASE WHEN $4 = 'KG' THEN COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg) ELSE fr.length_m END, 2),
+           updated_at = now()
        FROM fabric_rolls fr
        WHERE l.id = $2 AND l.slip_id = $3 AND fr.id = l.fabric_roll_id`,
-      [line.unitPrice, line.lineId, slipId],
+      [line.unitPrice, line.lineId, slipId, basis],
     );
   }
 }
@@ -227,12 +244,13 @@ export async function createPurchaseInvoiceFromDispatchSlip(
     fabric_roll_id: string;
     unit_price: string | null;
     line_total: string | null;
+    price_basis: string | null;
     length_m: string;
     item_id: string;
     item_name: string;
     warehouse_id: string;
   }>(
-    `SELECT l.id, l.fabric_roll_id, l.unit_price, l.line_total,
+    `SELECT l.id, l.fabric_roll_id, l.unit_price, l.line_total, l.price_basis,
             fr.length_m, fr.item_id, fi.name AS item_name, fr.warehouse_id
        FROM intake_dispatch_slip_lines l
        JOIN fabric_rolls fr ON fr.id = l.fabric_roll_id
@@ -256,7 +274,8 @@ export async function createPurchaseInvoiceFromDispatchSlip(
     description: l.item_name,
     quantity: Number(l.length_m),
     unit: 'meter' as const,
-    unitPrice: Number(l.unit_price),
+    // السعر بالكيلو: فاتورة الشراء بالمتر فيُشتق سعر المتر الفعلي من الإجمالي
+    unitPrice: l.price_basis === 'KG' && Number(l.length_m) > 0 ? Math.round((Number(l.line_total) / Number(l.length_m)) * 10000) / 10000 : Number(l.unit_price),
     lineTotal: Number(l.line_total ?? Number(l.unit_price) * Number(l.length_m)),
   }));
   const subtotal = Math.round(lines.reduce((sum, l) => sum + l.lineTotal, 0) * 100) / 100;

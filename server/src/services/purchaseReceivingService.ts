@@ -98,8 +98,8 @@ export interface ReceiptView { id: string; receiptNo: string; invoiceId: string 
 
 export async function listReceipts(db: Db, companyId: string, f: { invoiceId?: string; pending?: boolean; limit?: number } = {}): Promise<ReceiptView[]> {
   const rs = (await db.query<Record<string, unknown>>(
-    `SELECT r.id, r.receipt_no, r.invoice_id, i.invoice_no, s.name AS supplier_name, w.name AS warehouse_name, r.status, r.notes, r.created_at, COALESCE(u.full_name,u.username) AS by, r.linked_at
-       FROM purchase_receipts r JOIN warehouses w ON w.id=r.warehouse_id LEFT JOIN purchase_invoices i ON i.id=r.invoice_id LEFT JOIN suppliers s ON s.id=COALESCE(r.supplier_id, i.supplier_id) LEFT JOIN users u ON u.id=r.created_by_user_id
+    `SELECT r.id, r.receipt_no, r.invoice_id, i.invoice_no, s.name AS supplier_name, COALESCE(w.name, ow.name) AS warehouse_name, r.status, r.notes, r.created_at, COALESCE(u.full_name,u.username) AS by, r.linked_at
+       FROM purchase_receipts r LEFT JOIN warehouses w ON w.id=r.warehouse_id LEFT JOIN operating_warehouses ow ON ow.id=r.operating_warehouse_id LEFT JOIN purchase_invoices i ON i.id=r.invoice_id LEFT JOIN suppliers s ON s.id=COALESCE(r.supplier_id, i.supplier_id) LEFT JOIN users u ON u.id=r.created_by_user_id
       WHERE r.company_id=$1 AND ($2::uuid IS NULL OR r.invoice_id=$2) AND ($3::boolean IS NOT TRUE OR r.status='PENDING_INVOICE') ORDER BY r.created_at DESC LIMIT ${Math.min(Math.max(f.limit ?? 100, 1), 300)}`,
     [companyId, f.invoiceId ?? null, f.pending === true])).rows;
   if (!rs.length) return [];
@@ -120,21 +120,26 @@ const lotIn = z.object({ weightKg: z.coerce.number().positive(), lotNo: z.string
 const lineIn = z.object({
   invoiceLineId: z.string().uuid().nullable().optional(), description: z.string().trim().max(300).optional(), materialKind: z.enum(['FABRIC', 'YARN', 'OTHER']).optional(),
   unit: z.enum(['meter', 'yard', 'kg', 'package', 'piece']), quantity: z.coerce.number().positive().optional(), conversionFactor: z.coerce.number().positive().optional(), quantityInInvoiceUnit: z.coerce.number().nonnegative().optional(),
-  packageCount: z.coerce.number().nonnegative().optional(), locationId: z.string().uuid().nullable().optional(), rolls: z.array(rollIn).max(500).optional(), lots: z.array(lotIn).max(200).optional(),
+  packageCount: z.coerce.number().nonnegative().optional(), catalogItemId: z.string().uuid().nullable().optional(), operatingWarehouseId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(), rolls: z.array(rollIn).max(500).optional(), lots: z.array(lotIn).max(200).optional(),
 }).strict();
-export const receiptInput = z.object({ invoiceId: z.string().uuid().nullable().optional(), supplierId: z.string().uuid().nullable().optional(), warehouseId: z.string().uuid(), notes: z.string().trim().max(500).optional(), lines: z.array(lineIn).min(1).max(100) }).strict();
+export const receiptInput = z.object({ invoiceId: z.string().uuid().nullable().optional(), supplierId: z.string().uuid().nullable().optional(), warehouseId: z.string().uuid().nullable().optional(), notes: z.string().trim().max(500).optional(), lines: z.array(lineIn).min(1).max(100) }).strict();
 export type ReceiptInput = z.infer<typeof receiptInput>;
 
 interface InvRow { id: string; invoice_no: string; supplier_id: string; currency_code: string; receive_via_warehouse: boolean; document_status: string }
-interface InvLineRow { id: string; invoice_id: string; line_no: number; unit: string; quantity: string; unit_cost: string; description: string; material_kind: string | null; metadata: Record<string, unknown>; warehouse_id: string | null }
+interface InvLineRow { id: string; invoice_id: string; line_no: number; unit: string; quantity: string; unit_cost: string; description: string; material_kind: string | null; metadata: Record<string, unknown>; warehouse_id: string | null; catalog_item_id?: string | null }
 
 export async function createReceipt(client: PoolClient, companyId: string, userId: string, raw: unknown, opts: { warehouseScope?: string[] | null } = {}): Promise<{ id: string; receiptNo: string; status: string }> {
   const parsed = receiptInput.safeParse(raw);
   if (!parsed.success) throw fail('بيانات الاستلام غير صالحة');
   const d = parsed.data;
-  if (opts.warehouseScope && !opts.warehouseScope.includes(d.warehouseId)) throw fail('هذا المستودع خارج المستودعات المسموحة لك', 'FORBIDDEN');
-  const wh = await client.query('SELECT 1 FROM warehouses WHERE id=$1 AND company_id=$2', [d.warehouseId, companyId]);
-  if (!wh.rows.length) throw fail('المستودع غير موجود', 'NOT_FOUND');
+  // مواد تشغيلية فقط (OTHER) تُستلم في مستودع تشغيلي ولا تتطلب مستودع أقمشة
+  const onlyOther = d.lines.every((l) => (l.materialKind ?? 'OTHER') === 'OTHER' && l.materialKind === 'OTHER');
+  if (!d.warehouseId && !onlyOther) throw fail('اختر المخزن');
+  if (d.warehouseId) {
+    if (opts.warehouseScope && !opts.warehouseScope.includes(d.warehouseId)) throw fail('هذا المستودع خارج المستودعات المسموحة لك', 'FORBIDDEN');
+    const wh = await client.query('SELECT 1 FROM warehouses WHERE id=$1 AND company_id=$2', [d.warehouseId, companyId]);
+    if (!wh.rows.length) throw fail('المستودع غير موجود', 'NOT_FOUND');
+  }
 
   let inv: InvRow | null = null;
   if (d.invoiceId) {
@@ -148,7 +153,7 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
   const receiptNo = await generateSequentialDocumentNo(client, companyId, 'PURCHASE_RECEIPT');
   const rIns = await client.query<{ id: string }>(
     `INSERT INTO purchase_receipts (company_id, receipt_no, invoice_id, supplier_id, warehouse_id, status, notes, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [companyId, receiptNo, inv?.id ?? null, inv?.supplier_id ?? d.supplierId ?? null, d.warehouseId, inv ? 'RECEIVED' : 'PENDING_INVOICE', d.notes ?? null, userId]);
+    [companyId, receiptNo, inv?.id ?? null, inv?.supplier_id ?? d.supplierId ?? null, d.warehouseId ?? null, inv ? 'RECEIVED' : 'PENDING_INVOICE', d.notes ?? null, userId]);
   const receiptId = rIns.rows[0].id;
   const supplierId = inv?.supplier_id ?? d.supplierId ?? null;
 
@@ -156,7 +161,7 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
     let il: InvLineRow | null = null;
     if (ln.invoiceLineId) {
       if (!inv) throw fail('بند الفاتورة يتطلب تحديد الفاتورة');
-      il = (await client.query<InvLineRow>('SELECT id, invoice_id, line_no, unit, quantity::text, unit_cost::text, description, material_kind, metadata, warehouse_id FROM purchase_invoice_lines WHERE id=$1 AND company_id=$2 AND invoice_id=$3 FOR UPDATE', [ln.invoiceLineId, companyId, inv.id])).rows[0] ?? null;
+      il = (await client.query<InvLineRow>('SELECT id, invoice_id, line_no, unit, quantity::text, unit_cost::text, description, material_kind, metadata, warehouse_id, catalog_item_id FROM purchase_invoice_lines WHERE id=$1 AND company_id=$2 AND invoice_id=$3 FOR UPDATE', [ln.invoiceLineId, companyId, inv.id])).rows[0] ?? null;
       if (!il) throw fail('بند الفاتورة غير موجود في هذه الفاتورة', 'NOT_FOUND');
       // فاتورة بالاستلام التلقائي: أتواب/دفعات سطورها أُنشئت عند التأكيد؛ لا نكرّر المخزون إلا لسطور الطرد/القطعة (تتبع كمية فقط)
       if (!inv.receive_via_warehouse && !['package', 'piece'].includes(il.unit)) throw fail('هذه الفاتورة بالاستلام التلقائي: مخزونها أُنشئ عند التأكيد ولا يُسجَّل لها استلام ثانٍ');
@@ -187,7 +192,7 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
           else if (il.unit === 'kg' && r.weightKg) costPerM = (lineUnitCost * r.weightKg) / lengthM;
         }
         const made = await receiveFabricRoll(client, companyId, userId, {
-          receiptId, receiptNo, invoiceNo: inv?.invoice_no ?? null, supplierId, warehouseId: d.warehouseId, locationId: r.locationId ?? ln.locationId ?? null,
+          receiptId, receiptNo, invoiceNo: inv?.invoice_no ?? null, supplierId, warehouseId: d.warehouseId as string, locationId: r.locationId ?? ln.locationId ?? null,
           materialName: r.materialName ?? text(meta.materialName ?? meta.fabricName ?? description), designCode: r.designCode ?? text(meta.designCode ?? meta.dsamNumber), colorName: r.colorName ?? text(meta.colorName), colorCode: r.colorCode ?? text(meta.colorCode),
           widthCm: width, gsm, lengthM, weightKg: r.weightKg ?? null, barcode: r.barcode, lotNo: r.lotNo ?? text(meta.lotNo), unitCostPerMeter: costPerM, currency: ccy, note: description,
         });
@@ -202,7 +207,7 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
       let kg = 0, pk = 0;
       for (const l of ln.lots) {
         const made = await receiveYarnLot(client, companyId, userId, {
-          receiptId, receiptNo, invoiceId: inv?.id ?? null, invoiceLineId: il?.id ?? null, invoiceNo: inv?.invoice_no ?? null, supplierId, warehouseId: d.warehouseId, locationId: l.locationId ?? ln.locationId ?? null,
+          receiptId, receiptNo, invoiceId: inv?.id ?? null, invoiceLineId: il?.id ?? null, invoiceNo: inv?.invoice_no ?? null, supplierId, warehouseId: d.warehouseId as string, locationId: l.locationId ?? ln.locationId ?? null,
           materialName: l.materialName ?? text(meta.materialName ?? description), designCode: l.designCode ?? text(meta.designCode), colorName: l.colorName ?? text(meta.colorName), colorCode: l.colorCode ?? text(meta.colorCode),
           weightKg: l.weightKg, lotNo: l.lotNo, batchNo: l.batchNo, unitCostPerKg: il && il.unit === 'kg' ? lineUnitCost : null, currency: ccy, note: description,
         });
@@ -212,14 +217,35 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
       if (!(qty > 0)) throw fail('كمية الاستلام صفر');
     } else if (!(qty > 0)) throw fail('الكمية المستلمة مطلوبة');
 
+    // المواد الأخرى: تدخل المستودع التشغيلي (منفصل عن مستودعات الأقمشة) إن حُدّد المستودع والبند المرجعي
+    let catalogItemId: string | null = null, opWhId: string | null = null;
+    if (kind === 'OTHER') {
+      catalogItemId = ln.catalogItemId ?? il?.catalog_item_id ?? null;
+      if (catalogItemId) {
+        const ci = (await client.query<{ operating_warehouse_id: string | null }>('SELECT operating_warehouse_id FROM purchase_catalog_items WHERE id=$1 AND company_id=$2', [catalogItemId, companyId])).rows[0];
+        if (!ci) throw fail('البند المرجعي غير موجود', 'NOT_FOUND');
+        opWhId = ln.operatingWarehouseId ?? ci.operating_warehouse_id;
+      }
+      if (opWhId && catalogItemId) {
+        if (!(await client.query('SELECT 1 FROM operating_warehouses WHERE id=$1 AND company_id=$2 AND is_active', [opWhId, companyId])).rows.length) throw fail('المستودع التشغيلي غير موجود أو غير فعّال', 'NOT_FOUND');
+        await client.query(
+          `INSERT INTO operating_stock (company_id, warehouse_id, catalog_item_id, quantity) VALUES ($1,$2,$3,$4)
+           ON CONFLICT (warehouse_id, catalog_item_id) DO UPDATE SET quantity = operating_stock.quantity + EXCLUDED.quantity, updated_at = now()`, [companyId, opWhId, catalogItemId, qty]);
+        await client.query(
+          `INSERT INTO operating_stock_movements (company_id, warehouse_id, catalog_item_id, movement_type, quantity, unit, receipt_id, notes, created_by_user_id) VALUES ($1,$2,$3,'RECEIPT',$4,$5,$6,$7,$8)`,
+          [companyId, opWhId, catalogItemId, qty, unit, receiptId, `استلام ${receiptNo}`, userId]);
+        await client.query('UPDATE purchase_receipts SET operating_warehouse_id=COALESCE(operating_warehouse_id,$3) WHERE id=$1 AND company_id=$2', [receiptId, companyId, opWhId]);
+      }
+    }
+
     // مقارنة بوحدة الفاتورة (إن وُجد بند)
     const conv = il ? toInvoiceUnit(qty, unit, il.unit, ln.conversionFactor, ln.quantityInInvoiceUnit) : { qty, factor: null };
     await client.query(
-      `INSERT INTO purchase_receipt_lines (company_id, receipt_id, invoice_line_id, description, material_kind, unit, quantity, quantity_in_invoice_unit, conversion_factor, package_count, location_id, details, roll_ids, yarn_lot_ids)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::uuid[],$14::uuid[])`,
+      `INSERT INTO purchase_receipt_lines (company_id, receipt_id, invoice_line_id, description, material_kind, unit, quantity, quantity_in_invoice_unit, conversion_factor, package_count, location_id, details, roll_ids, yarn_lot_ids, catalog_item_id, operating_warehouse_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::uuid[],$14::uuid[],$15,$16)`,
       [companyId, receiptId, il?.id ?? null, description, kind, unit, qty, Math.round(conv.qty * 1000) / 1000, conv.factor, ln.packageCount ?? null, ln.locationId ?? null,
-        JSON.stringify({ rolls: ln.rolls?.length ?? 0, lots: ln.lots?.length ?? 0, supplierSideUnit: il?.unit ?? null }), rollIds, lotIds]);
-    if (il && !il.warehouse_id) await client.query('UPDATE purchase_invoice_lines SET warehouse_id=$3 WHERE id=$1 AND company_id=$2', [il.id, companyId, d.warehouseId]);
+        JSON.stringify({ rolls: ln.rolls?.length ?? 0, lots: ln.lots?.length ?? 0, supplierSideUnit: il?.unit ?? null }), rollIds, lotIds, catalogItemId, opWhId]);
+    if (il && !il.warehouse_id && d.warehouseId) await client.query('UPDATE purchase_invoice_lines SET warehouse_id=$3 WHERE id=$1 AND company_id=$2', [il.id, companyId, d.warehouseId]);
   }
   return { id: receiptId, receiptNo, status: inv ? 'RECEIVED' : 'PENDING_INVOICE' };
 }

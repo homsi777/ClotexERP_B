@@ -18,6 +18,7 @@ import {
   voidPurchaseInvoice,
   repairStalePurchaseInvoiceRolls,
 } from '../services/purchaseInvoiceService.js';
+import { createCatalogItem, listCatalog, updateCatalogItem } from '../services/purchaseCatalogService.js';
 
 export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', { preHandler: authenticateRequest }, async (req, reply) => {
@@ -36,6 +37,25 @@ export const purchaseInvoiceRoutes: FastifyPluginAsync = async (app) => {
     });
     const rows = canPrice(req.user, 'purchases.invoices') ? result.rows : (result.rows as Record<string, unknown>[]).map((r) => maskMoneyRow(r, 'header'));
     return reply.send({ ok: true, ...result, rows });
+  });
+
+  // القائمة المرجعية لبنود المشتريات (بلا أي بيانات مالية)
+  const catalogErr = (reply: Parameters<typeof sendError>[0], e: unknown) => {
+    const err = e as { code?: string; message?: string };
+    if (err.code === 'DUPLICATE') return sendError(reply, 409, err.message || 'مكرر', 'DUPLICATE');
+    if (err.code === 'VALIDATION') return sendError(reply, 400, err.message || ArabicErrors.validation, 'VALIDATION');
+    if (err.code === 'NOT_FOUND') return sendError(reply, 404, err.message || 'غير موجود', 'NOT_FOUND');
+    throw e;
+  };
+  app.get('/catalog', { preHandler: authenticateRequest }, async (req) => {
+    const q = req.query as Record<string, string>;
+    return { ok: true, data: await listCatalog(getPool(), req.user!.companyId, { kind: ['FABRIC', 'YARN', 'OTHER'].includes(q.kind) ? q.kind : undefined, search: q.search, includeInactive: q.all === '1' }) };
+  });
+  app.post('/catalog', { preHandler: authenticateRequest }, async (req, reply) => {
+    try { return reply.status(201).send({ ok: true, data: await createCatalogItem(getPool(), req.user!.companyId, req.user!.sub, req.body) }); } catch (e) { return catalogErr(reply, e); }
+  });
+  app.patch('/catalog/:id', { preHandler: authenticateRequest }, async (req, reply) => {
+    try { return { ok: true, data: await updateCatalogItem(getPool(), req.user!.companyId, (req.params as { id: string }).id, req.body) }; } catch (e) { return catalogErr(reply, e); }
   });
 
   // مسودات شراء بحاجة إلى تسعير (إشعارات المحاسب/المدير).

@@ -420,7 +420,7 @@ export const Purchases = () => {
             <span>{t('import.excelLink')}</span>
           </Link>
           <Link
-            to="/invoices/purchases/new"
+            to="/purchases/new-invoice"
             className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 transition font-medium text-sm"
           >
             <Plus className="w-4 h-4" />
