@@ -28,6 +28,7 @@ export interface ApiIntakeDispatchSlipLine {
   line_total: string | null;
   price_basis?: 'METER' | 'KG';
   weight_kg?: string | null;
+  entry_basis?: 'LENGTH' | 'WEIGHT';
   barcode: string;
   length_m: string;
   item_name: string;

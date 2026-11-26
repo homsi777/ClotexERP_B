@@ -33,6 +33,7 @@ export type IntakeDispatchSlipLineRow = {
   line_total: string | null;
   price_basis?: 'METER' | 'KG';
   weight_kg?: string | null;
+  entry_basis?: 'LENGTH' | 'WEIGHT';
   barcode: string;
   length_m: string;
   item_name: string;
@@ -82,7 +83,7 @@ export async function getDispatchSlipWithLines(
 
   const linesRes = await pool.query<IntakeDispatchSlipLineRow>(
     `SELECT l.id, l.slip_id, l.fabric_roll_id, l.unit_price, l.line_total, l.price_basis,
-            COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg) AS weight_kg,
+            COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg) AS weight_kg, fr.entry_basis,
             fr.barcode, fr.length_m, fi.name AS item_name, fc.name_ar AS color_name_ar
      FROM intake_dispatch_slip_lines l
      JOIN fabric_rolls fr ON fr.id = l.fabric_roll_id

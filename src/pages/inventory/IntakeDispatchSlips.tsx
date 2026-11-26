@@ -102,7 +102,7 @@ export const IntakeDispatchSlips: React.FC = () => {
         if (vals.size === 1) seed[g] = [...vals][0];
       }
       setItemPrice(seed); setColorPrice({}); setColorOpen({});
-      setBasis(Object.fromEntries([...new Set(ls.map((l) => l.item_name))].map((g) => [g, ls.filter((l) => l.item_name === g).every((l) => l.price_basis === 'KG') ? 'KG' : 'METER'])));
+      setBasis(Object.fromEntries([...new Set(ls.map((l) => l.item_name))].map((g) => [g, ls.filter((l) => l.item_name === g).every((l) => (l.unit_price != null ? l.price_basis === 'KG' : l.entry_basis === 'WEIGHT')) ? 'KG' : 'METER'])));
     } catch (e) {
       showToast({ type: 'error', message: e instanceof ApiRequestError ? e.message : t('loadFailed') });
       setOpenSlipId(null);
@@ -348,7 +348,7 @@ export const IntakeDispatchSlips: React.FC = () => {
                     return (
                       <div key={g} className="rounded-xl border border-slate-200 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div><b>{g}</b> <span className="text-xs text-slate-500">· {gl.length} توب · {meters.toFixed(2)} م{kgTotal > 0 ? ` · ${kgTotal.toFixed(1)} كغ` : ''}</span></div>
+                          <div><b>{g}</b> <span className="text-xs text-slate-500">· {gl.length} توب{gl.every((l) => l.entry_basis === 'WEIGHT') ? '' : ` · ${meters.toFixed(2)} م`}{kgTotal > 0 ? ` · ${kgTotal.toFixed(1)} كغ` : ''}</span></div>
                           <div className="flex rounded-lg border border-slate-200 text-xs font-bold" role="group" aria-label="أساس السعر">
                             <button type="button" onClick={() => setBasis((p) => ({ ...p, [g]: 'METER' }))} className={`rounded-r-lg px-3 py-1 ${b === 'METER' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700'}`}>سعر المتر</button>
                             <button type="button" disabled={kgTotal <= 0} onClick={() => setBasis((p) => ({ ...p, [g]: 'KG' }))} className={`rounded-l-lg px-3 py-1 disabled:opacity-40 ${b === 'KG' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}>سعر الكيلو</button>

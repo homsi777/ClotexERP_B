@@ -27,6 +27,8 @@ export interface FabricRollDto {
   gsm: string | null;
   calculated_weight_kg: string | null;
   actual_weight_kg: string | null;
+  /** WEIGHT: أُدخل بالوزن (الطول مشتق). */
+  entry_basis?: 'LENGTH' | 'WEIGHT';
   unit_cost: string | null;
   currency_code: string | null;
   batch_no: string | null;
@@ -184,6 +186,7 @@ export interface FabricRollCreatePayload {
   widthCm?: number | null;
   gsm?: number | null;
   actualWeightKg?: number | null;
+  entryBasis?: 'LENGTH' | 'WEIGHT';
   unitCost?: number | null;
   currencyCode?: string | null;
   batchNo?: string | null;

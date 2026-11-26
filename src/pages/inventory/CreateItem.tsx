@@ -145,6 +145,8 @@ type DraftRoll = {
   widthUnit: 'inch' | 'cm';
   weightMultiplier: number;
   weight: number;
+  /** أُدخل بالوزن: الطول مشتق وليس فعلياً. */
+  byWeight?: boolean;
   costPrice: number;
   sellingPrice: number;
   imageUrl: string;
@@ -706,6 +708,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       widthCm,
       gsm: gsmNum,
       actualWeightKg: Number(draft.weight) || null,
+      entryBasis: draft.byWeight ? 'WEIGHT' : 'LENGTH',
       unitCost: Number(draft.costPrice) || null,
       currencyCode: branchCurrency,
       notes: draft.imageUrl ? 'تم إرفاق صورة للمادة في واجهة النظام.' : null,
@@ -805,7 +808,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       const draftR: DraftRoll = {
         localId: editingDraftId ?? nextDraftRollId(), catL1Id, catL2Id, catL3Id, catL4Id,
         name, barcode, lotNumber, lengthType, length: Number(length) || 0,
-        rollWidth: Number(rollWidth) || 0, widthUnit, weightMultiplier: Number(weightMultiplier) || 0, weight: Number(weight) || 0,
+        rollWidth: Number(rollWidth) || 0, widthUnit, weightMultiplier: Number(weightMultiplier) || 0, weight: Number(weight) || 0, byWeight: qtyBasis === 'weight',
         costPrice: 0, sellingPrice: 0, imageUrl: '', warehouseId, forSale: false,
         receipt: { itemId: rItemId, colorName: '', colorCode: '', defective: rDefective, defectReason: rDefectReason, responsibleParty: rResponsible.trim(), notes: rLineNotes.trim() },
       };
@@ -956,6 +959,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       widthUnit,
       weightMultiplier: Number(weightMultiplier) || 0,
       weight: Number(weight) || 0,
+      byWeight: qtyBasis === 'weight',
       costPrice: Number(costPrice) || 0,
       sellingPrice: Number(sellingPrice) || 0,
       imageUrl,

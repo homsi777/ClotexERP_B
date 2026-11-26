@@ -86,3 +86,12 @@ test('invoice statement: kg lines show kilograms, never meters', () => {
   assert.equal(d.kg, 1000); assert.equal(d.meters, 4444.44);
   assert.deepEqual(statementQuantity({ quantity: 80, unitType: 'meter', weightKg: 12 }), { meters: 80, kg: 12 });
 });
+
+test('thermal statement: rolls entered by weight show kg, not derived meters', () => {
+  const w = [roll('W1', 4444.44, 'خام', 'K22', { entry_basis: 'WEIGHT', actual_weight_kg: '1000' } as never)];
+  const { html } = renderInventoryRollsThermal78({ rolls: w });
+  assert.ok(html.includes('1,000.0') && html.includes('كغ'), 'الوزن ظاهر');
+  assert.ok(!html.includes('4,444.44'), 'لا أمتار مشتقة');
+  const s = renderInventoryRollsThermal78({ rolls: w, summary: true });
+  assert.ok(!s.html.includes('4,444.44'));
+});

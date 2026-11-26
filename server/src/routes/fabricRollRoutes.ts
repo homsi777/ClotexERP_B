@@ -30,6 +30,8 @@ import { todayYmd } from '../utils/businessDate.js';
 // ─── Zod schemas ────────────────────────────────────────────────────────────
 
 const createRollSchema = z.object({
+  /** WEIGHT: أُدخل التوب بالوزن (الطول مشتق وليس فعلياً). */
+  entryBasis: z.enum(['LENGTH', 'WEIGHT']).optional(),
   barcode: z.string().optional(),
   rollNo: z.string().optional(),
   itemId: z.string().uuid('معرّف الخامة غير صالح'),
@@ -148,7 +150,7 @@ const ROLL_COLUMNS = `
   fr.id, fr.company_id, fr.roll_no, fr.barcode, fr.item_id, fr.color_id,
   fr.variant_id, fr.supplier_id, fr.warehouse_id, fr.location_id,
   fr.length_m, fr.width_cm, fr.gsm,
-  fr.calculated_weight_kg, fr.actual_weight_kg,
+  fr.calculated_weight_kg, fr.actual_weight_kg, fr.entry_basis,
   fr.unit_cost, fr.currency_code,
   fr.batch_no,
   -- اللوط: المستورد من Excel بعمود lot_no؛ والأتواب اليدوية كانت تحفظ اللوط في batch_no (ما لم يكن وسم استيراد).
@@ -1305,8 +1307,8 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
             warehouse_id, location_id, length_m, width_cm, gsm,
             calculated_weight_kg, actual_weight_kg, unit_cost, currency_code,
             batch_no, container_no, purchase_invoice_no, supplier_roll_ref,
-            notes, created_by_user_id, intake_operation_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+            notes, created_by_user_id, intake_operation_id, entry_basis)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
          RETURNING *`,
         [
           companyId, d.rollNo ?? null, barcode, d.itemId,
@@ -1316,7 +1318,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
           calcWt, d.actualWeightKg ?? null, d.unitCost ?? null, d.currencyCode ?? null,
           d.batchNo ?? null, d.containerNo ?? null,
           d.purchaseInvoiceNo ?? null, d.supplierRollRef ?? null,
-          d.notes ?? null, userId, d.intakeOperationId ?? null,
+          d.notes ?? null, userId, d.intakeOperationId ?? null, d.entryBasis === 'WEIGHT' && d.actualWeightKg ? 'WEIGHT' : 'LENGTH',
         ],
       );
 

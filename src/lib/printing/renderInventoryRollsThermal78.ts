@@ -10,13 +10,13 @@ const STATUS: Record<string, string> = { AVAILABLE: '', RESERVED: 'محجوز', 
 
 /** الأتواب مجمَّعة بحسب اللون وكوده، ومرتبة بالباركود (منطق مشترك للكشف الحراري). */
 export function groupRollsByColor(rolls: FabricRollDto[]) {
-  const groups = new Map<string, { colorName: string; colorCode: string; rows: Array<{ barcode: string; meters: number; kg: number; status: string; warehouse: string }> }>();
+  const groups = new Map<string, { colorName: string; colorCode: string; rows: Array<{ barcode: string; meters: number; kg: number; status: string; warehouse: string; byW: boolean }> }>();
   for (const r of rolls) {
     const colorName = displayImportedColorName(r.color_name_ar || r.color_name_tr);
     const colorCode = displayImportedColorCode(r.color_code);
     const k = `${colorName}\u0000${colorCode}`;
     const g = groups.get(k) ?? { colorName, colorCode, rows: [] };
-    g.rows.push({ barcode: String(r.barcode || '—'), meters: getRollLengthMeters(r), kg: kgOf(r), status: STATUS[r.status] ?? r.status ?? '', warehouse: String(r.warehouse_name ?? '') });
+    g.rows.push({ barcode: String(r.barcode || '—'), meters: getRollLengthMeters(r), kg: kgOf(r), status: STATUS[r.status] ?? r.status ?? '', warehouse: String(r.warehouse_name ?? ''), byW: r.entry_basis === 'WEIGHT' });
     groups.set(k, g);
   }
   const cmp = (a: string, b: string) => a.localeCompare(b, 'ar', { numeric: true, sensitivity: 'base' });
@@ -43,24 +43,25 @@ export function renderInventoryRollsThermal78(o: ThermalStatementOptions): { htm
   const printedAt = o.printedAt ?? new Date();
   const groups = groupRollsByColor(o.rolls ?? []);
   const totalRolls = o.rolls.length;
-  const totalM = o.rolls.reduce((a, r) => a + getRollLengthMeters(r), 0);
+  const totalM = o.rolls.filter((r) => r.entry_basis !== 'WEIGHT').reduce((a, r) => a + getRollLengthMeters(r), 0);
+  const allWeight = o.rolls.length > 0 && o.rolls.every((r) => r.entry_basis === 'WEIGHT');
   const totalKg = o.rolls.reduce((a, r) => a + kgOf(r), 0);
   const warehouses = new Set(o.rolls.map((r) => String(r.warehouse_name ?? '')));
   const summary = o.summary === true;
   const summaryHtml = `<div class="sh"><span>اللون</span><span>الأتواب</span><span>الأمتار</span></div>` + groups.map((g) => {
-    const gm = g.rows.reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0);
-    return `<div class="srow"><div class="sn">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div><div class="sc">${g.rows.length.toLocaleString('en')}</div><div class="sm">${fmt(gm)}${gk > 0 ? `<small>${fmt(gk, 1)} كغ</small>` : ''}</div></div>`;
+    const gm = g.rows.filter((r) => !r.byW).reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0), allW = g.rows.every((r) => r.byW);
+    return `<div class="srow"><div class="sn">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div><div class="sc">${g.rows.length.toLocaleString('en')}</div><div class="sm">${allW ? `${fmt(gk, 1)}<small>كغ</small>` : fmt(gm)}${!allW && gk > 0 ? `<small>${fmt(gk, 1)} كغ</small>` : ''}</div></div>`;
   }).join('');
   const rollsHtml = summary ? summaryHtml : groups.map((g) => {
-    const gm = g.rows.reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0);
+    const gm = g.rows.filter((r) => !r.byW).reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0), allW = g.rows.every((r) => r.byW);
     const cells = g.rows.map((r, i) => {
-      const extra = [r.kg > 0 ? `${fmt(r.kg, 1)} كغ` : '', r.status, warehouses.size > 1 ? r.warehouse : ''].filter(Boolean).join(' · ');
-      return `<div class="cell"><div class="m">${fmt(r.meters)}<small> م</small></div><div class="bc"><span class="n">#${i + 1}</span> ${esc(r.barcode)}</div>${extra ? `<div class="x">${esc(extra)}</div>` : ''}</div>`;
+      const extra = [r.kg > 0 && !r.byW ? `${fmt(r.kg, 1)} كغ` : '', r.status, warehouses.size > 1 ? r.warehouse : ''].filter(Boolean).join(' · ');
+      return `<div class="cell"><div class="m">${r.byW ? fmt(r.kg, 1) : fmt(r.meters)}<small> ${r.byW ? 'كغ' : 'م'}</small></div><div class="bc"><span class="n">#${i + 1}</span> ${esc(r.barcode)}</div>${extra ? `<div class="x">${esc(extra)}</div>` : ''}</div>`;
     });
     const rows: string[] = [];
     for (let i = 0; i < cells.length; i += 2) rows.push(`<div class="row">${cells[i]}<div class="sep"></div>${cells[i + 1] ?? '<div class="cell empty"></div>'}</div>`);
     return `<section class="grp"><div class="gh">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div>${rows.join('')}
-      <div class="tot"><span>${g.rows.length.toLocaleString('en')} توب</span><b>${fmt(gm)} م</b>${gk > 0 ? `<span>${fmt(gk, 1)} كغ</span>` : ''}</div></section>`;
+      <div class="tot"><span>${g.rows.length.toLocaleString('en')} توب</span><b>${allW ? `${fmt(gk, 1)} كغ` : `${fmt(gm)} م`}</b>${!allW && gk > 0 ? `<span>${fmt(gk, 1)} كغ</span>` : ''}</div></section>`;
   }).join('');
 
   // ارتفاع تقديري يتبع المحتوى (لا فراغ كبير ولا قص): الرأس + مجموعات + الإجمالي
@@ -112,7 +113,7 @@ ${o.searchQuery ? `<div><span>البحث</span><span>${esc(o.searchQuery)}</span
 <div><span>المستودع</span><span>${esc(o.warehouseLabel || 'كل المستودعات')}</span></div>
 </div>
 ${rollsHtml || '<p style="text-align:center;font-size:9pt">لا أتواب.</p>'}
-<div class="grand"><div class="t">الإجمالي العام — ${totalRolls.toLocaleString('en')} توب</div><div class="v">${fmt(totalM)} م</div>${totalKg > 0 ? `<div class="k">${fmt(totalKg, 1)} كغ</div>` : ''}</div>
+<div class="grand"><div class="t">الإجمالي العام — ${totalRolls.toLocaleString('en')} توب</div><div class="v">${allWeight ? `${fmt(totalKg, 1)} كغ` : `${fmt(totalM)} م`}</div>${!allWeight && totalKg > 0 ? `<div class="k">${fmt(totalKg, 1)} كغ</div>` : ''}</div>
 <div class="foot">${esc(o.brandName ?? 'CLOTEX')}</div>
 </div></body></html>`;
   return { html, heightMm };

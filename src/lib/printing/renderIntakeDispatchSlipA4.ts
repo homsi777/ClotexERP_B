@@ -32,7 +32,12 @@ export function renderIntakeDispatchSlipA4Html(opts: {
     i18n.t(key, { ns: 'intakeOperations', lng: lang, ...options });
 
   const totalRolls = lines.length;
-  const totalM = lines.reduce((sum, l) => sum + (Number(l.length_m) || 0), 0);
+  // أتواب أُدخلت بالوزن: تُعرض بالكيلو (طولها مشتق وليس فعلياً)
+  const byW = (l: ApiIntakeDispatchSlipLine) => l.entry_basis === 'WEIGHT';
+  const kgOf = (l: ApiIntakeDispatchSlipLine) => Number(l.weight_kg) || 0;
+  const totalM = lines.filter((l) => !byW(l)).reduce((sum, l) => sum + (Number(l.length_m) || 0), 0);
+  const totalKg = lines.filter(byW).reduce((sum, l) => sum + kgOf(l), 0);
+  const anyWeight = lines.some(byW), anyLength = lines.some((l) => !byW(l));
   const totalValue = lines.reduce((sum, l) => sum + (Number(l.line_total) || 0), 0);
   const anyPriced = lines.some((l) => l.unit_price != null);
 
@@ -44,8 +49,8 @@ export function renderIntakeDispatchSlipA4Html(opts: {
       <td class="cell">${escapeHtml(line.item_name)}</td>
       <td class="cell center">${escapeHtml(line.color_name_ar || '—')}</td>
       <td class="cell center mono">${escapeHtml(line.barcode)}</td>
-      <td class="cell center num">${formatNum(line.length_m)}</td>
-      <td class="cell center num">${line.unit_price != null ? formatNum(line.unit_price, 4) : '—'}</td>
+      <td class="cell center num">${byW(line) ? `${formatNum(kgOf(line))} كغ` : formatNum(line.length_m)}</td>
+      <td class="cell center num">${line.unit_price != null ? `${formatNum(line.unit_price, 4)}${line.price_basis === 'KG' ? ' /كغ' : ''}` : '—'}</td>
       <td class="cell center num">${line.line_total != null ? formatNum(line.line_total) : '—'}</td>
     </tr>`,
     )
@@ -111,7 +116,7 @@ export function renderIntakeDispatchSlipA4Html(opts: {
           <th>${t('colItem')}</th>
           <th>${t('colColor')}</th>
           <th>${t('colBarcode')}</th>
-          <th>${t('print.colLength')}</th>
+          <th>${anyWeight && !anyLength ? 'الوزن (كغ)' : anyWeight ? `${t('print.colLength')} / الوزن` : t('print.colLength')}</th>
           <th>${t('colUnitPrice')}</th>
           <th>${t('print.colLineTotal')}</th>
         </tr>
@@ -120,7 +125,7 @@ export function renderIntakeDispatchSlipA4Html(opts: {
       <tfoot>
         <tr>
           <td colspan="4">${t('print.totalsLabel', { count: totalRolls })}</td>
-          <td class="num">${formatNum(totalM)}</td>
+          <td class="num">${[anyLength ? formatNum(totalM) : '', anyWeight ? `${formatNum(totalKg)} كغ` : ''].filter(Boolean).join(' + ')}</td>
           <td colspan="2" class="num">${anyPriced ? formatNum(totalValue) : '—'}</td>
         </tr>
       </tfoot>
