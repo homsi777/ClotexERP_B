@@ -137,7 +137,7 @@ const normalize = (raw: unknown): string =>
     .toLowerCase();
 
 const HEADER_MAP: Record<keyof Omit<StockExcelRow, 'rowIndex' | 'raw'>, string[]> = {
-  barcode:   ['باركود', 'باركورد', 'barkod', 'barcode', 'ean'],
+  barcode:   ['باركود', 'الباركود', 'رقمالباركود', 'باركورد', 'barkod', 'barcode', 'ean'],
   date:      ['التاريخ', 'date', 'tarih'],
   itemName:  ['اسمالصنف', 'اسمالخامة', 'الصنف', 'الخامه', 'الخامة', 'item', 'itemname', 'stokadi', 'stokadı', 'stok adi', 'urun'],
   itemCode:  ['رمزالصنف', 'كودالصنف', 'كودالخامة', 'كودخامة', 'code', 'itemcode', 'sku', 'stokkodu', 'desenadi', 'desenadı', 'desenkodu', 'desenno', 'modelkodu'],
@@ -213,7 +213,13 @@ function detectSheetKind(sheetName: string, headers: string[], cols: Record<keyo
   const n = normalize(sheetName);
   if (n.includes('وارد') || n === 'incoming' || n === 'in') return 'incoming';
   if (n.includes('صادر') || n === 'outgoing' || n === 'out') return 'outgoing';
-  if (n.includes('مخزون') || n === 'stock' || n === 'balance' || n === 'inventory') return 'balance';
+  if (n.includes('مخزون') || n === 'stock' || n === 'balance' || n === 'inventory') {
+    // ورقة باسم «مخزون» لكنها قائمة أتواب (باركود + خامة + لون + طول/كمية، صف لكل توب) قابلة للاستيراد؛
+    // ورقة الرصيد الحقيقية (الوارد/الصادر/المخزن) لا تحمل باركود.
+    const hasHistoryCols = headers.some((h) => ['الوارد', 'الصادر', 'المخزن'].includes(normalize(h)));
+    if (cols.barcode >= 0 && cols.itemName >= 0 && cols.colorName >= 0 && cols.quantity >= 0 && !hasHistoryCols) return 'incoming';
+    return 'balance';
+  }
   if (isSupplierPurchaseInvoiceHeaders(headers)) return 'incoming';
   // Fallback by inspecting headers
   const hasIn = headers.some((h) => normalize(h) === 'الوارد');
