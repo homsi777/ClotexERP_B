@@ -492,7 +492,7 @@ export const ProfitDetails = () => {
               <span className="text-slate-500 font-bold">{t('topCustomer.totalPurchase')}</span>
               <span className="font-mono text-slate-900">{fmtMoney(topCustomer.salesAmount)}</span>
               <span className="text-slate-500 font-bold">{t('topCustomer.meters')}</span>
-              <span className="font-mono text-slate-900">{fmtMeters(topCustomer.soldMeters)}</span>
+              <span className="font-mono text-slate-900">{fmtMeters(topCustomer.soldMeters)}{Number(topCustomer.soldKg) > 0 ? ` + ${Number(topCustomer.soldKg).toLocaleString('en', { maximumFractionDigits: 2 })} كغ` : ''}</span>
               <span className="text-slate-500 font-bold">{t('topCustomer.invoiceCount')}</span>
               <span className="font-mono text-slate-900">{dash(topCustomer.invoiceCount)}</span>
               <span className="text-slate-500 font-bold">{t('topCustomer.remaining')}</span>
@@ -607,7 +607,7 @@ export const ProfitDetails = () => {
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-bold text-slate-500">{t('topCustomerModal.totalMeters')}</p>
-                  <p className="mt-2 font-mono text-lg font-black text-slate-900">{fmtMeters(topCustomer.soldMeters)}</p>
+                  <p className="mt-2 font-mono text-lg font-black text-slate-900">{fmtMeters(topCustomer.soldMeters)}{Number(topCustomer.soldKg) > 0 ? ` + ${Number(topCustomer.soldKg).toLocaleString('en', { maximumFractionDigits: 2 })} كغ` : ''}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-bold text-slate-500">{t('topCustomerModal.totalCost')}</p>

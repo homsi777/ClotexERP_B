@@ -8,8 +8,10 @@ export async function getRollReservation(db:PoolClient,company:string,roll:strin
 }
 
 export async function reserveRoll(db:PoolClient,company:string,user:string|null,roll:string,owner:ReservationOwner){
-  const r=(await db.query('SELECT status FROM fabric_rolls WHERE company_id=$1 AND id=$2 FOR UPDATE',[company,roll])).rows[0];
+  const r=(await db.query('SELECT status, entry_basis FROM fabric_rolls WHERE company_id=$1 AND id=$2 FOR UPDATE',[company,roll])).rows[0];
   if(!r)throw invalid('الرول غير موجود');
+  // طلبات العملاء بالأمتار؛ توب الوزن (كيلو) لا يُحجز لها كي لا تُحتسب كيلوغراماته أمتاراً محجوزة (حجز مسودات البيع بالكيلو يبقى مسموحاً)
+  if(r.entry_basis==='WEIGHT'&&owner.type==='CUSTOMER_ORDER_LINE')throw invalid('هذا التوب مُدخل بالوزن (كيلو) وطلبات العملاء تعمل بالأمتار — لا يُحجز لطلب');
   const current=await getRollReservation(db,company,roll);
   if(current){
     if(current.reference_type===owner.type&&current.reference_id===owner.id&&r.status==='RESERVED')return;

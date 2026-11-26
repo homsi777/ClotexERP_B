@@ -32,7 +32,10 @@ function Compare({ branches }: { branches: Overview['branches'] }) {
     <div className="cx-charts">
       <ChartCard title="مقارنة المبيعات" right={<CurrencyTabs currencies={ccys} value={cur} onChange={setCcy} />} empty={!ccys.length ? 'لا مبيعات.' : undefined}><HBars unit={cur} legend={['المبيعات']} items={item((b) => pick(b.metrics.sales.current))} /></ChartCard>
       <ChartCard title="مقارنة المشتريات" right={<CurrencyTabs currencies={ccys} value={cur} onChange={setCcy} />} empty={!ccys.length ? 'لا مشتريات.' : undefined}><HBars unit={cur} legend={['المشتريات']} items={item((b) => pick(b.metrics.purchases.current))} /></ChartCard>
-      <ChartCard title="مقارنة المخزون المتاح (أمتار)"><HBars unit="م" legend={['أمتار']} items={item((b) => b.metrics.inventory.available.meters)} /></ChartCard>
+      <ChartCard title="مقارنة المخزون المتاح — بالأمتار (أقمشة مُدخلة بالمتر)"><HBars unit="م" legend={['أمتار']} items={item((b) => b.metrics.inventory.available.meters)} /></ChartCard>
+      <ChartCard title="مقارنة المخزون المتاح — بالكيلوغرام (أقمشة مُدخلة بالوزن)"><HBars unit="كغ" legend={['كيلوغرام']} items={item((b) => b.metrics.inventory.available.kg ?? 0)} /></ChartCard>
+      <ChartCard title="مقارنة كمية المبيعات — أمتار"><HBars unit="م" legend={['أمتار']} items={item((b) => b.metrics.sales.quantity.current.meters)} /></ChartCard>
+      <ChartCard title="مقارنة كمية المبيعات — كيلوغرام"><HBars unit="كغ" legend={['كيلوغرام']} items={item((b) => b.metrics.sales.quantity.current.kg)} /></ChartCard>
       <ChartCard title="مقارنة ديون العملاء" right={<CurrencyTabs currencies={ccys} value={cur} onChange={setCcy} />} empty={!ccys.length ? 'لا أرصدة.' : undefined}><HBars unit={cur} legend={['مدينون لنا']} items={item((b) => b.metrics.balances.customers.find((c) => c.currency === cur)?.owedToUs ?? 0)} /></ChartCard>
     </div>
   </div>;

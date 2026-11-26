@@ -102,12 +102,16 @@ export async function createExternalJob(
   // final enforcement happens again at confirm() since time may pass between
   // creating the draft and sending it.
   for (const ln of input.lines) {
-    const r = await client.query<{ status: string }>(
-      `SELECT status FROM fabric_rolls WHERE id=$1 AND company_id=$2`,
+    const r = await client.query<{ status: string; entry_basis: string }>(
+      `SELECT status, entry_basis FROM fabric_rolls WHERE id=$1 AND company_id=$2`,
       [ln.rollId, companyId],
     );
     if (!r.rows.length) {
       throw Object.assign(new Error('الثوب غير موجود'), { code: 'NOT_FOUND' });
+    }
+    // المصنعية الخارجية تعمل بالأمتار (إرسال/استلام/هدر)؛ توب الوزن كميته كيلوغرامات فلا يدخلها كي لا تُنتج أرقام أمتار مضللة
+    if (r.rows[0].entry_basis === 'WEIGHT') {
+      throw Object.assign(new Error('هذا التوب مُدخل بالوزن (كيلو) والمصنعية الخارجية تعمل بالأمتار ولا تدعمه — لا يمكن إرساله لمصنعية'), { code: 'VALIDATION' });
     }
     if (r.rows[0].status !== 'AVAILABLE') {
       throw Object.assign(new Error('أحد الأتواب المختارة غير متاح حالياً'), { code: 'INVALID_STOCK' });
@@ -816,8 +820,9 @@ export async function createProcessingExternalJob(
     color_id: string | null;
     actual_weight_kg: string | null;
     calculated_weight_kg: string | null;
+    entry_basis: string;
   }>(
-    `SELECT id, barcode, status, warehouse_id, length_m, color_id, actual_weight_kg, calculated_weight_kg
+    `SELECT id, barcode, status, warehouse_id, length_m, color_id, actual_weight_kg, calculated_weight_kg, entry_basis
      FROM fabric_rolls WHERE company_id=$1 AND id = ANY($2::uuid[]) FOR UPDATE`,
     [companyId, rollIds],
   );
@@ -827,6 +832,9 @@ export async function createProcessingExternalJob(
     const roll = rollsById.get(rollId);
     if (!roll) {
       throw Object.assign(new Error('أحد الأتواب المختارة غير موجود بهذه الشركة'), { code: 'NOT_FOUND' });
+    }
+    if (roll.entry_basis === 'WEIGHT') {
+      throw Object.assign(new Error(`الثوب ${roll.barcode} مُدخل بالوزن (كيلو) والمصنعية تعمل بالأمتار ولا تدعمه`), { code: 'VALIDATION' });
     }
     if (roll.warehouse_id !== input.sourceWarehouseId) {
       throw Object.assign(new Error(`الثوب ${roll.barcode} ليس بالمستودع المصدر المحدَّد`), { code: 'INVALID_STOCK' });

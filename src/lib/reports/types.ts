@@ -12,6 +12,7 @@ export interface ProfitTopCustomerInvoice {
   invoiceDate: string;
   salesAmount: string;
   soldMeters?: string;
+  soldKg?: string;
   remainingAmount?: string;
 }
 
@@ -24,6 +25,7 @@ export interface ProfitTopCustomerInsight {
   paidAmount?: string;
   remainingAmount?: string;
   soldMeters?: string;
+  soldKg?: string;
   remainingReceivableMeters?: string;
   invoiceCount?: number;
   lastInvoiceDate?: string;

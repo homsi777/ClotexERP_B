@@ -1565,9 +1565,10 @@ const CustomerStatementInner = () => {
                     (acc, r) => ({
                       rollCount: acc.rollCount + r.roll_count,
                       meters: acc.meters + Number(r.net_meters_after_returns),
+                      kg: acc.kg + Number(r.kg_sold ?? 0),
                       amount: acc.amount + Number(r.net_amount_after_returns),
                     }),
-                    { rollCount: 0, meters: 0, amount: 0 },
+                    { rollCount: 0, meters: 0, kg: 0, amount: 0 },
                   );
                   return (
                     <div key={materialKey}>
@@ -1587,7 +1588,8 @@ const CustomerStatementInner = () => {
                         </span>
                         <span className="text-xs text-slate-600 font-mono flex gap-3">
                           <span>{t('detailView.colRolls')}: {materialTotals.rollCount}</span>
-                          <span>{t('detailView.colMeters')}: {materialTotals.meters.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span>{t('detailView.colMeters')}: {materialTotals.meters.toLocaleString(undefined, { minimumFractionDigits: 2 })} م</span>
+                          {materialTotals.kg > 0 && <span>كغ: {materialTotals.kg.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>}
                           <span className="font-bold text-slate-900">{materialTotals.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {itemDetailCurrencyLabel}</span>
                         </span>
                       </button>
@@ -1598,7 +1600,8 @@ const CustomerStatementInner = () => {
                               <tr>
                                 <th className="py-1.5 text-right font-bold">{t('detailView.colColor')}</th>
                                 <th className="py-1.5 text-right font-bold">{t('detailView.colRolls')}</th>
-                                <th className="py-1.5 text-right font-bold">{t('detailView.colMeters')}</th>
+                                <th className="py-1.5 text-right font-bold">{t('detailView.colMeters')} (م)</th>
+                                <th className="py-1.5 text-right font-bold">كغ</th>
                                 <th className="py-1.5 text-right font-bold">{t('detailView.colAmount')}</th>
                                 <th className="py-1.5 text-right font-bold">{t('detailView.colReturned')}</th>
                                 <th className="py-1.5 text-right font-bold">{t('detailView.colInvoices')}</th>
@@ -1610,6 +1613,7 @@ const CustomerStatementInner = () => {
                                   <td className="py-1.5 pr-2">{row.color_name} {row.color_code ? <span className="text-slate-400 font-mono">({row.color_code})</span> : null}</td>
                                   <td className="py-1.5 font-mono">{row.roll_count}</td>
                                   <td className="py-1.5 font-mono">{Number(row.net_meters_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                  <td className="py-1.5 font-mono">{Number(row.kg_sold ?? 0) > 0 ? Number(row.kg_sold).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
                                   <td className="py-1.5 font-mono font-bold">{Number(row.net_amount_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })} {itemDetailCurrencyLabel}</td>
                                   <td className="py-1.5 font-mono text-rose-600">
                                     {Number(row.returned_meters) > 0 ? `${Number(row.returned_meters).toLocaleString(undefined, { minimumFractionDigits: 2 })} (${Number(row.returned_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${itemDetailCurrencyLabel})` : '—'}

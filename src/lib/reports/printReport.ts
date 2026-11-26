@@ -12,6 +12,7 @@ function arTotalLabel(label: string): string {
     total_sold_length_m: t('printReport.totalSoldLengthM'),
     total_weight_kg: t('printReport.totalWeightKg'),
     sold_meters: t('printReport.soldMeters'),
+    sold_kg: 'إجمالي الكيلوغرامات المباعة',
     remaining_receivable_meters: t('printReport.remainingReceivableMeters'),
   };
   return map[label] || label;
