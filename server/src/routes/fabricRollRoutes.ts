@@ -150,7 +150,7 @@ const ROLL_COLUMNS = `
   fr.id, fr.company_id, fr.roll_no, fr.barcode, fr.item_id, fr.color_id,
   fr.variant_id, fr.supplier_id, fr.warehouse_id, fr.location_id,
   fr.length_m, fr.width_cm, fr.gsm,
-  fr.calculated_weight_kg, fr.actual_weight_kg, fr.entry_basis,
+  fr.calculated_weight_kg, fr.actual_weight_kg, fr.entry_basis, fr.original_weight_kg,
   fr.unit_cost, fr.currency_code,
   fr.batch_no,
   -- اللوط: المستورد من Excel بعمود lot_no؛ والأتواب اليدوية كانت تحفظ اللوط في batch_no (ما لم يكن وسم استيراد).

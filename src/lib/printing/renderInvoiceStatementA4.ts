@@ -175,6 +175,8 @@ export function renderInvoiceStatementA4Html(opts: {
     colorName: string;
     total: number;
     returnedMeters: number;
+    /** سطر بيع بالكيلو: الكمية المرتجعة بالكيلو (لا تدخل عمود الأمتار). */
+    returnedKg: number;
     isReturned: boolean;
   };
 
@@ -201,6 +203,7 @@ export function renderInvoiceStatementA4Html(opts: {
       colorName: normalizeText(item.colorName, ''),
       total: Number(item.total || 0),
       returnedMeters,
+      returnedKg: item.unitType === 'kg' ? Math.min(q.kg, Math.max(0, Number(item.returnedQuantity || 0))) : 0,
       // سطر الكيلو: يُعلَّم مرتجعاً بالكمية المرتجعة (بالكيلو) دون إدخالها في عمود الأمتار
       isReturned: item.unitType === 'kg' ? Number(item.returnedQuantity || 0) > RETURN_EPSILON : returnedMeters > RETURN_EPSILON,
     };
@@ -240,6 +243,7 @@ export function renderInvoiceStatementA4Html(opts: {
     const totalKg = rows.reduce((sum, row) => sum + (Number.isFinite(row.kg) ? row.kg : 0), 0);
     const totalAmount = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
     const returnedMeters = rows.reduce((sum, row) => sum + (Number.isFinite(row.returnedMeters) ? row.returnedMeters : 0), 0);
+    const returnedKg = rows.reduce((sum, row) => sum + (Number.isFinite(row.returnedKg) ? row.returnedKg : 0), 0);
     const returnedRollCount = rows.filter((row) => row.isReturned).length;
     return {
       materialName: first.materialName,
@@ -252,6 +256,8 @@ export function renderInvoiceStatementA4Html(opts: {
       totalAmount,
       rollCount: rows.length,
       returnedMeters,
+      returnedKg,
+      netKg: totalKg - returnedKg,
       returnedRollCount,
       netMeters: totalMeters - returnedMeters,
       netRollCount: rows.length - returnedRollCount,
@@ -273,6 +279,7 @@ export function renderInvoiceStatementA4Html(opts: {
       designCode: string;
       meters: number;
       kg: number;
+      returnedKg: number;
       totalAmount: number;
       colors: Set<string>;
       rolls: number;
@@ -289,6 +296,7 @@ export function renderInvoiceStatementA4Html(opts: {
         designCode: group.designCode,
         meters: 0,
         kg: 0,
+        returnedKg: 0,
         totalAmount: 0,
         colors: new Set<string>(),
         rolls: 0,
@@ -297,6 +305,7 @@ export function renderInvoiceStatementA4Html(opts: {
       };
     current.meters += group.totalMeters;
     current.kg += group.totalKg;
+    current.returnedKg += group.returnedKg;
     current.totalAmount += group.totalAmount;
     current.rolls += group.rollCount;
     current.returnedMeters += group.returnedMeters;
@@ -316,6 +325,8 @@ export function renderInvoiceStatementA4Html(opts: {
   const totalRollsAll = groups.reduce((sum, group) => sum + group.rollCount, 0);
   const totalAmountAll = groups.reduce((sum, group) => sum + group.totalAmount, 0);
   const returnedMetersAll = groups.reduce((sum, group) => sum + group.returnedMeters, 0);
+  const returnedKgAll = groups.reduce((sum, group) => sum + group.returnedKg, 0);
+  const netKgAll = totalKgAll - returnedKgAll;
   const returnedRollsAll = groups.reduce((sum, group) => sum + group.returnedRollCount, 0);
   const netMetersAll = totalMetersAll - returnedMetersAll;
   const netRollsAll = totalRollsAll - returnedRollsAll;
@@ -382,7 +393,7 @@ export function renderInvoiceStatementA4Html(opts: {
           <td class="cell text center">${escapeHtml(line.colorCode || '—')}</td>
           <td class="cell text center">${escapeHtml(line.colorName || '—')}</td>
           <td class="cell num">${formatAr(line.meters)}</td>
-          <td class="cell num">${formatAr(line.kg)}</td>
+          <td class="cell num">${formatAr(line.kg)}${line.returnedKg > 0 ? `<span class="returned-note">-${formatAr(line.returnedKg)} kg</span>` : ''}</td>
           <td class="cell text center mono">${escapeHtml(line.barcode || '—')}</td>
           <td class="cell text center">${escapeHtml(line.lotNo || '—')}</td>
         </tr>`,
@@ -410,7 +421,7 @@ export function renderInvoiceStatementA4Html(opts: {
         <tr class="group-subtotal-row">
           <td class="subtotal-cell subtotal-label" colspan="4">${escapeHtml(subtotalLabel)}${groupReturnNote}</td>
           <td class="subtotal-cell num">${formatAr(group.netMeters)} mt${group.returnedMeters > 0 ? `<span class="returned-note">-${formatAr(group.returnedMeters)} mt</span>` : ''}</td>
-          <td class="subtotal-cell num">${formatAr(group.totalKg)} kg</td>
+          <td class="subtotal-cell num">${formatAr(group.netKg)} kg${group.returnedKg > 0 ? `<span class="returned-note">-${formatAr(group.returnedKg)} kg</span>` : ''}</td>
           <td class="subtotal-cell" colspan="2"></td>
         </tr>`,
     });
@@ -431,7 +442,7 @@ export function renderInvoiceStatementA4Html(opts: {
     <tr class="grand-subtotal-row">
       <td class="subtotal-cell subtotal-label strong" colspan="4">${AR_INVOICE_STATEMENT.total}: ${netRollsAll} ${t('invoiceStatement.rollUnitNoob')}${grandReturnNote}</td>
       <td class="subtotal-cell num strong">${formatAr(netMetersAll)} mt${returnedMetersAll > 0 ? `<span class="returned-note">-${formatAr(returnedMetersAll)} mt</span>` : ''}</td>
-      <td class="subtotal-cell num strong">${formatAr(totalKgAll)} kg</td>
+      <td class="subtotal-cell num strong">${formatAr(netKgAll)} kg${returnedKgAll > 0 ? `<span class="returned-note">-${formatAr(returnedKgAll)} kg</span>` : ''}</td>
       <td class="subtotal-cell" colspan="2"></td>
     </tr>`,
     });
@@ -439,11 +450,13 @@ export function renderInvoiceStatementA4Html(opts: {
 
   const summaryRows = summaryRowsData
     .map((row) => {
-      const meterPrice = row.meters > 0 ? row.totalAmount / row.meters : 0;
+      // خامة بالكيلو فقط (بلا أمتار): السعر للكيلو وليس للمتر
+      const kgOnly = row.meters <= 0 && row.kg > 0;
+      const meterPrice = row.meters > 0 ? row.totalAmount / row.meters : kgOnly ? row.totalAmount / row.kg : 0;
       const colorLabel = `${row.colors.size} ${t('invoiceStatement.colorUnit')}`;
       const priceCell = hideFinancialColumns
         ? ''
-        : `<td class="cell num">${formatAr(meterPrice)} ${escapeHtml(currency)}</td>`;
+        : `<td class="cell num">${formatAr(meterPrice)} ${escapeHtml(currency)}${kgOnly ? ' / kg' : ''}</td>`;
       const amountCell = hideFinancialColumns
         ? ''
         : `<td class="cell num">${formatAr(row.totalAmount)} ${escapeHtml(currency)}</td>`;
@@ -460,7 +473,7 @@ export function renderInvoiceStatementA4Html(opts: {
           <td class="cell text center">${escapeHtml(row.designCode)}</td>
           <td class="cell center">${colorLabel}</td>
           <td class="cell num">${formatAr(netMeters)}${returnedNote}</td>
-          <td class="cell num">${formatAr(row.kg)}</td>
+          <td class="cell num">${formatAr(row.kg - row.returnedKg)}${row.returnedKg > 0 ? `<span class="returned-note">-${formatAr(row.returnedKg)}</span>` : ''}</td>
           ${priceCell}
           ${amountCell}
         </tr>`;
@@ -559,7 +572,7 @@ export function renderInvoiceStatementA4Html(opts: {
               <td class="cell text strong" colspan="2">${AR_INVOICE_STATEMENT.grandTotals}</td>
               <td class="cell center strong">${netRollsAll} ${t('invoiceStatement.rollUnitToub')}${returnedRollsAll > 0 ? `<span class="returned-note">${escapeHtml(t('invoiceStatement.soldReturnedNet', { sold: totalRollsAll, returned: returnedRollsAll, net: netRollsAll }))}</span>` : ''}</td>
               <td class="cell num strong">${formatAr(netMetersAll)}${returnedMetersAll > 0 ? `<span class="returned-note">-${formatAr(returnedMetersAll)}</span>` : ''}</td>
-              <td class="cell num strong">${formatAr(totalKgAll)}</td>
+              <td class="cell num strong">${formatAr(netKgAll)}${returnedKgAll > 0 ? `<span class="returned-note">-${formatAr(returnedKgAll)}</span>` : ''}</td>
               ${totalPriceCell}
               ${totalAmountCell}
             </tr>

@@ -1645,6 +1645,7 @@ return (
                     </td>
                     <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap">
                       {parseFloat(weight).toFixed(2)}{t('main.kgUnitSuffix')}
+                      {roll.entry_basis === 'WEIGHT' && roll.original_weight_kg && Math.abs(parseFloat(roll.original_weight_kg) - parseFloat(weight)) > 0.0005 && <div className="text-[10px] text-slate-400">الأصلي {parseFloat(roll.original_weight_kg).toFixed(2)}{t('main.kgUnitSuffix')}</div>}
                     </td>
                     <td className="py-2.5 px-4 text-slate-700">{roll.warehouse_name ?? '—'}</td>
                     <td className="py-2.5 px-4">

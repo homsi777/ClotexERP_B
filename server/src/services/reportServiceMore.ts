@@ -706,11 +706,15 @@ async function queryProfitTopCustomerInsight(
   remainingAmount: string;
   soldMeters: string;
   soldKg: string;
+  returnedMeters: string;
+  returnedKg: string;
+  netMeters: string;
+  netKg: string;
   remainingReceivableMeters: string;
   invoiceCount: number;
   lastInvoiceDate: string;
   topMaterialName: string;
-  topInvoices: Array<{ invoiceId: string; invoiceNo: string; invoiceDate: string; salesAmount: string; soldMeters: string; soldKg: string; remainingAmount: string }>;
+  topInvoices: Array<{ invoiceId: string; invoiceNo: string; invoiceDate: string; salesAmount: string; soldMeters: string; soldKg: string; returnedKg: string; netKg: string; remainingAmount: string }>;
 } | null> {
   const pool = getPool();
   const filters: string[] = [`si.company_id = $1`, `si.document_status = 'CONFIRMED'`];
@@ -762,6 +766,8 @@ async function queryProfitTopCustomerInsight(
         ${SQL_LINE_COST_USD} AS cost_amount,
         (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters,
         (CASE WHEN sil.unit = 'kg' THEN sil.quantity ELSE 0 END)::numeric AS quantity_kg,
+        COALESCE((SELECT SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END) FROM return_invoice_lines ril JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id WHERE ril.original_sales_invoice_line_id = sil.id AND ri.status = 'CONFIRMED' AND ri.return_type = 'SALES_RETURN'), 0)::numeric AS returned_meters,
+        COALESCE((SELECT SUM(CASE WHEN ril.unit = 'kg' THEN ril.quantity ELSE 0 END) FROM return_invoice_lines ril JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id WHERE ril.original_sales_invoice_line_id = sil.id AND ri.status = 'CONFIRMED' AND ri.return_type = 'SALES_RETURN'), 0)::numeric AS returned_kg,
         COALESCE(si.total_amount_usd, CASE WHEN si.currency_code='USD' THEN si.total_amount ELSE si.total_amount / NULLIF(si.exchange_rate_to_usd, 0) END, 0)::numeric AS total_amount_usd,
         COALESCE(si.paid_amount_usd, CASE WHEN si.currency_code='USD' THEN si.paid_amount ELSE si.paid_amount / NULLIF(si.exchange_rate_to_usd, 0) END, 0)::numeric AS paid_amount_usd,
         COALESCE(si.remaining_amount_usd, CASE WHEN si.currency_code='USD' THEN si.remaining_amount ELSE si.remaining_amount / NULLIF(si.exchange_rate_to_usd, 0) END, 0)::numeric AS remaining_amount_usd
@@ -785,6 +791,10 @@ async function queryProfitTopCustomerInsight(
             ROUND(COALESCE(SUM(CASE WHEN COALESCE(total_amount_usd, 0) > 0 THEN (remaining_amount_usd / total_amount_usd) * sales_amount ELSE 0 END), 0), 2)::text AS remaining_amount,
             ROUND(COALESCE(SUM(quantity_meters), 0), 2)::text AS sold_meters,
             ROUND(COALESCE(SUM(quantity_kg), 0), 2)::text AS sold_kg,
+            ROUND(COALESCE(SUM(returned_meters), 0), 2)::text AS returned_meters,
+            ROUND(COALESCE(SUM(returned_kg), 0), 2)::text AS returned_kg,
+            ROUND(COALESCE(SUM(quantity_meters - returned_meters), 0), 2)::text AS net_meters,
+            ROUND(COALESCE(SUM(quantity_kg - returned_kg), 0), 2)::text AS net_kg,
             ROUND(COALESCE(SUM(CASE WHEN COALESCE(total_amount_usd, 0) > 0 THEN (remaining_amount_usd / total_amount_usd) * quantity_meters ELSE 0 END), 0), 2)::text AS remaining_receivable_meters,
             COUNT(DISTINCT invoice_id)::int AS invoice_count,
             MAX(invoice_date)::text AS last_invoice_date
@@ -818,6 +828,10 @@ async function queryProfitTopCustomerInsight(
             ROUND(COALESCE(SUM(sales_amount), 0), 2)::text AS sales_amount,
             ROUND(COALESCE(SUM(quantity_meters), 0), 2)::text AS sold_meters,
             ROUND(COALESCE(SUM(quantity_kg), 0), 2)::text AS sold_kg,
+            ROUND(COALESCE(SUM(returned_meters), 0), 2)::text AS returned_meters,
+            ROUND(COALESCE(SUM(returned_kg), 0), 2)::text AS returned_kg,
+            ROUND(COALESCE(SUM(quantity_meters - returned_meters), 0), 2)::text AS net_meters,
+            ROUND(COALESCE(SUM(quantity_kg - returned_kg), 0), 2)::text AS net_kg,
             ROUND(COALESCE(SUM(CASE WHEN COALESCE(total_amount_usd, 0) > 0 THEN (remaining_amount_usd / total_amount_usd) * sales_amount ELSE 0 END), 0), 2)::text AS remaining_amount
      FROM line_profit
      WHERE customer_id::text = $${customerParamIndex}
@@ -837,6 +851,10 @@ async function queryProfitTopCustomerInsight(
     remainingAmount: String(topRow.remaining_amount ?? '0.00'),
     soldMeters: String(topRow.sold_meters ?? '0.00'),
     soldKg: String(topRow.sold_kg ?? '0.00'),
+    returnedMeters: String(topRow.returned_meters ?? '0.00'),
+    returnedKg: String(topRow.returned_kg ?? '0.00'),
+    netMeters: String(topRow.net_meters ?? '0.00'),
+    netKg: String(topRow.net_kg ?? '0.00'),
     remainingReceivableMeters: String(topRow.remaining_receivable_meters ?? '0.00'),
     invoiceCount: Number(topRow.invoice_count ?? 0),
     lastInvoiceDate: String(topRow.last_invoice_date ?? ''),
@@ -848,6 +866,8 @@ async function queryProfitTopCustomerInsight(
       salesAmount: String(r.sales_amount ?? '0.00'),
       soldMeters: String(r.sold_meters ?? '0.00'),
       soldKg: String(r.sold_kg ?? '0.00'),
+      returnedKg: String(r.returned_kg ?? '0.00'),
+      netKg: String(r.net_kg ?? '0.00'),
       remainingAmount: String(r.remaining_amount ?? '0.00'),
     })),
   };
@@ -932,6 +952,8 @@ async function reportProfitDetailsByLine(
         sil.unit,
         (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters,
         (CASE WHEN sil.unit = 'kg' THEN sil.quantity ELSE 0 END)::numeric AS quantity_kg,
+        COALESCE((SELECT SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END) FROM return_invoice_lines ril JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id WHERE ril.original_sales_invoice_line_id = sil.id AND ri.status = 'CONFIRMED' AND ri.return_type = 'SALES_RETURN'), 0)::numeric AS returned_meters,
+        COALESCE((SELECT SUM(CASE WHEN ril.unit = 'kg' THEN ril.quantity ELSE 0 END) FROM return_invoice_lines ril JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id WHERE ril.original_sales_invoice_line_id = sil.id AND ri.status = 'CONFIRMED' AND ri.return_type = 'SALES_RETURN'), 0)::numeric AS returned_kg,
         sil.unit_price,
         ${SQL_NET_LINE_REVENUE_USD} AS sales_amount,
         ${SQL_LINE_COST_USD} AS cost_amount,
@@ -975,6 +997,8 @@ async function reportProfitDetailsByLine(
             color_name, color_code, supplier_name, warehouse_name, quantity::text AS quantity, unit,
             ROUND(quantity_meters, 2)::text AS quantity_meters,
             ROUND(quantity_kg, 2)::text AS quantity_kg,
+            ROUND(returned_meters, 2)::text AS returned_meters,
+            ROUND(returned_kg, 2)::text AS returned_kg,
             ROUND(unit_price, 4)::text AS unit_price,
             ROUND(sales_amount, 2)::text AS sales_amount,
             ROUND(cost_amount, 2)::text AS cost_amount,
@@ -1011,6 +1035,10 @@ async function reportProfitDetailsByLine(
             ROUND(COALESCE(SUM(CASE WHEN COALESCE(total_amount_usd, 0) > 0 THEN (remaining_amount_usd / total_amount_usd) * sales_amount ELSE 0 END), 0), 2)::text AS remaining_amount,
             ROUND(COALESCE(SUM(quantity_meters), 0), 2)::text AS sold_meters,
             ROUND(COALESCE(SUM(quantity_kg), 0), 2)::text AS sold_kg,
+            ROUND(COALESCE(SUM(returned_meters), 0), 2)::text AS returned_meters,
+            ROUND(COALESCE(SUM(returned_kg), 0), 2)::text AS returned_kg,
+            ROUND(COALESCE(SUM(quantity_meters - returned_meters), 0), 2)::text AS net_meters,
+            ROUND(COALESCE(SUM(quantity_kg - returned_kg), 0), 2)::text AS net_kg,
             ROUND(
               COALESCE(
                 SUM(
@@ -1045,6 +1073,10 @@ async function reportProfitDetailsByLine(
                     ROUND(COALESCE(SUM(CASE WHEN COALESCE(total_amount_usd, 0) > 0 THEN (remaining_amount_usd / total_amount_usd) * sales_amount ELSE 0 END), 0), 2)::text AS remaining_amount,
                     ROUND(COALESCE(SUM(quantity_meters), 0), 2)::text AS sold_meters,
                     ROUND(COALESCE(SUM(quantity_kg), 0), 2)::text AS sold_kg,
+                    ROUND(COALESCE(SUM(returned_meters), 0), 2)::text AS returned_meters,
+                    ROUND(COALESCE(SUM(returned_kg), 0), 2)::text AS returned_kg,
+                    ROUND(COALESCE(SUM(quantity_meters - returned_meters), 0), 2)::text AS net_meters,
+                    ROUND(COALESCE(SUM(quantity_kg - returned_kg), 0), 2)::text AS net_kg,
                     ROUND(
                       COALESCE(
                         SUM(
@@ -1078,6 +1110,10 @@ async function reportProfitDetailsByLine(
             remaining_amount: row.remaining_amount,
             sold_meters: row.sold_meters,
             sold_kg: row.sold_kg,
+            returned_meters: row.returned_meters,
+            returned_kg: row.returned_kg,
+            net_meters: row.net_meters,
+            net_kg: row.net_kg,
             remaining_receivable_meters: row.remaining_receivable_meters,
             realized_profit: row.realized_profit,
             receivable_profit: row.receivable_profit,
@@ -1108,6 +1144,8 @@ async function reportProfitDetailsByLine(
       { label: 'إجمالي الربح', value: `${totalRow.gross_profit ?? '0.00'} USD` },
       { label: 'إجمالي الأمتار المباعة', value: `${totalRow.sold_meters ?? '0.00'} م` },
       { label: 'إجمالي الكيلوغرامات المباعة', value: `${totalRow.sold_kg ?? '0.00'} كغ` },
+      { label: 'الكيلوغرامات المرتجعة', value: `${totalRow.returned_kg ?? '0.00'} كغ` },
+      { label: 'صافي الكيلوغرامات', value: `${totalRow.net_kg ?? '0.00'} كغ` },
       { label: 'بنود تكلفة مفقودة', value: missingCostCount },
     ],
     columns: [
@@ -1125,6 +1163,8 @@ async function reportProfitDetailsByLine(
       textCol('unit', 'الوحدة'),
       numCol('quantity_meters', 'الكمية بالمتر (م)'),
       numCol('quantity_kg', 'الكمية بالكيلو (كغ)'),
+      numCol('returned_meters', 'أمتار مرتجعة (م)'),
+      numCol('returned_kg', 'كيلوغرامات مرتجعة (كغ)'),
       moneyCol('sales_amount', 'البيع'),
       moneyCol('cost_amount', 'التكلفة'),
       moneyCol('gross_profit', 'الربح'),
@@ -1197,6 +1237,8 @@ export async function reportProfitDetails(
              SUM(${SQL_LINE_COST_USD})::numeric AS cost_amount,
              SUM((CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END))::numeric AS sold_meters,
              SUM(CASE WHEN sil.unit = 'kg' THEN sil.quantity ELSE 0 END)::numeric AS sold_kg,
+             SUM(COALESCE((SELECT SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END) FROM return_invoice_lines ril JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id WHERE ril.original_sales_invoice_line_id = sil.id AND ri.status = 'CONFIRMED' AND ri.return_type = 'SALES_RETURN'), 0)::numeric)::numeric AS returned_meters,
+             SUM(COALESCE((SELECT SUM(CASE WHEN ril.unit = 'kg' THEN ril.quantity ELSE 0 END) FROM return_invoice_lines ril JOIN return_invoices ri ON ri.id = ril.return_invoice_id AND ri.company_id = ril.company_id WHERE ril.original_sales_invoice_line_id = sil.id AND ri.status = 'CONFIRMED' AND ri.return_type = 'SALES_RETURN'), 0)::numeric)::numeric AS returned_kg,
              COUNT(*) FILTER (
                WHERE (
                  sil.cost_source = 'MISSING'
@@ -1239,6 +1281,8 @@ export async function reportProfitDetails(
              COALESCE(lc.cost_amount, 0)::numeric AS cost_amount,
              COALESCE(lc.sold_meters, 0)::numeric AS sold_meters,
              COALESCE(lc.sold_kg, 0)::numeric AS sold_kg,
+             COALESCE(lc.returned_meters, 0)::numeric AS returned_meters,
+             COALESCE(lc.returned_kg, 0)::numeric AS returned_kg,
              COALESCE(lc.missing_cost_count, 0)::int AS missing_cost_count,
              COALESCE(lc.fallback_cost_count, 0)::int AS fallback_cost_count,
              COALESCE(lc.historical_snapshot_count, 0)::int AS historical_snapshot_count,
@@ -1271,6 +1315,10 @@ export async function reportProfitDetails(
             ROUND(sales_amount - cost_amount, 2)::text AS gross_profit,
             ROUND(sold_meters, 2)::text AS sold_meters,
             ROUND(sold_kg, 2)::text AS sold_kg,
+            ROUND(returned_meters, 2)::text AS returned_meters,
+            ROUND(returned_kg, 2)::text AS returned_kg,
+            ROUND(sold_meters - returned_meters, 2)::text AS net_meters,
+            ROUND(sold_kg - returned_kg, 2)::text AS net_kg,
             ROUND(CASE WHEN sales_amount > 0 THEN (remaining_amount / sales_amount) * sold_meters ELSE 0 END, 2)::text AS remaining_receivable_meters,
             ROUND(CASE WHEN sales_amount > 0 THEN (paid_amount / sales_amount) * (sales_amount - cost_amount) ELSE 0 END, 2)::text AS realized_profit,
             ROUND(CASE WHEN sales_amount > 0 THEN (remaining_amount / sales_amount) * (sales_amount - cost_amount) ELSE 0 END, 2)::text AS receivable_profit,
@@ -1303,6 +1351,10 @@ export async function reportProfitDetails(
             ROUND(COALESCE(SUM(sales_amount - cost_amount), 0), 2)::text AS gross_profit,
             ROUND(COALESCE(SUM(sold_meters), 0), 2)::text AS sold_meters,
             ROUND(COALESCE(SUM(sold_kg), 0), 2)::text AS sold_kg,
+            ROUND(COALESCE(SUM(returned_meters), 0), 2)::text AS returned_meters,
+            ROUND(COALESCE(SUM(returned_kg), 0), 2)::text AS returned_kg,
+            ROUND(COALESCE(SUM(sold_meters - returned_meters), 0), 2)::text AS net_meters,
+            ROUND(COALESCE(SUM(sold_kg - returned_kg), 0), 2)::text AS net_kg,
             ROUND(COALESCE(SUM(CASE WHEN sales_amount > 0 THEN (remaining_amount / sales_amount) * sold_meters ELSE 0 END), 0), 2)::text AS remaining_receivable_meters,
             ROUND(COALESCE(SUM(CASE WHEN sales_amount > 0 THEN (paid_amount / sales_amount) * (sales_amount - cost_amount) ELSE 0 END), 0), 2)::text AS realized_profit,
             ROUND(COALESCE(SUM(CASE WHEN sales_amount > 0 THEN (remaining_amount / sales_amount) * (sales_amount - cost_amount) ELSE 0 END), 0), 2)::text AS receivable_profit,
@@ -1329,6 +1381,10 @@ export async function reportProfitDetails(
                     ROUND(COALESCE(SUM(sales_amount - cost_amount), 0), 2)::text AS gross_profit,
                     ROUND(COALESCE(SUM(sold_meters), 0), 2)::text AS sold_meters,
                     ROUND(COALESCE(SUM(sold_kg), 0), 2)::text AS sold_kg,
+                    ROUND(COALESCE(SUM(returned_meters), 0), 2)::text AS returned_meters,
+                    ROUND(COALESCE(SUM(returned_kg), 0), 2)::text AS returned_kg,
+                    ROUND(COALESCE(SUM(sold_meters - returned_meters), 0), 2)::text AS net_meters,
+                    ROUND(COALESCE(SUM(sold_kg - returned_kg), 0), 2)::text AS net_kg,
                     ROUND(COALESCE(SUM(CASE WHEN sales_amount > 0 THEN (remaining_amount / sales_amount) * sold_meters ELSE 0 END), 0), 2)::text AS remaining_receivable_meters,
                     ROUND(COALESCE(SUM(CASE WHEN sales_amount > 0 THEN (paid_amount / sales_amount) * (sales_amount - cost_amount) ELSE 0 END), 0), 2)::text AS realized_profit,
                     ROUND(COALESCE(SUM(CASE WHEN sales_amount > 0 THEN (remaining_amount / sales_amount) * (sales_amount - cost_amount) ELSE 0 END), 0), 2)::text AS receivable_profit,
@@ -1354,6 +1410,10 @@ export async function reportProfitDetails(
             remaining_amount: row.remaining_amount,
             sold_meters: row.sold_meters,
             sold_kg: row.sold_kg,
+            returned_meters: row.returned_meters,
+            returned_kg: row.returned_kg,
+            net_meters: row.net_meters,
+            net_kg: row.net_kg,
             remaining_receivable_meters: row.remaining_receivable_meters,
             realized_profit: row.realized_profit,
             receivable_profit: row.receivable_profit,
@@ -1388,6 +1448,8 @@ export async function reportProfitDetails(
       { label: 'ربح متبق مع الذمم', value: `${totalRow.receivable_profit ?? '0.00'} USD` },
       { label: 'إجمالي الأمتار المباعة', value: `${totalRow.sold_meters ?? '0.00'} م` },
       { label: 'إجمالي الكيلوغرامات المباعة', value: `${totalRow.sold_kg ?? '0.00'} كغ` },
+      { label: 'الكيلوغرامات المرتجعة', value: `${totalRow.returned_kg ?? '0.00'} كغ` },
+      { label: 'صافي الكيلوغرامات', value: `${totalRow.net_kg ?? '0.00'} كغ` },
     ],
     columns: [
       dateCol('invoice_date', 'التاريخ'),
@@ -1398,6 +1460,10 @@ export async function reportProfitDetails(
       moneyCol('remaining_amount', 'المتبقي ذمم'),
       numCol('sold_meters', 'أمتار مباعة (م)'),
       numCol('sold_kg', 'كيلوغرامات مباعة (كغ)'),
+      numCol('returned_meters', 'أمتار مرتجعة (م)'),
+      numCol('returned_kg', 'كيلوغرامات مرتجعة (كغ)'),
+      numCol('net_meters', 'صافي الأمتار (م)'),
+      numCol('net_kg', 'صافي الكيلوغرامات (كغ)'),
       numCol('remaining_receivable_meters', 'أمتار ضمن الذمم'),
       moneyCol('cost_amount', 'التكلفة'),
       moneyCol('gross_profit', 'الربح الكلي'),

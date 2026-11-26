@@ -16,6 +16,10 @@ function exportTotalLabel(label: string): string {
     total_weight_kg: t('export.totals.totalWeightKg'),
     sold_meters: t('export.totals.soldMeters'),
     sold_kg: 'إجمالي الكيلوغرامات المباعة',
+    returned_kg: 'الكيلوغرامات المرتجعة',
+    returned_meters: 'الأمتار المرتجعة',
+    net_kg: 'صافي الكيلوغرامات',
+    net_meters: 'صافي الأمتار',
     remaining_receivable_meters: t('export.totals.remainingReceivableMeters'),
   };
   return map[label] || label;

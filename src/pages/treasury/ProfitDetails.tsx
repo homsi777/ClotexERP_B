@@ -492,7 +492,7 @@ export const ProfitDetails = () => {
               <span className="text-slate-500 font-bold">{t('topCustomer.totalPurchase')}</span>
               <span className="font-mono text-slate-900">{fmtMoney(topCustomer.salesAmount)}</span>
               <span className="text-slate-500 font-bold">{t('topCustomer.meters')}</span>
-              <span className="font-mono text-slate-900">{fmtMeters(topCustomer.soldMeters)}{Number(topCustomer.soldKg) > 0 ? ` + ${Number(topCustomer.soldKg).toLocaleString('en', { maximumFractionDigits: 2 })} كغ` : ''}</span>
+              <span className="font-mono text-slate-900">{fmtMeters(topCustomer.soldMeters)} م{Number(topCustomer.soldKg) > 0 ? ` + ${Number(topCustomer.soldKg).toLocaleString('en', { maximumFractionDigits: 2 })} كغ` : ''}{Number(topCustomer.returnedMeters) > 0 || Number(topCustomer.returnedKg) > 0 ? ` (مرتجع: ${Number(topCustomer.returnedMeters) > 0 ? `${fmtMeters(topCustomer.returnedMeters)} م` : ''}${Number(topCustomer.returnedMeters) > 0 && Number(topCustomer.returnedKg) > 0 ? ' + ' : ''}${Number(topCustomer.returnedKg) > 0 ? `${Number(topCustomer.returnedKg).toLocaleString('en', { maximumFractionDigits: 2 })} كغ` : ''} — الصافي: ${fmtMeters(topCustomer.netMeters)} م${Number(topCustomer.netKg) > 0 ? ` + ${Number(topCustomer.netKg).toLocaleString('en', { maximumFractionDigits: 2 })} كغ` : ''})` : ''}</span>
               <span className="text-slate-500 font-bold">{t('topCustomer.invoiceCount')}</span>
               <span className="font-mono text-slate-900">{dash(topCustomer.invoiceCount)}</span>
               <span className="text-slate-500 font-bold">{t('topCustomer.remaining')}</span>

@@ -118,6 +118,9 @@ test('meters and kg are separated in sales/customer reports, inventory reports a
     // المخزون: توب المتر 30م، توب الوزن 400 (كغ)، وكلاهما متاح
     const st = await q('SELECT barcode, length_m::float AS q, status FROM fabric_rolls ORDER BY barcode');
     assert.deepEqual(st.map((r) => [r.barcode, r.q, r.status]), [['K1', 400, 'AVAILABLE'], ['M1', 30, 'AVAILABLE']]);
+    // الوزن المتبقي الفعلي يتبع الكمية بعد المرتجع الجزئي، والأصلي محفوظ للسجل
+    const wk = (await q("SELECT actual_weight_kg::float AS cur, original_weight_kg::float AS orig, length_m::float AS qty FROM fabric_rolls WHERE barcode='K1'"))[0];
+    assert.deepEqual([wk.cur, wk.orig, wk.qty], [400, 1000, 400], 'الوزن الحالي 400 والأصلي 1000');
     // التقارير: مبيعات حسب الصنف — مباع 80م/1000كغ، مرتجع 30م/400كغ، صافي 50م/600كغ
     const byItem2 = (await more.reportSalesByItem(co, {})).rows[0] as Record<string, string>;
     assert.deepEqual([byItem2.meters_sold, byItem2.kg_sold, byItem2.returned_quantity, byItem2.returned_kg, byItem2.net_quantity_after_returns, byItem2.net_kg_after_returns].map(Number), [80, 1000, 30, 400, 50, 600]);
@@ -138,6 +141,14 @@ test('meters and kg are separated in sales/customer reports, inventory reports a
     const retTotal = await q("SELECT COALESCE(SUM(total_amount),0)::float AS t FROM return_invoices WHERE company_id=$1 AND status='CONFIRMED'", [co]);
     assert.equal(retTotal[0].t, 30 * 5 + 400 * 4);
 
+    // تقارير الأرباح وملخص الذمم وأكبر عميل: مباع 80م/1000كغ، مرتجع 30م/400كغ، صافي 50م/600كغ
+    const pd2 = await more.reportProfitDetails(co, {});
+    const t2 = pd2.totals as Record<string, string>;
+    assert.deepEqual([t2.sold_meters, t2.sold_kg, t2.returned_meters, t2.returned_kg, t2.net_meters, t2.net_kg].map(Number), [80, 1000, 30, 400, 50, 600]);
+    const pdRows = JSON.stringify(pd2.rows);
+    assert.ok(pdRows.includes('"returned_kg"') && pdRows.includes('"net_kg"'), 'صفوف الأرباح فيها المرتجع والصافي');
+    const pdJson = JSON.stringify(pd2);
+    assert.ok(pdJson.includes('"returnedKg":"400.00"') && pdJson.includes('"netKg":"600.00"'), 'أكبر عميل/الذمم: كيلو مرتجع 400 وصافي 600');
     // ───── الشراء بالمتر وبالكيلو ثم مرتجع الشراء بالوحدتين ─────
     const { createPurchaseInvoice } = await import('./purchaseInvoiceService.js');
     const pl = (desc: string, qty: number, unit: string, price: number, meta: Record<string, unknown>) => ({ description: desc, quantity: qty, unit, unitPrice: price, lineDiscount: 0, lineTotal: qty * price, materialKind: 'FABRIC', metadata: meta });

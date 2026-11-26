@@ -29,6 +29,8 @@ export interface FabricRollDto {
   actual_weight_kg: string | null;
   /** WEIGHT: أُدخل بالوزن (الطول مشتق). */
   entry_basis?: 'LENGTH' | 'WEIGHT';
+  /** الوزن الأصلي لتوب الوزن (السجل التاريخي)؛ الوزن الحالي في actual_weight_kg. */
+  original_weight_kg?: string | null;
   unit_cost: string | null;
   currency_code: string | null;
   batch_no: string | null;
