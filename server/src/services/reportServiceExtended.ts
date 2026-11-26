@@ -265,7 +265,7 @@ export async function reportOperationalPosition(companyId: string): Promise<Unif
             'أرصدة حالية'::text AS note
      FROM cashboxes c WHERE c.company_id = $1 AND c.is_active GROUP BY c.currency_code
      UNION ALL
-     SELECT 'مخزون أقمشة (طول م)', 'إجمالي أمتار', COALESCE(SUM(length_m),0), 'كمية فقط'
+     SELECT 'مخزون أقمشة (طول م)', 'إجمالي أمتار', COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END),0), 'كمية فقط'
      FROM fabric_rolls WHERE company_id = $1
      UNION ALL
      SELECT 'سندات معلقة', 'مسودات سندات', COUNT(*)::numeric, 'عدد'

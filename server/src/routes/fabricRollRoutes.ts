@@ -578,7 +578,7 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
          fi.default_selling_currency_code,
          COUNT(fr.id)::int AS roll_count,
          COUNT(DISTINCT fr.color_id)::int AS color_count,
-         COALESCE(SUM(fr.length_m), 0)::numeric AS total_meters,
+         COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_meters,
          COALESCE(SUM(COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg, 0)), 0)::numeric AS total_kg,
          COALESCE(AVG(fr.unit_cost) FILTER (WHERE fr.unit_cost IS NOT NULL), 0)::numeric AS avg_unit_cost,
          COALESCE(MIN(fr.unit_cost) FILTER (WHERE fr.unit_cost IS NOT NULL), 0)::numeric AS min_unit_cost,

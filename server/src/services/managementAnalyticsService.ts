@@ -48,9 +48,9 @@ export async function getBranchAnalytics(db: Db, companyId: string, period: Peri
   }
 
   const byStatus = await q<{ status: string; n: string; m: string; kg: string }>(
-    `SELECT status, count(*)::text AS n, COALESCE(sum(length_m),0)::text AS m, COALESCE(sum(COALESCE(actual_weight_kg, calculated_weight_kg)),0)::text AS kg FROM fabric_rolls WHERE company_id=$1 AND status IN ('AVAILABLE','RESERVED','DAMAGED') GROUP BY 1 ORDER BY 1`);
+    `SELECT status, count(*)::text AS n, COALESCE(sum(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END),0)::text AS m, COALESCE(sum(COALESCE(actual_weight_kg, calculated_weight_kg)),0)::text AS kg FROM fabric_rolls WHERE company_id=$1 AND status IN ('AVAILABLE','RESERVED','DAMAGED') GROUP BY 1 ORDER BY 1`);
   const byWarehouse = await q<{ name: string; n: string; m: string }>(
-    `SELECT w.name, count(*)::text AS n, COALESCE(sum(r.length_m),0)::text AS m FROM fabric_rolls r JOIN warehouses w ON w.id=r.warehouse_id WHERE r.company_id=$1 AND r.status IN ('AVAILABLE','RESERVED') GROUP BY 1 ORDER BY sum(r.length_m) DESC LIMIT 20`);
+    `SELECT w.name, count(*)::text AS n, COALESCE(sum(CASE WHEN r.entry_basis='WEIGHT' THEN 0 ELSE r.length_m END),0)::text AS m FROM fabric_rolls r JOIN warehouses w ON w.id=r.warehouse_id WHERE r.company_id=$1 AND r.status IN ('AVAILABLE','RESERVED') GROUP BY 1 ORDER BY sum(CASE WHEN r.entry_basis='WEIGHT' THEN 0 ELSE r.length_m END) DESC LIMIT 20`);
 
   return {
     period, bucketUnit: unit as 'day' | 'month',

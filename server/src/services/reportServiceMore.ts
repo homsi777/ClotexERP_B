@@ -47,7 +47,7 @@ const SQL_LINE_COST_USD = `
       THEN sil.cost_total / sil.cost_exchange_rate_to_usd
     WHEN sil.cost_source IS NULL AND fr.unit_cost IS NOT NULL AND fr.unit_cost > 0
       THEN (
-        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END) * fr.unit_cost
+        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END) * fr.unit_cost
         / NULLIF(
           CASE
             WHEN UPPER(COALESCE(fr.currency_code, si.currency_code, 'USD')) = 'USD' THEN 1
@@ -152,7 +152,7 @@ export async function reportSalesDetails(
 
 const SQL_GROSS_LINE_USD = `
   ROUND(
-    (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END * sil.unit_price)
+    (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END * sil.unit_price)
     / NULLIF(CASE WHEN si.currency_code = 'USD' THEN 1 ELSE si.exchange_rate_to_usd END, 0),
     4
   )::numeric`;
@@ -203,7 +203,7 @@ export async function reportSalesByItemColorForCustomer(
   const sql = `
     WITH return_agg AS (
       SELECT ril.original_sales_invoice_line_id AS line_id,
-             SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 ELSE ril.quantity END)::numeric AS returned_meters,
+             SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END)::numeric AS returned_meters,
              SUM(
                ROUND(
                  ril.line_total / NULLIF(
@@ -230,7 +230,7 @@ export async function reportSalesByItemColorForCustomer(
         COALESCE(fc.id::text, 'none') AS color_key,
         COALESCE(fc.name_ar, fc.name_tr, 'بدون لون') AS color_name,
         COALESCE(fc.color_code, '') AS color_code,
-        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END)::numeric AS quantity_meters,
+        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters,
         ${SQL_NET_LINE_REVENUE_USD} AS net_sales_usd
       FROM sales_invoice_lines sil
       INNER JOIN sales_invoices si ON si.id = sil.invoice_id AND si.company_id = sil.company_id
@@ -327,7 +327,7 @@ export async function reportSalesByItem(
     const detailBaseSql = `
       WITH return_agg AS (
         SELECT ril.original_sales_invoice_line_id AS line_id,
-               SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 ELSE ril.quantity END)::numeric AS returned_meters,
+               SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END)::numeric AS returned_meters,
                STRING_AGG(DISTINCT ri.return_no, ', ' ORDER BY ri.return_no) AS return_nos,
                STRING_AGG(DISTINCT ri.return_date::text, ', ' ORDER BY ri.return_date::text) AS return_dates
         FROM return_invoice_lines ril
@@ -347,7 +347,7 @@ export async function reportSalesByItem(
           c.name AS customer_name,
           COALESCE(NULLIF(fi.name, ''), 'بدون خامة') AS material_name,
           COALESCE(fi.internal_code, '') AS material_code,
-          (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END)::numeric AS quantity_meters_num,
+          (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters_num,
           ${SQL_NET_LINE_REVENUE_USD} AS net_sales_usd,
           COALESCE(ra.returned_meters, 0)::numeric AS returned_meters_num,
           ra.return_dates,
@@ -434,7 +434,7 @@ export async function reportSalesByItem(
     ? `
     return_by_line AS (
       SELECT ril.original_sales_invoice_line_id AS line_id,
-             SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 ELSE ril.quantity END)::numeric AS returned_meters,
+             SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END)::numeric AS returned_meters,
              SUM(
                ROUND(
                  ril.line_total / NULLIF(
@@ -465,7 +465,8 @@ export async function reportSalesByItem(
         fi.internal_code AS material_code,
         COALESCE(fv.variant_code, fi.internal_code) AS design_name,
         sil.id AS line_id,
-        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END)::numeric AS quantity_meters,
+        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters,
+        (CASE WHEN sil.unit = 'kg' THEN sil.quantity ELSE 0 END)::numeric AS quantity_kg,
         sil.quantity,
         ${SQL_GROSS_LINE_USD} AS gross_sales_usd,
         ${SQL_LINE_DISCOUNT_USD} AS discount_usd,
@@ -486,6 +487,7 @@ export async function reportSalesByItem(
         COALESCE(NULLIF(design_name, ''), '—') AS design_name,
         ROUND(COALESCE(SUM(sl.quantity), 0), 3)::text AS quantity_sold,
         ROUND(COALESCE(SUM(sl.quantity_meters), 0), 2)::text AS meters_sold,
+        ROUND(COALESCE(SUM(sl.quantity_kg), 0), 2)::text AS kg_sold,
         ROUND(COALESCE(SUM(sl.gross_sales_usd), 0), 2)::text AS gross_sales_amount,
         ROUND(COALESCE(SUM(sl.discount_usd), 0), 2)::text AS discount_amount,
         ROUND(COALESCE(SUM(sl.net_sales_usd), 0), 2)::text AS net_sales_amount,
@@ -538,8 +540,8 @@ export async function reportSalesByItem(
       textCol('material_name', 'الخامة'),
       textCol('material_code', 'كود الخامة'),
       textCol('design_name', 'التصميم'),
-      numCol('quantity_sold', 'الكمية المباعة'),
-      moneyCol('meters_sold', 'الأمتار'),
+      moneyCol('meters_sold', 'الأمتار المباعة (م)'),
+      moneyCol('kg_sold', 'الكيلوغرامات المباعة (كغ)'),
       moneyCol('gross_sales_amount', 'إجمالي البيع'),
       moneyCol('discount_amount', 'الخصم'),
       moneyCol('net_sales_amount', 'صافي البيع'),
@@ -732,7 +734,7 @@ async function queryProfitTopCustomerInsight(
         fi.internal_code AS material_code,
         ${SQL_NET_LINE_REVENUE_USD} AS sales_amount,
         ${SQL_LINE_COST_USD} AS cost_amount,
-        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END)::numeric AS quantity_meters,
+        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters,
         COALESCE(si.total_amount_usd, CASE WHEN si.currency_code='USD' THEN si.total_amount ELSE si.total_amount / NULLIF(si.exchange_rate_to_usd, 0) END, 0)::numeric AS total_amount_usd,
         COALESCE(si.paid_amount_usd, CASE WHEN si.currency_code='USD' THEN si.paid_amount ELSE si.paid_amount / NULLIF(si.exchange_rate_to_usd, 0) END, 0)::numeric AS paid_amount_usd,
         COALESCE(si.remaining_amount_usd, CASE WHEN si.currency_code='USD' THEN si.remaining_amount ELSE si.remaining_amount / NULLIF(si.exchange_rate_to_usd, 0) END, 0)::numeric AS remaining_amount_usd
@@ -897,7 +899,7 @@ async function reportProfitDetailsByLine(
         w.name AS warehouse_name,
         sil.quantity,
         sil.unit,
-        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END)::numeric AS quantity_meters,
+        (CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END)::numeric AS quantity_meters,
         sil.unit_price,
         ${SQL_NET_LINE_REVENUE_USD} AS sales_amount,
         ${SQL_LINE_COST_USD} AS cost_amount,
@@ -1155,7 +1157,7 @@ export async function reportProfitDetails(
     WITH line_costs AS (
       SELECT sil.invoice_id,
              SUM(${SQL_LINE_COST_USD})::numeric AS cost_amount,
-             SUM((CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 ELSE sil.quantity END))::numeric AS sold_meters,
+             SUM((CASE WHEN sil.unit = 'yard' THEN sil.quantity * 0.9144 WHEN sil.unit = 'kg' THEN 0 ELSE sil.quantity END))::numeric AS sold_meters,
              COUNT(*) FILTER (
                WHERE (
                  sil.cost_source = 'MISSING'
@@ -1391,7 +1393,7 @@ export async function reportPurchasesSummary(companyId: string): Promise<Unified
     [companyId],
   );
   const fr = await pool.query(
-    `SELECT COUNT(*)::int AS n, COALESCE(SUM(length_m),0)::numeric AS m
+    `SELECT COUNT(*)::int AS n, COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END),0)::numeric AS m
      FROM fabric_rolls fr WHERE company_id = $1`,
     [companyId],
   );
@@ -1457,7 +1459,8 @@ export async function reportPurchasesBySupplier(companyId: string): Promise<Unif
   const data = await pool.query(
     `SELECT COALESCE(s.name, '(بدون مورد)') AS supplier_name,
             COUNT(fr.id)::int AS rolls_count,
-            COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      LEFT JOIN suppliers s ON s.id = fr.supplier_id AND s.company_id = fr.company_id
      WHERE fr.company_id = $1
@@ -1473,7 +1476,8 @@ export async function reportPurchasesBySupplier(companyId: string): Promise<Unif
     columns: [
       textCol('supplier_name', 'المورد'),
       numCol('rolls_count', 'عدد الأتواب'),
-      moneyCol('total_m', 'إجمالي أمتار'),
+      moneyCol('total_m', 'إجمالي أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
     ],
     rows: data.rows as Record<string, unknown>[],
     meta: { total: data.rows.length },
@@ -1483,7 +1487,8 @@ export async function reportPurchasesBySupplier(companyId: string): Promise<Unif
 export async function reportPurchasesByItem(companyId: string): Promise<UnifiedReportPayload> {
   const pool = getPool();
   const data = await pool.query(
-    `SELECT fi.name AS item_name, COUNT(fr.id)::int AS rolls, COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+    `SELECT fi.name AS item_name, COUNT(fr.id)::int AS rolls, COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id
      WHERE fr.company_id = $1
@@ -1498,7 +1503,8 @@ export async function reportPurchasesByItem(companyId: string): Promise<UnifiedR
     columns: [
       textCol('item_name', 'الخامة'),
       numCol('rolls', 'أتواب'),
-      moneyCol('total_m', 'أمتار'),
+      moneyCol('total_m', 'أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
     ],
     rows: data.rows as Record<string, unknown>[],
     meta: { total: data.rows.length },
@@ -1510,7 +1516,8 @@ export async function reportPurchasesByBatch(companyId: string): Promise<Unified
   const data = await pool.query(
     `SELECT COALESCE(fr.batch_no, '(بدون دفعة)') AS batch_no,
             COUNT(*)::int AS rolls,
-            COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      WHERE fr.company_id = $1
      GROUP BY fr.batch_no
@@ -1525,7 +1532,8 @@ export async function reportPurchasesByBatch(companyId: string): Promise<Unified
     columns: [
       textCol('batch_no', 'الدفعة'),
       numCol('rolls', 'أتواب'),
-      moneyCol('total_m', 'أمتار'),
+      moneyCol('total_m', 'أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
     ],
     rows: data.rows as Record<string, unknown>[],
     meta: { total: data.rows.length },
@@ -1571,7 +1579,8 @@ export async function reportInventoryBalances(companyId: string): Promise<Unifie
     `SELECT w.name AS warehouse, fi.name AS item_name,
             COALESCE(fc.name_ar, fc.name_tr, '') AS color_name, fr.status,
             COUNT(fr.id)::int AS rolls,
-            COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      JOIN warehouses w ON w.id = fr.warehouse_id
      JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id
@@ -1593,7 +1602,8 @@ export async function reportInventoryBalances(companyId: string): Promise<Unifie
       textCol('color_name', 'اللون'),
       textCol('status', 'الحالة'),
       numCol('rolls', 'أتواب'),
-      moneyCol('total_m', 'أمتار'),
+      moneyCol('total_m', 'أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
     ],
     rows: data.rows as Record<string, unknown>[],
     meta: { total: data.rows.length },
@@ -1606,7 +1616,8 @@ export async function reportInventoryValuation(companyId: string): Promise<Unifi
     `SELECT fi.name AS item_name,
             COUNT(fr.id)::int AS rolls,
             COALESCE(SUM(fr.length_m * COALESCE(fr.unit_cost, 0)), 0)::numeric AS est_value,
-            COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id
      WHERE fr.company_id = $1
@@ -1625,7 +1636,8 @@ export async function reportInventoryValuation(companyId: string): Promise<Unifi
     columns: [
       textCol('item_name', 'الخامة'),
       numCol('rolls', 'أتواب'),
-      moneyCol('total_m', 'أمتار'),
+      moneyCol('total_m', 'أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
       moneyCol('est_value', 'قيمة تقديرية'),
     ],
     rows: data.rows as Record<string, unknown>[],
@@ -1641,7 +1653,8 @@ export async function reportInventoryByColor(companyId: string): Promise<Unified
   const data = await pool.query(
     `SELECT COALESCE(fc.name_ar, fc.name_tr, '(بدون لون)') AS color_name,
             COUNT(fr.id)::int AS rolls,
-            COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      LEFT JOIN fabric_colors fc ON fc.id = fr.color_id
      WHERE fr.company_id = $1
@@ -1659,7 +1672,8 @@ export async function reportInventoryByColor(companyId: string): Promise<Unified
     columns: [
       textCol('color_name', 'اللون'),
       numCol('rolls', 'أتواب'),
-      moneyCol('total_m', 'أمتار'),
+      moneyCol('total_m', 'أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
     ],
     rows: data.rows as Record<string, unknown>[],
     meta: { total: data.rows.length },
@@ -1676,7 +1690,8 @@ export async function reportInventoryAging(companyId: string): Promise<UnifiedRe
               ELSE 'أكثر من 90 يوم'
             END AS bucket,
             COUNT(*)::int AS rolls,
-            COALESCE(SUM(fr.length_m),0)::numeric AS total_m
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::numeric AS total_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END),0)::numeric AS total_kg
      FROM fabric_rolls fr
      WHERE fr.company_id = $1
        AND fr.status NOT IN ('SOLD', 'INACTIVE', 'DAMAGED')
@@ -1693,7 +1708,8 @@ export async function reportInventoryAging(companyId: string): Promise<UnifiedRe
     columns: [
       textCol('bucket', 'الفترة'),
       numCol('rolls', 'أتواب'),
-      moneyCol('total_m', 'أمتار'),
+      moneyCol('total_m', 'أمتار (م)'),
+      moneyCol('total_kg', 'كيلوغرامات (كغ)'),
     ],
     rows: data.rows as Record<string, unknown>[],
     meta: { total: data.rows.length },
@@ -2062,7 +2078,7 @@ export async function reportInventoryRemainingLengths(companyId: string): Promis
        fi.name AS item_name,
        COALESCE(fi.internal_code, '') AS internal_code,
        COUNT(fr.id)::int AS rolls_count,
-       COALESCE(SUM(fr.length_m), 0)::numeric AS remaining_m,
+       COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS remaining_m,
        COALESCE(SUM(COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg, 0)), 0)::numeric AS remaining_weight_kg
      FROM fabric_rolls fr
      JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id

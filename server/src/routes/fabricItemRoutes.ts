@@ -127,7 +127,7 @@ export const fabricItemRoutes: FastifyPluginAsync = async (app) => {
       `WITH roll_colors AS (
          SELECT color_id,
                 COUNT(*)::int AS roll_count,
-                COALESCE(SUM(length_m),0) AS total_meters,
+                COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END),0) AS total_meters,
                 (ARRAY_AGG(variant_id) FILTER (WHERE variant_id IS NOT NULL))[1] AS roll_variant_id
            FROM fabric_rolls
           WHERE company_id = $1 AND item_id = $2 AND color_id IS NOT NULL

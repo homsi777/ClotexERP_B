@@ -42,7 +42,7 @@ export interface BranchMetrics {
   balances: { customers: Array<{ currency: string; owedToUs: number; weOwe: number; pendingCheques: number }>; suppliers: Array<{ currency: string; owedToUs: number; weOwe: number }>; customerAlerts: { promiseOverdue: number; limitExceeded: number }; supplierPromiseOverdue: number };
   cash: Money[];
   cheques: { pending: number; overdue: number; pendingByCurrency: Money[] };
-  inventory: { available: { rolls: number; meters: number }; reserved: { rolls: number; meters: number }; quarantined: { rolls: number; meters: number }; withoutLocation: number; slowMoving: { thresholdDays: number; rolls: number; meters: number }; pendingTransfers: number };
+  inventory: { available: { rolls: number; meters: number; kg?: number }; reserved: { rolls: number; meters: number; kg?: number }; quarantined: { rolls: number; meters: number }; withoutLocation: number; slowMoving: { thresholdDays: number; rolls: number; meters: number }; pendingTransfers: number };
   external: { open: number; late: number; lateThresholdDays: number; partiallyReceived: number; metersSent: number; metersReceived: number; metersRemaining: number; settlementsInPeriod: Array<{ category: string; meters: number }> };
   production: { open: number; late: number; byStatus: Array<{ status: string; count: number }> };
   waiting: { salesDrafts: number; purchaseDrafts: number; pricingQueue: number; editRequests: number; wasteDrafts: number };
@@ -121,16 +121,17 @@ export async function getBranchMetrics(db: Db, companyId: string, period: Period
   const chqBy = await q<{ currency: string; total: string }>(
     `SELECT currency_code AS currency, COALESCE(sum(amount),0)::text AS total FROM checks WHERE company_id=$1 AND status IN ('RECEIVED','DEPOSITED') AND party_type='CUSTOMER' GROUP BY 1 ORDER BY 1`);
 
-  const inv = await one<{ av_n: string; av_m: string; rs_n: string; rs_m: string; q_n: string; q_m: string; noloc: string; tr: string }>(
-    `SELECT count(*) FILTER (WHERE status='AVAILABLE')::text AS av_n, COALESCE(sum(length_m) FILTER (WHERE status='AVAILABLE'),0)::text AS av_m,
-            count(*) FILTER (WHERE status='RESERVED')::text AS rs_n, COALESCE(sum(length_m) FILTER (WHERE status='RESERVED'),0)::text AS rs_m,
+  const inv = await one<{ av_kg: string; rs_kg: string; av_n: string; av_m: string; rs_n: string; rs_m: string; q_n: string; q_m: string; noloc: string; tr: string }>(
+    `SELECT COALESCE(sum(length_m) FILTER (WHERE status='AVAILABLE' AND entry_basis='WEIGHT'),0)::text AS av_kg, COALESCE(sum(length_m) FILTER (WHERE status='RESERVED' AND entry_basis='WEIGHT'),0)::text AS rs_kg,
+            count(*) FILTER (WHERE status='AVAILABLE')::text AS av_n, COALESCE(sum(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END) FILTER (WHERE status='AVAILABLE'),0)::text AS av_m,
+            count(*) FILTER (WHERE status='RESERVED')::text AS rs_n, COALESCE(sum(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END) FILTER (WHERE status='RESERVED'),0)::text AS rs_m,
             count(*) FILTER (WHERE status='DAMAGED' OR EXISTS (SELECT 1 FROM external_job_return_lines q WHERE q.result_roll_id=fabric_rolls.id AND q.company_id=fabric_rolls.company_id AND q.defective AND q.resolution IS NULL))::text AS q_n,
-            COALESCE(sum(length_m) FILTER (WHERE status='DAMAGED' OR EXISTS (SELECT 1 FROM external_job_return_lines q WHERE q.result_roll_id=fabric_rolls.id AND q.company_id=fabric_rolls.company_id AND q.defective AND q.resolution IS NULL)),0)::text AS q_m,
+            COALESCE(sum(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END) FILTER (WHERE status='DAMAGED' OR EXISTS (SELECT 1 FROM external_job_return_lines q WHERE q.result_roll_id=fabric_rolls.id AND q.company_id=fabric_rolls.company_id AND q.defective AND q.resolution IS NULL)),0)::text AS q_m,
             count(*) FILTER (WHERE status IN ('AVAILABLE','RESERVED') AND location_id IS NULL)::text AS noloc,
             (SELECT count(*) FROM inventory_transfers t WHERE t.company_id=$1 AND t.status='DRAFT')::text AS tr
        FROM fabric_rolls WHERE company_id=$1`);
   const slow = await one<{ n: string; m: string }>(
-    `SELECT count(*)::text AS n, COALESCE(sum(r.length_m),0)::text AS m FROM fabric_rolls r
+    `SELECT count(*)::text AS n, COALESCE(sum(CASE WHEN r.entry_basis='WEIGHT' THEN 0 ELSE r.length_m END),0)::text AS m FROM fabric_rolls r
       WHERE r.company_id=$1 AND r.status='AVAILABLE' AND r.length_m > 0
         AND GREATEST(r.created_at, COALESCE((SELECT max(im.created_at) FROM inventory_movements im WHERE im.roll_id=r.id AND im.company_id=r.company_id), r.created_at)) < now() - make_interval(days => $2::int)`, [thresholds.slowStockDays]);
 
@@ -181,7 +182,7 @@ export async function getBranchMetrics(db: Db, companyId: string, period: Period
     cash: m(cash),
     cheques: { pending: Number(chq.pending), overdue: Number(chq.overdue), pendingByCurrency: m(chqBy) },
     inventory: {
-      available: { rolls: Number(inv.av_n), meters: Number(inv.av_m) }, reserved: { rolls: Number(inv.rs_n), meters: Number(inv.rs_m) },
+      available: { rolls: Number(inv.av_n), meters: Number(inv.av_m), kg: Number(inv.av_kg) }, reserved: { rolls: Number(inv.rs_n), meters: Number(inv.rs_m), kg: Number(inv.rs_kg) },
       quarantined: { rolls: Number(inv.q_n), meters: Number(inv.q_m) }, withoutLocation: Number(inv.noloc),
       slowMoving: { thresholdDays: thresholds.slowStockDays, rolls: Number(slow.n), meters: Number(slow.m) }, pendingTransfers: Number(inv.tr),
     },

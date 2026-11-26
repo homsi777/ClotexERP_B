@@ -62,7 +62,7 @@ export async function zoneSummary(db: Db, companyId: string, warehouseId: string
   const zones = await db.query(
     `SELECT wl.id, wl.code, wl.name, wl.is_active,
             COUNT(fr.id) FILTER (WHERE fr.status IN ${ASSIGNABLE})::int AS rolls,
-            COALESCE(SUM(fr.length_m) FILTER (WHERE fr.status IN ${ASSIGNABLE}), 0)::float AS meters
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END) FILTER (WHERE fr.status IN ${ASSIGNABLE}), 0)::float AS meters
        FROM warehouse_locations wl
        LEFT JOIN fabric_rolls fr ON fr.location_id = wl.id AND fr.company_id = wl.company_id
       WHERE wl.warehouse_id = $1 AND wl.company_id = $2
@@ -70,7 +70,7 @@ export async function zoneSummary(db: Db, companyId: string, warehouseId: string
     [warehouseId, companyId],
   );
   const un = await db.query(
-    `SELECT COUNT(*)::int AS rolls, COALESCE(SUM(length_m),0)::float AS meters FROM fabric_rolls
+    `SELECT COUNT(*)::int AS rolls, COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END),0)::float AS meters FROM fabric_rolls
       WHERE company_id = $1 AND warehouse_id = $2 AND location_id IS NULL AND status IN ${ASSIGNABLE}`,
     [companyId, warehouseId],
   );
@@ -220,7 +220,7 @@ export async function zoneContents(db: Db, companyId: string, warehouseId: strin
 export async function itemDistribution(db: Db, companyId: string, warehouseId: string, itemId: string) {
   const r = await db.query(
     `SELECT wl.id AS zone_id, COALESCE(wl.name, 'غير محدد') AS zone_name, fr.color_id, fc.name_ar AS color_name, fc.color_code,
-            COUNT(*)::int AS rolls, COALESCE(SUM(fr.length_m),0)::float AS meters
+            COUNT(*)::int AS rolls, COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END),0)::float AS meters
        FROM fabric_rolls fr
        LEFT JOIN warehouse_locations wl ON wl.id = fr.location_id
        LEFT JOIN fabric_colors fc ON fc.id = fr.color_id

@@ -37,7 +37,7 @@ export async function fetchExtendedDashboardSummary(companyId: string): Promise<
          (SELECT COUNT(*)::int FROM payroll_runs WHERE company_id = $1) AS payroll_runs_count,
          (SELECT COUNT(*)::int FROM inventory_transfers WHERE company_id = $1) AS transfers_count,
          (SELECT COUNT(*)::int FROM inventory_waste_records WHERE company_id = $1) AS waste_records_count,
-         (SELECT COALESCE(SUM(length_m), 0)::numeric FROM fabric_rolls WHERE company_id = $1) AS total_roll_length_m,
+         (SELECT COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END), 0)::numeric FROM fabric_rolls WHERE company_id = $1) AS total_roll_length_m,
          (SELECT COALESCE(SUM(COALESCE(actual_weight_kg, calculated_weight_kg, 0)), 0)::numeric
             FROM fabric_rolls WHERE company_id = $1) AS total_roll_weight_kg,
          (SELECT COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric
@@ -211,7 +211,7 @@ export async function reportInventoryRolls(
     `${rollLengthCte}
      SELECT
        COALESCE(SUM(COALESCE(NULLIF(rl.positive_length_m, 0), COALESCE(fr.length_m, 0) + COALESCE(rl.sold_length_m, 0), COALESCE(fr.length_m, 0), 0)), 0)::numeric AS total_length,
-       COALESCE(SUM(COALESCE(fr.length_m, 0)), 0)::numeric AS total_remaining_length,
+       COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE COALESCE(fr.length_m, 0) END), 0)::numeric AS total_remaining_length,
        COALESCE(SUM(GREATEST(
          COALESCE(NULLIF(rl.positive_length_m, 0), COALESCE(fr.length_m, 0) + COALESCE(rl.sold_length_m, 0), COALESCE(fr.length_m, 0), 0)
          - COALESCE(fr.length_m, 0),
@@ -489,7 +489,8 @@ export async function reportRollsByWarehouse(
     SELECT w.code AS warehouse_code,
            w.name AS warehouse_name,
            COUNT(fr.id) FILTER (WHERE fr.status NOT IN ('SOLD', 'INACTIVE', 'DAMAGED') AND fr.length_m > 0)::int AS rolls_count,
-           COALESCE(SUM(fr.length_m) FILTER (WHERE fr.status NOT IN ('SOLD', 'INACTIVE', 'DAMAGED')), 0)::numeric AS total_length_m,
+           COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END) FILTER (WHERE fr.status NOT IN ('SOLD', 'INACTIVE', 'DAMAGED')), 0)::numeric AS total_length_m,
+           COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END) FILTER (WHERE fr.status NOT IN ('SOLD', 'INACTIVE', 'DAMAGED')), 0)::numeric AS total_weight_kg,
            COALESCE(SUM(COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg, 0))
              FILTER (WHERE fr.status NOT IN ('SOLD', 'INACTIVE', 'DAMAGED')), 0)::numeric AS total_weight_kg,
            COUNT(fr.id) FILTER (WHERE fr.status IN ('AVAILABLE','RESERVED','TRANSFERRED'))::int AS active_count,
@@ -521,7 +522,8 @@ export async function reportRollsByWarehouse(
       { key: 'warehouse_code', label: 'كود', type: 'text' },
       { key: 'warehouse_name', label: 'المستودع', type: 'text' },
       { key: 'rolls_count', label: 'عدد الأتواب', type: 'number' },
-      { key: 'total_length_m', label: 'إجمالي الأمتار', type: 'number' },
+      { key: 'total_length_m', label: 'إجمالي الأمتار (م)', type: 'number' },
+      { key: 'total_weight_kg', label: 'إجمالي الكيلوغرامات (كغ)', type: 'number' },
       { key: 'total_weight_kg', label: 'إجمالي الوزن', type: 'number' },
       { key: 'active_count', label: 'نشطة', type: 'number' },
       { key: 'damaged_count', label: 'تالفة', type: 'number' },
@@ -563,7 +565,8 @@ export async function reportRollsByItemColor(
             COALESCE(fc.name_ar, fc.name_tr, '') AS color_name,
             fc.color_code,
             COUNT(fr.id)::int AS rolls_count,
-            COALESCE(SUM(fr.length_m), 0)::numeric AS total_length_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_length_m,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN fr.length_m ELSE 0 END), 0)::numeric AS total_weight_kg,
             COALESCE(SUM(COALESCE(fr.actual_weight_kg, fr.calculated_weight_kg, 0)), 0)::numeric AS total_weight_kg,
             COUNT(DISTINCT fr.warehouse_id)::int AS warehouses_count
      FROM fabric_rolls fr
@@ -587,7 +590,8 @@ export async function reportRollsByItemColor(
       { key: 'color_name', label: 'اللون', type: 'text' },
       { key: 'color_code', label: 'كود اللون', type: 'text' },
       { key: 'rolls_count', label: 'عدد الأتواب', type: 'number' },
-      { key: 'total_length_m', label: 'إجمالي الأمتار', type: 'number' },
+      { key: 'total_length_m', label: 'إجمالي الأمتار (م)', type: 'number' },
+      { key: 'total_weight_kg', label: 'إجمالي الكيلوغرامات (كغ)', type: 'number' },
       { key: 'total_weight_kg', label: 'إجمالي الوزن', type: 'number' },
       { key: 'warehouses_count', label: 'عدد المستودعات', type: 'number' },
     ],

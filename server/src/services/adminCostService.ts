@@ -35,7 +35,7 @@ export interface CostGroup { itemId: string; itemName: string; itemCode: string 
 export async function listCostGroups(db: Db, companyId: string, opts: { onlyMissing?: boolean; search?: string } = {}): Promise<CostGroup[]> {
   const rows = (await db.query<Record<string, unknown>>(
     `SELECT r.item_id, fi.name AS item_name, fi.internal_code, r.color_id, fc.name_ar AS color_name,
-            count(*)::int AS rolls, COALESCE(sum(r.length_m),0)::float AS meters, count(*) FILTER (WHERE r.unit_cost IS NOT NULL AND r.unit_cost > 0)::int AS official,
+            count(*)::int AS rolls, COALESCE(sum(CASE WHEN r.entry_basis='WEIGHT' THEN 0 ELSE r.length_m END),0)::float AS meters, count(*) FILTER (WHERE r.unit_cost IS NOT NULL AND r.unit_cost > 0)::int AS official,
             (SELECT row_to_json(x) FROM (SELECT a.scope, a.unit_cost_per_meter::float AS cost, a.unit_basis AS basis, a.currency_code AS currency, a.effective_from::text AS since FROM admin_cost_rates a
                WHERE a.company_id=r.company_id AND a.item_id=r.item_id AND ((a.scope='ITEM_COLOR' AND a.color_id IS NOT DISTINCT FROM r.color_id) OR a.scope='ITEM')
                ORDER BY CASE a.scope WHEN 'ITEM_COLOR' THEN 0 ELSE 1 END, a.effective_from DESC LIMIT 1) x) AS rate

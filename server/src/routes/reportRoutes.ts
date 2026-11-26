@@ -133,7 +133,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
     const { companyId } = req.user!;
     const pool = getPool();
     const rolls = await pool.query<{ total_m: string; n: string }>(
-      `SELECT COALESCE(SUM(length_m), 0)::numeric AS total_m, COUNT(*)::int AS n
+      `SELECT COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END), 0)::numeric AS total_m, COUNT(*)::int AS n
        FROM fabric_rolls WHERE company_id = $1`,
       [companyId],
     );

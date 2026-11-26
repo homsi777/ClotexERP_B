@@ -65,6 +65,13 @@ test('roll entered by weight: quantity is the kg itself (no meters derived), wid
     const cut = await call('POST', '/api/inventory/rolls/cut', { originalRollId: id, cutLengthM: 10, customerId: cust, deferPricing: true });
     assert.equal(cut.statusCode, 400, cut.body); assert.match(cut.body, /بالوزن/);
     assert.equal((await q('SELECT length_m::float AS q FROM fabric_rolls WHERE id=$1', [id]))[0].q, 1000, 'لم يُخصم شيء');
+    // مجاميع الأمتار تستثني توب الوزن، والمسارات تعمل
+    const items = await call('GET', '/api/fabric/items');
+    assert.equal(items.statusCode, 200, items.body);
+    const summ = await call('GET', '/api/reports/inventory-summary');
+    assert.equal(summ.statusCode, 200, summ.body);
+    assert.ok(!JSON.stringify(summ.json()).includes('1080'), 'مجموع الأمتار لا يضم 1000 كغ');
+    assert.equal((await call('GET', '/api/inventory/rolls')).statusCode, 200);
     setPoolOverrideForTests(null);
   } finally {
     await db.query('ROLLBACK').catch(() => undefined);

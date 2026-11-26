@@ -13,7 +13,7 @@ export interface BranchMetrics{
   balances:{customers:Array<{currency:string;owedToUs:number;weOwe:number;pendingCheques:number}>;suppliers:Array<{currency:string;owedToUs:number;weOwe:number}>;customerAlerts:{promiseOverdue:number;limitExceeded:number};supplierPromiseOverdue:number};
   cash:Money[];
   cheques:{pending:number;overdue:number;pendingByCurrency:Money[]};
-  inventory:{available:{rolls:number;meters:number};reserved:{rolls:number;meters:number};quarantined:{rolls:number;meters:number};withoutLocation:number;slowMoving:{thresholdDays:number;rolls:number;meters:number};pendingTransfers:number};
+  inventory:{available:{rolls:number;meters:number;kg?:number};reserved:{rolls:number;meters:number;kg?:number};quarantined:{rolls:number;meters:number};withoutLocation:number;slowMoving:{thresholdDays:number;rolls:number;meters:number};pendingTransfers:number};
   external:{open:number;late:number;lateThresholdDays:number;partiallyReceived:number;metersSent:number;metersReceived:number;metersRemaining:number;settlementsInPeriod:Array<{category:string;meters:number}>};
   production:{open:number;late:number;byStatus:Array<{status:string;count:number}>};
   waiting:{salesDrafts:number;purchaseDrafts:number;pricingQueue:number;editRequests:number;wasteDrafts:number};

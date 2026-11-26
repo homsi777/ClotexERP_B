@@ -62,7 +62,7 @@ export async function getInventorySummary(
   const { rows } = await pool.query(
     `SELECT
        COUNT(*)::int AS roll_count,
-       COALESCE(SUM(fr.length_m), 0)::numeric AS total_meters,
+       COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_meters,
        COUNT(DISTINCT fi.id)::int AS fabric_types
      FROM fabric_rolls fr
      LEFT JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id
@@ -85,13 +85,13 @@ export async function getLowStockFabrics(companyId: string, thresholdMeters = 50
   const { rows } = await pool.query(
     `SELECT fi.name, fi.internal_code,
             COUNT(fr.id)::int AS roll_count,
-            COALESCE(SUM(fr.length_m), 0)::numeric AS total_meters
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_meters
      FROM fabric_rolls fr
      JOIN fabric_items fi ON fi.id = fr.item_id AND fi.company_id = fr.company_id
      WHERE fr.company_id = $1
        AND fr.status IN ('AVAILABLE', 'RESERVED')
      GROUP BY fi.id, fi.name, fi.internal_code
-     HAVING COALESCE(SUM(fr.length_m), 0) < $2
+     HAVING COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0) < $2
      ORDER BY total_meters ASC
      LIMIT $3`,
     [companyId, threshold, MAX_ROWS],
@@ -114,7 +114,7 @@ export async function getFabricStockByNameOrCode(companyId: string, nameOrCode: 
   const { rows } = await pool.query(
     `SELECT fi.id, fi.name, fi.internal_code,
             COUNT(fr.id)::int AS roll_count,
-            COALESCE(SUM(fr.length_m), 0)::numeric AS total_meters
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_meters
      FROM fabric_items fi
      LEFT JOIN fabric_rolls fr ON fr.item_id = fi.id
        AND fr.company_id = fi.company_id
@@ -216,7 +216,7 @@ export async function getContainerSummary(companyId: string, containerNoOrId: st
   const { rows } = await pool.query(
     `SELECT fr.container_no,
             COUNT(*)::int AS roll_count,
-            COALESCE(SUM(fr.length_m), 0)::numeric AS total_meters,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_meters,
             MIN(fr.created_at) AS first_received,
             MAX(fr.created_at) AS last_received
      FROM fabric_rolls fr
@@ -243,7 +243,7 @@ export async function getRecentContainers(companyId: string, limit = 5) {
   const { rows } = await pool.query(
     `SELECT fr.container_no,
             COUNT(*)::int AS roll_count,
-            COALESCE(SUM(fr.length_m), 0)::numeric AS total_meters,
+            COALESCE(SUM(CASE WHEN fr.entry_basis='WEIGHT' THEN 0 ELSE fr.length_m END), 0)::numeric AS total_meters,
             MAX(fr.created_at) AS last_received
      FROM fabric_rolls fr
      WHERE fr.company_id = $1 AND fr.container_no IS NOT NULL AND TRIM(fr.container_no) <> ''
