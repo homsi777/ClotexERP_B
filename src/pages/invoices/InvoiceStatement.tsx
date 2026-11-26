@@ -1,3 +1,4 @@
+import { statementQuantity } from '../../lib/invoiceKgLine';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import i18n from '../../i18n/config';
 import { useTranslation } from 'react-i18next';
@@ -439,8 +440,8 @@ export const InvoiceStatement = () => {
         rollNo: item.rollNo ?? item.rollNumber,
         rollNumber: item.rollNumber,
         barcode: item.barcode,
-        lengthMeters: item.quantity,
-        weightKg: item.weightKg ?? item.weight,
+        lengthMeters: statementQuantity(item).meters,
+        weightKg: statementQuantity(item).kg,
         pricePerMeter: item.unitPrice,
         lineTotal: item.total,
         returnedQuantity: item.returnedQuantity,
@@ -878,8 +879,8 @@ export const InvoiceStatement = () => {
                         <td className="p-2 border border-slate-200 font-mono">{item.barcode || '-'}</td>
                         <td className="p-2 border border-slate-200 font-mono">{item.colorCode || '-'}</td>
                         <td className="p-2 border border-slate-200">{item.colorName || '-'}</td>
-                        <td className="p-2 border border-slate-200 text-right font-mono">{formatNumber(item.quantity)}</td>
-                        <td className="p-2 border border-slate-200 text-right font-mono">{formatNumber(item.weightKg ?? item.weight ?? 0)}</td>
+                        <td className="p-2 border border-slate-200 text-right font-mono">{formatNumber(statementQuantity(item).meters)}</td>
+                        <td className="p-2 border border-slate-200 text-right font-mono">{formatNumber(statementQuantity(item).kg)}</td>
                         {!hideFinancialColumns && <td className="p-2 border border-slate-200 text-right font-mono">{formatMoney(item.unitPrice, currency)}</td>}
                         {!hideFinancialColumns && <td className="p-2 border border-slate-200 text-right font-bold font-mono">{formatMoney(item.total, currency)}</td>}
                       </tr>

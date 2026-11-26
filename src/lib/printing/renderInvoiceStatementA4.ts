@@ -1,3 +1,4 @@
+import { statementQuantity } from '../invoiceKgLine';
 import type { Invoice, InvoiceItem } from '../../types';
 import { BRAND } from '../../branding';
 import { AR_INVOICE_STATEMENT } from '../i18n/arTerminology';
@@ -180,7 +181,8 @@ export function renderInvoiceStatementA4Html(opts: {
   const RETURN_EPSILON = 1e-4;
 
   const rawLines: Line[] = (invoice.items || []).map((item) => {
-    const meters = Number(item.quantity || 0);
+    const q = statementQuantity(item as never);
+    const meters = q.meters;
     const returnedMeters = Math.min(meters, Math.max(0, Number(item.returnedQuantity || 0)));
     return {
       materialName: normalizeText(item.materialName || item.fabricName, '—'),
@@ -194,7 +196,7 @@ export function renderInvoiceStatementA4Html(opts: {
       barcode: normalizeBarcodeValue(item),
       lotNo: normalizeText(item.rollNo || item.rollNumber, ''),
       meters,
-      kg: Number(item.weightKg ?? item.weight ?? 0),
+      kg: q.kg,
       colorCode: normalizeText(item.colorCode, ''),
       colorName: normalizeText(item.colorName, ''),
       total: Number(item.total || 0),

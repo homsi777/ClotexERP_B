@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { FabricRollDto } from '../api/fabricRollsApi';
 import { renderInventoryRollsThermal78, groupRollsByColor } from './renderInventoryRollsThermal78';
 import { renderInventoryAuditSticker, variableColorCode } from './renderInventoryAuditSticker';
+import { statementQuantity } from '../invoiceKgLine';
 import { clampFontScale, loadInventoryPrintSettings, saveInventoryPrintSettings, DEFAULT_INVENTORY_PRINT_SETTINGS } from './inventoryPrintSettings';
 
 const roll = (barcode: string, len: number, color: string, code: string, extra: Partial<FabricRollDto> = {}) =>
@@ -77,4 +78,11 @@ test('thermal summary: one line per color with roll count and totals, no individ
   assert.match(sum.html, /<div class="sc">3<\/div>/, 'عدد أتواب خاكي');
   assert.match(sum.html, /كشف جرد ملخص/);
   assert.ok(sum.heightMm < det.heightMm);
+});
+
+test('invoice statement: kg lines show kilograms, never meters', () => {
+  assert.deepEqual(statementQuantity({ quantity: 1000, unitType: 'kg' }), { meters: 0, kg: 1000 });
+  const d = statementQuantity({ quantity: 1000, unitType: 'kg', widthCm: 150, gsm: 150 });
+  assert.equal(d.kg, 1000); assert.equal(d.meters, 4444.44);
+  assert.deepEqual(statementQuantity({ quantity: 80, unitType: 'meter', weightKg: 12 }), { meters: 80, kg: 12 });
 });
