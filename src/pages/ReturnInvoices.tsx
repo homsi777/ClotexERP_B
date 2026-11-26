@@ -1130,9 +1130,9 @@ export const ReturnInvoices = () => {
                             </div>
                           </td>
                           <td className="px-2 py-2 whitespace-nowrap">
-                            {maxU.toFixed(3)} {ln.unit === 'yard' ? 'yd' : t('lineTable.meterAbbr')}
+                            {maxU.toFixed(3)} {ln.unit === 'yard' ? 'yd' : ln.unit === 'kg' ? 'كغ' : t('lineTable.meterAbbr')}
                           </td>
-                          <td className="px-2 py-2">{ln.returned_meters.toFixed(3)}</td>
+                          <td className="px-2 py-2">{ln.returned_meters.toFixed(3)}{ln.unit === 'kg' ? ' كغ' : ''}</td>
                           <td className="px-2 py-2">
                             <input
                               type="number"

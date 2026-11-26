@@ -22,7 +22,7 @@ export const draftLineSchema = z.object({
   description: z.string().min(1, 'وصف السطر مطلوب'),
   quantity: z.coerce.number().nonnegative(),
   unitPrice: z.coerce.number().nonnegative(),
-  unit: z.enum(['meter', 'yard']).optional().default('meter'),
+  unit: z.enum(['meter', 'yard', 'kg']).optional().default('meter'),
   fabricRollId: z.string().uuid().optional().nullable(),
   fabricItemId: z.string().uuid().optional().nullable(),
   originalSalesInvoiceLineId: z.string().uuid().optional().nullable(),
@@ -56,7 +56,7 @@ export type CreateReturnBody = z.infer<typeof createReturnBodySchema>;
 export type NormalizedReturnLine = {
   description: string;
   quantity: number;
-  unit: 'meter' | 'yard';
+  unit: 'meter' | 'yard' | 'kg';
   unitPrice: number;
   lineTotal: number;
   fabricRollId: string | null;
@@ -153,6 +153,7 @@ export async function validateAndBuildReturnDraft(
       let fr = ln.fabricRollId ?? null;
       let fi = ln.fabricItemId ?? null;
       let osId = ln.originalSalesInvoiceLineId ?? null;
+      let unitOut: 'meter' | 'yard' | 'kg' = ln.unit ?? 'meter';
 
       if (ln.quantity > EPS) {
         if (!osId) {
@@ -175,8 +176,10 @@ export async function validateAndBuildReturnDraft(
           up = Number(srcLn.unit_price);
         }
         if (!desc?.trim()) desc = srcLn.description || 'بند مرتجع';
+        // سطر بيع بالكيلو يُرجَع بالكيلو (وحدة المرتجع تتبع وحدة السطر الأصلي) كي لا يُحتسب أمتاراً في التقارير
+        if (String(srcLn.unit) === 'kg') unitOut = 'kg';
 
-        const reqM = returnQtyToMeters(ln.quantity, ln.unit ?? 'meter');
+        const reqM = returnQtyToMeters(ln.quantity, unitOut);
         assertQtyWithinAvailable(reqM, srcLn.available_meters, `سطر ${srcLn.line_no}`);
       }
 
@@ -186,7 +189,7 @@ export async function validateAndBuildReturnDraft(
       normalizedLines.push({
         description: desc.trim() || 'بند مرتجع',
         quantity: ln.quantity,
-        unit: ln.unit ?? 'meter',
+        unit: unitOut,
         unitPrice: up,
         lineTotal: lt,
         fabricRollId: fr,
@@ -215,6 +218,7 @@ export async function validateAndBuildReturnDraft(
     for (const ln of data.lines) {
       let up = ln.unitPrice;
       let opId = ln.originalPurchaseInvoiceLineId ?? null;
+      let unitOut: 'meter' | 'yard' | 'kg' = ln.unit ?? 'meter';
       let desc = ln.description;
       let fr = ln.fabricRollId ?? null;
       let fi = ln.fabricItemId ?? null;
@@ -234,8 +238,9 @@ export async function validateAndBuildReturnDraft(
         if (!fi && srcLn.fabric_item_id) fi = srcLn.fabric_item_id;
         if (up <= 0) up = Number(srcLn.unit_price);
         if (!desc?.trim()) desc = srcLn.description || 'بند مرتجع';
+        if (String(srcLn.unit) === 'kg') unitOut = 'kg';
 
-        const reqM = returnQtyToMeters(ln.quantity, ln.unit ?? 'meter');
+        const reqM = returnQtyToMeters(ln.quantity, unitOut);
         assertQtyWithinAvailable(reqM, srcLn.available_meters, `سطر ${srcLn.line_no}`);
       }
 
@@ -245,7 +250,7 @@ export async function validateAndBuildReturnDraft(
       normalizedLines.push({
         description: desc.trim() || 'بند مرتجع',
         quantity: ln.quantity,
-        unit: ln.unit ?? 'meter',
+        unit: unitOut,
         unitPrice: up,
         lineTotal: lt,
         fabricRollId: fr,
@@ -383,7 +388,7 @@ export async function loadReturnInvoiceAsDraftBody(
       description: String(ln.description),
       quantity: Number(ln.quantity),
       unitPrice: Number(ln.unit_price),
-      unit: (ln.unit === 'yard' ? 'yard' : 'meter') as 'meter' | 'yard',
+      unit: (ln.unit === 'yard' ? 'yard' : ln.unit === 'kg' ? 'kg' : 'meter') as 'meter' | 'yard' | 'kg',
       fabricRollId: (ln.fabric_roll_id as string | null) ?? null,
       fabricItemId: (ln.fabric_item_id as string | null) ?? null,
       originalSalesInvoiceLineId: (ln.original_sales_invoice_line_id as string | null) ?? null,

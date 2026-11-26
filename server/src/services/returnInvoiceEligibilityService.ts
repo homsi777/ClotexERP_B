@@ -202,7 +202,7 @@ export async function getSourceSalesInvoiceForReturn(
 
   const outLines: SourceInvoiceLineRow[] = [];
   for (const ln of lines.rows) {
-    const u = ln.unit === 'yard' ? 'yard' : 'meter';
+    const u = ln.unit === 'yard' ? 'yard' : ln.unit === 'kg' ? 'kg' : 'meter';
     const qtyM = u === 'yard' ? Number(ln.quantity) * 0.9144 : Number(ln.quantity);
     const ret = await client.query<{ s: string }>(
       `SELECT COALESCE(SUM(
@@ -289,7 +289,7 @@ export async function getSourcePurchaseInvoiceForReturn(
 
   const outLines: SourceInvoiceLineRow[] = [];
   for (const ln of lines.rows) {
-    const u = ln.unit === 'yard' ? 'yard' : 'meter';
+    const u = ln.unit === 'yard' ? 'yard' : ln.unit === 'kg' ? 'kg' : 'meter';
     const qtyM = u === 'yard' ? Number(ln.quantity) * 0.9144 : Number(ln.quantity);
     const ret = await client.query<{ s: string }>(
       `SELECT COALESCE(SUM(

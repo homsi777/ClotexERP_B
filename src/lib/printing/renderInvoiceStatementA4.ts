@@ -201,7 +201,8 @@ export function renderInvoiceStatementA4Html(opts: {
       colorName: normalizeText(item.colorName, ''),
       total: Number(item.total || 0),
       returnedMeters,
-      isReturned: returnedMeters > RETURN_EPSILON,
+      // سطر الكيلو: يُعلَّم مرتجعاً بالكمية المرتجعة (بالكيلو) دون إدخالها في عمود الأمتار
+      isReturned: item.unitType === 'kg' ? Number(item.returnedQuantity || 0) > RETURN_EPSILON : returnedMeters > RETURN_EPSILON,
     };
   });
 

@@ -183,8 +183,10 @@ export type CustomerItemColorSalesRow = {
   kg_sold: string;
   net_sales_amount: string;
   returned_meters: string;
+  returned_kg: string;
   returned_amount: string;
   net_meters_after_returns: string;
+  net_kg_after_returns: string;
   net_amount_after_returns: string;
   invoice_refs: Array<{ sourceId: string; documentNo: string }>;
 };
@@ -205,6 +207,7 @@ export async function reportSalesByItemColorForCustomer(
     WITH return_agg AS (
       SELECT ril.original_sales_invoice_line_id AS line_id,
              SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END)::numeric AS returned_meters,
+             SUM(CASE WHEN ril.unit = 'kg' THEN ril.quantity ELSE 0 END)::numeric AS returned_kg,
              SUM(
                ROUND(
                  ril.line_total / NULLIF(
@@ -255,8 +258,10 @@ export async function reportSalesByItemColorForCustomer(
       ROUND(COALESCE(SUM(sl.quantity_kg), 0), 2)::text AS kg_sold,
       ROUND(COALESCE(SUM(sl.net_sales_usd), 0), 2)::text AS net_sales_amount,
       ROUND(COALESCE(SUM(ra.returned_meters), 0), 2)::text AS returned_meters,
+      ROUND(COALESCE(SUM(ra.returned_kg), 0), 2)::text AS returned_kg,
       ROUND(COALESCE(SUM(ra.returned_amount_usd), 0), 2)::text AS returned_amount,
       ROUND(COALESCE(SUM(sl.quantity_meters), 0) - COALESCE(SUM(ra.returned_meters), 0), 2)::text AS net_meters_after_returns,
+      ROUND(COALESCE(SUM(sl.quantity_kg), 0) - COALESCE(SUM(ra.returned_kg), 0), 2)::text AS net_kg_after_returns,
       ROUND(COALESCE(SUM(sl.net_sales_usd), 0) - COALESCE(SUM(ra.returned_amount_usd), 0), 2)::text AS net_amount_after_returns,
       JSONB_AGG(DISTINCT JSONB_BUILD_OBJECT('sourceId', sl.invoice_id::text, 'documentNo', sl.invoice_no)) AS invoice_refs
     FROM sale_lines sl
@@ -331,6 +336,7 @@ export async function reportSalesByItem(
       WITH return_agg AS (
         SELECT ril.original_sales_invoice_line_id AS line_id,
                SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END)::numeric AS returned_meters,
+               SUM(CASE WHEN ril.unit = 'kg' THEN ril.quantity ELSE 0 END)::numeric AS returned_kg,
                STRING_AGG(DISTINCT ri.return_no, ', ' ORDER BY ri.return_no) AS return_nos,
                STRING_AGG(DISTINCT ri.return_date::text, ', ' ORDER BY ri.return_date::text) AS return_dates
         FROM return_invoice_lines ril
@@ -354,6 +360,7 @@ export async function reportSalesByItem(
           (CASE WHEN sil.unit = 'kg' THEN sil.quantity ELSE 0 END)::numeric AS quantity_kg_num,
           ${SQL_NET_LINE_REVENUE_USD} AS net_sales_usd,
           COALESCE(ra.returned_meters, 0)::numeric AS returned_meters_num,
+          COALESCE(ra.returned_kg, 0)::numeric AS returned_kg_num,
           ra.return_dates,
           ra.return_nos
         FROM sales_invoice_lines sil
@@ -380,12 +387,14 @@ export async function reportSalesByItem(
          ROUND(quantity_kg_num, 2)::text AS quantity_kg,
          ROUND(net_sales_usd, 2)::text AS net_sales_amount,
          ROUND(returned_meters_num, 2)::text AS returned_meters,
+         ROUND(returned_kg_num, 2)::text AS returned_kg,
          COALESCE(return_dates, '—') AS return_date,
          COALESCE(return_nos, '—') AS return_no,
          ROUND(quantity_meters_num - returned_meters_num, 2)::text AS net_meters,
+         ROUND(quantity_kg_num - returned_kg_num, 2)::text AS net_kg,
          CASE
-           WHEN returned_meters_num <= 0.0001 THEN 'مباع'
-           WHEN returned_meters_num >= quantity_meters_num - 0.0001 THEN 'مرتجع كلياً'
+           WHEN returned_meters_num + returned_kg_num <= 0.0001 THEN 'مباع'
+           WHEN returned_meters_num + returned_kg_num >= quantity_meters_num + quantity_kg_num - 0.0001 THEN 'مرتجع كلياً'
            ELSE 'مرتجع جزئياً'
          END AS line_status
        FROM detail_lines
@@ -400,7 +409,9 @@ export async function reportSalesByItem(
          ROUND(COALESCE(SUM(quantity_kg_num), 0), 2)::text AS quantity_kg,
          ROUND(COALESCE(SUM(net_sales_usd), 0), 2)::text AS net_sales_amount,
          ROUND(COALESCE(SUM(returned_meters_num), 0), 2)::text AS returned_meters,
-         ROUND(COALESCE(SUM(quantity_meters_num - returned_meters_num), 0), 2)::text AS net_meters
+         ROUND(COALESCE(SUM(returned_kg_num), 0), 2)::text AS returned_kg,
+         ROUND(COALESCE(SUM(quantity_meters_num - returned_meters_num), 0), 2)::text AS net_meters,
+         ROUND(COALESCE(SUM(quantity_kg_num - returned_kg_num), 0), 2)::text AS net_kg
        FROM detail_lines`,
       params,
     );
@@ -420,10 +431,12 @@ export async function reportSalesByItem(
         moneyCol('quantity_meters', 'الأمتار المباعة (م)'),
         moneyCol('quantity_kg', 'الكيلوغرامات المباعة (كغ)'),
         moneyCol('net_sales_amount', 'قيمة البيع'),
-        moneyCol('returned_meters', 'الأمتار المرتجعة'),
+        moneyCol('returned_meters', 'الأمتار المرتجعة (م)'),
+        moneyCol('returned_kg', 'الكيلوغرامات المرتجعة (كغ)'),
         dateCol('return_date', 'تاريخ الإرجاع'),
         textCol('return_no', 'رقم فاتورة المرتجع'),
-        moneyCol('net_meters', 'صافي الأمتار'),
+        moneyCol('net_meters', 'صافي الأمتار (م)'),
+        moneyCol('net_kg', 'صافي الكيلوغرامات (كغ)'),
         textCol('line_status', 'حالة السطر'),
       ],
       rows: data.rows as Record<string, unknown>[],
@@ -442,6 +455,7 @@ export async function reportSalesByItem(
     return_by_line AS (
       SELECT ril.original_sales_invoice_line_id AS line_id,
              SUM(CASE WHEN ril.unit = 'yard' THEN ril.quantity * 0.9144 WHEN ril.unit = 'kg' THEN 0 ELSE ril.quantity END)::numeric AS returned_meters,
+             SUM(CASE WHEN ril.unit = 'kg' THEN ril.quantity ELSE 0 END)::numeric AS returned_kg,
              SUM(
                ROUND(
                  ril.line_total / NULLIF(
@@ -459,7 +473,7 @@ export async function reportSalesByItem(
     ),`
     : `
     return_by_line AS (
-      SELECT NULL::uuid AS line_id, 0::numeric AS returned_meters, 0::numeric AS returned_amount_usd
+      SELECT NULL::uuid AS line_id, 0::numeric AS returned_meters, 0::numeric AS returned_kg, 0::numeric AS returned_amount_usd
       WHERE false
     ),`;
 
@@ -506,8 +520,10 @@ export async function reportSalesByItem(
           ELSE '0.00'
         END AS profit_percent,
         ROUND(COALESCE(SUM(rbl.returned_meters), 0), 2)::text AS returned_quantity,
+        ROUND(COALESCE(SUM(rbl.returned_kg), 0), 2)::text AS returned_kg,
         ROUND(COALESCE(SUM(rbl.returned_amount_usd), 0), 2)::text AS returned_amount,
         ROUND(COALESCE(SUM(sl.quantity_meters), 0) - COALESCE(SUM(rbl.returned_meters), 0), 2)::text AS net_quantity_after_returns,
+        ROUND(COALESCE(SUM(sl.quantity_kg), 0) - COALESCE(SUM(rbl.returned_kg), 0), 2)::text AS net_kg_after_returns,
         ROUND(COALESCE(SUM(sl.net_sales_usd), 0) - COALESCE(SUM(rbl.returned_amount_usd), 0), 2)::text AS net_revenue_after_returns
       FROM sales_lines sl
       LEFT JOIN return_by_line rbl ON rbl.line_id = sl.line_id
@@ -556,8 +572,10 @@ export async function reportSalesByItem(
       moneyCol('gross_profit', 'الربح الإجمالي'),
       textCol('profit_percent', 'نسبة الربح %'),
       moneyCol('returned_quantity', 'كمية مرتجعة (م)'),
+      moneyCol('returned_kg', 'كيلوغرامات مرتجعة (كغ)'),
       moneyCol('returned_amount', 'قيمة مرتجعة'),
-      moneyCol('net_quantity_after_returns', 'صافي الكمية بعد المرتجع'),
+      moneyCol('net_quantity_after_returns', 'صافي الأمتار بعد المرتجع (م)'),
+      moneyCol('net_kg_after_returns', 'صافي الكيلوغرامات بعد المرتجع (كغ)'),
       moneyCol('net_revenue_after_returns', 'صافي الإيراد بعد المرتجع'),
     ],
     rows: data.rows as Record<string, unknown>[],

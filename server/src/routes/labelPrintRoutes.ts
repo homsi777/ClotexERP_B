@@ -13,7 +13,7 @@ interface RollLabelRow {
   item_name: string | null; internal_code: string | null; supplier_code: string | null;
   color_name_ar: string | null; color_name_tr: string | null; color_code: string | null;
   supplier_color_code: string | null; variant_code: string | null;
-  length_m: string | null; width_cm: string | null; gsm: string | null;
+  length_m: string | null; width_cm: string | null; gsm: string | null; entry_basis?: string;
   calculated_weight_kg: string | null; actual_weight_kg: string | null;
   supplier_name: string | null; warehouse_name: string | null; location_name: string | null;
   batch_no: string | null; container_no: string | null;
@@ -23,7 +23,8 @@ interface RollLabelRow {
 
 function toDto(row: RollLabelRow) {
   const toNum = (value: string | null): number | null => (value !== null ? parseFloat(value) : null);
-  const lengthM = toNum(row.length_m);
+  // توب مُدخل بالوزن: لا أمتار على اللصاقة ولا في رمز QR (الكمية بالكيلو في حقل الوزن)
+  const lengthM = row.entry_basis === 'WEIGHT' ? null : toNum(row.length_m);
   const weightKg = toNum(row.actual_weight_kg) ?? toNum(row.calculated_weight_kg);
   const widthCm = toNum(row.width_cm);
   const gsm = toNum(row.gsm);
@@ -89,7 +90,7 @@ const ROLL_LABEL_SELECT = `
     fc.color_code,
     fc.supplier_color_code,
     fv.variant_code,
-    fr.length_m, fr.width_cm, fr.gsm,
+    fr.length_m, fr.width_cm, fr.gsm, fr.entry_basis,
     fr.calculated_weight_kg, fr.actual_weight_kg,
     s.name           AS supplier_name,
     w.name           AS warehouse_name,

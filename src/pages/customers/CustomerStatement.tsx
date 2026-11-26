@@ -1565,7 +1565,7 @@ const CustomerStatementInner = () => {
                     (acc, r) => ({
                       rollCount: acc.rollCount + r.roll_count,
                       meters: acc.meters + Number(r.net_meters_after_returns),
-                      kg: acc.kg + Number(r.kg_sold ?? 0),
+                      kg: acc.kg + Number(r.net_kg_after_returns ?? r.kg_sold ?? 0),
                       amount: acc.amount + Number(r.net_amount_after_returns),
                     }),
                     { rollCount: 0, meters: 0, kg: 0, amount: 0 },
@@ -1613,10 +1613,10 @@ const CustomerStatementInner = () => {
                                   <td className="py-1.5 pr-2">{row.color_name} {row.color_code ? <span className="text-slate-400 font-mono">({row.color_code})</span> : null}</td>
                                   <td className="py-1.5 font-mono">{row.roll_count}</td>
                                   <td className="py-1.5 font-mono">{Number(row.net_meters_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                  <td className="py-1.5 font-mono">{Number(row.kg_sold ?? 0) > 0 ? Number(row.kg_sold).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
+                                  <td className="py-1.5 font-mono">{Number(row.kg_sold ?? 0) > 0 ? Number(row.net_kg_after_returns ?? row.kg_sold).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
                                   <td className="py-1.5 font-mono font-bold">{Number(row.net_amount_after_returns).toLocaleString(undefined, { minimumFractionDigits: 2 })} {itemDetailCurrencyLabel}</td>
                                   <td className="py-1.5 font-mono text-rose-600">
-                                    {Number(row.returned_meters) > 0 ? `${Number(row.returned_meters).toLocaleString(undefined, { minimumFractionDigits: 2 })} (${Number(row.returned_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${itemDetailCurrencyLabel})` : '—'}
+                                    {Number(row.returned_kg ?? 0) > 0 ? `${Number(row.returned_kg).toLocaleString(undefined, { minimumFractionDigits: 2 })} كغ (${Number(row.returned_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${itemDetailCurrencyLabel})` : Number(row.returned_meters) > 0 ? `${Number(row.returned_meters).toLocaleString(undefined, { minimumFractionDigits: 2 })} م (${Number(row.returned_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${itemDetailCurrencyLabel})` : '—'}
                                   </td>
                                   <td className="py-1.5">
                                     <div className="flex flex-wrap gap-1.5">

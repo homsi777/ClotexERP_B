@@ -65,7 +65,7 @@ export async function refreshSalesInvoiceReturnFulfillment(
   let anyReturn = false;
   let allFully = true;
   for (const ln of lines.rows) {
-    const origM = returnQtyToMeters(Number(ln.quantity), ln.unit === 'yard' ? 'yard' : 'meter');
+    const origM = returnQtyToMeters(Number(ln.quantity), ln.unit === 'yard' ? 'yard' : ln.unit === 'kg' ? 'kg' : 'meter');
     if (origM <= EPS) continue;
     const retM = await sumReturnedMetersForSalesLine(client, companyId, ln.id, null);
     if (retM > EPS) anyReturn = true;
@@ -99,7 +99,7 @@ export async function refreshPurchaseInvoiceReturnFulfillment(
   let anyReturn = false;
   let allFully = true;
   for (const ln of lines.rows) {
-    const origM = returnQtyToMeters(Number(ln.quantity), ln.unit === 'yard' ? 'yard' : 'meter');
+    const origM = returnQtyToMeters(Number(ln.quantity), ln.unit === 'yard' ? 'yard' : ln.unit === 'kg' ? 'kg' : 'meter');
     if (origM <= EPS) continue;
     const retM = await sumReturnedMetersForPurchaseLine(client, companyId, ln.id, null);
     if (retM > EPS) anyReturn = true;

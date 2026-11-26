@@ -724,7 +724,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       colorCode: resolved.colorCode,
       widthCm,
       gsm: gsmNum,
-      lengthM,
+      lengthM: draft.byWeight ? 0 : lengthM, // توب الوزن: لا أمتار في QR/اللصاقة
       weightKg: Number(draft.weight) > 0 ? Number(draft.weight) : null,
       warehouse: whName,
       createdAt: roll.created_at ?? new Date().toISOString(),
@@ -740,7 +740,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       colorNameAr: resolved.fabricColorName,
       colorNameTr: null,
       colorCode: resolved.colorCode,
-      lengthM,
+      lengthM: draft.byWeight ? 0 : lengthM, // توب الوزن: لا أمتار في QR/اللصاقة
       widthCm,
       gsm: gsmNum,
       actualWeightKg: Number(draft.weight) > 0 ? Number(draft.weight) : null,

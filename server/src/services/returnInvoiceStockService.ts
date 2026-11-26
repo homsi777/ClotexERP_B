@@ -10,7 +10,7 @@ function round3(n: number): number {
 export type ReturnLineStockInput = {
   fabricRollId: string | null;
   quantity: number;
-  unit: 'meter' | 'yard';
+  unit: 'meter' | 'yard' | 'kg';
 };
 
 export type CogsLineForReturn = { quantityMeters: number; unitCostPerMeter: number | null };
@@ -55,7 +55,7 @@ export async function applyReturnInvoiceInventory(
 
   for (const ln of input.lines) {
     if (!ln.fabricRollId || ln.quantity <= EPS) continue;
-    const qtyM = round3(quantityToMeters(ln.quantity, ln.unit));
+    const qtyM = round3(quantityToMeters(ln.quantity, ln.unit === 'kg' ? 'meter' : ln.unit)); // كمية التوب بالكيلو: تُعاد كما هي
     if (qtyM <= EPS) continue;
 
     const rr = await client.query<{

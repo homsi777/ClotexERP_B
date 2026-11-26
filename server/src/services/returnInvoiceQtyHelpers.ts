@@ -2,11 +2,12 @@ import { quantityToMeters } from './salesInvoiceService.js';
 
 const EPS = 1e-4;
 
-export type LengthUnit = 'meter' | 'yard';
+export type LengthUnit = 'meter' | 'yard' | 'kg';
 
 /** Convert return line quantity (stored with its `unit`) to meters for comparison with invoice lines. */
 export function returnQtyToMeters(quantity: number, unit: LengthUnit): number {
-  return quantityToMeters(quantity, unit);
+  // سطر بالكيلو: الكمية تُقارن كما هي بوحدة الكيلو (لا تحويل)
+  return unit === 'kg' ? quantity : quantityToMeters(quantity, unit);
 }
 
 export function roundMeters(n: number): number {

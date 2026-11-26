@@ -89,6 +89,8 @@ export interface CustomerItemColorSalesRow {
   roll_count: number;
   meters_sold: string;
   kg_sold?: string;
+  returned_kg?: string;
+  net_kg_after_returns?: string;
   net_sales_amount: string;
   returned_meters: string;
   returned_amount: string;
