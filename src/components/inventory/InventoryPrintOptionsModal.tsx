@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Minus, Plus, Printer, RotateCcw, Tag, X } from 'lucide-react';
+import { Download, FileText, Minus, Plus, Printer, RotateCcw, Tag, X } from 'lucide-react';
 import type { FabricRollDto } from '../../lib/api/fabricRollsApi';
 import { renderInventoryRollsAuditA4Html } from '../../lib/printing/renderInventoryRollsAuditA4';
 import { groupRollsByColor, renderInventoryRollsThermal78 } from '../../lib/printing/renderInventoryRollsThermal78';
@@ -8,6 +8,7 @@ import { clampFontScale, FONT_SCALE_STEP, loadInventoryPrintSettings, saveInvent
 import { getPrintAdapter, isElectronRenderer } from '../../lib/printing/printAdapters';
 import { getRollLengthMeters } from '../../lib/inventory/rollAvailability';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
+import { downloadPrintPdf } from '../../lib/api/documentPdfApi';
 import { BRAND } from '../../branding';
 
 export interface InventoryPrintContext {
@@ -51,6 +52,15 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
       } else if (!openDocumentPrintWindow(html, title)) setMsg('منع المتصفح نافذة الطباعة: اسمح بالنوافذ المنبثقة');
     } finally { setBusy(false); }
   };
+  /** حفظ PDF (يعمل على الموبايل بلا نافذة طباعة): الخادم يحوّل نفس HTML بنفس مقاس الصفحة. */
+  const savePdf = async (html: string, name: string) => {
+    setBusy(true); setMsg('');
+    try { await downloadPrintPdf(html, `${name}-${new Date().toISOString().slice(0, 10)}`); setMsg('تم تجهيز ملف PDF'); }
+    catch (e) { setMsg(e instanceof Error ? e.message : 'تعذر حفظ PDF'); } finally { setBusy(false); }
+  };
+  const a4Html = () => renderInventoryRollsAuditA4Html({ rolls: ctx.rolls, searchQuery: ctx.searchQuery, scopeLabel: ctx.scopeLabel, warehouseLabel: ctx.warehouseLabel, printedAt: new Date(), orientation: s.a4Orientation });
+  const stickerHtml = (colors: AuditStickerColor[]) => renderInventoryAuditSticker({ materialName: ctx.materialName, baseCode: ctx.baseCode, cartelaCode: ctx.cartelaCode, colors, widthMm: s.stickerWidthMm }).html;
+  const pdfBtn = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-800 disabled:opacity-50';
   const printA4 = () => { update({ mode: 'A4' }); void send(renderInventoryRollsAuditA4Html({ rolls: ctx.rolls, searchQuery: ctx.searchQuery, scopeLabel: ctx.scopeLabel, warehouseLabel: ctx.warehouseLabel, printedAt: new Date(), orientation: s.a4Orientation }), ctx.scopeLabel, null); };
   const printThermal = (kind: 'detail' | 'summary') => { update({ mode: 'THERMAL' }); setThermalKind(kind); const t = kind === 'summary' ? thermalSummary : thermal; void send(t.html, ctx.scopeLabel, { widthMm: s.rollWidthMm, heightMm: t.heightMm }); };
   const printSticker = async (colors: AuditStickerColor[]) => {
@@ -68,10 +78,12 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
         <section className="space-y-3 border-b p-4 md:border-b-0 md:border-l">
           <h3 className="flex items-center gap-2 font-black text-slate-900"><FileText className="h-4 w-4" />الكشف التفصيلي</h3>
           <button type="button" disabled={busy || !ctx.rolls.length} onClick={printA4} className={`${btn} w-full bg-slate-900 text-white`}><Printer className="h-4 w-4" />طباعة A4 عادي</button>
+          <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => void savePdf(a4Html(), 'كشف-جرد-A4')} className={`${pdfBtn} w-full`}><Download className="h-4 w-4" />حفظ PDF — A4</button>
           <label className="flex items-center justify-between gap-2 text-xs font-bold text-slate-600">اتجاه A4
             <select value={s.a4Orientation} onChange={(e) => update({ a4Orientation: e.target.value as 'landscape' | 'portrait' })} className="rounded-lg border px-2 py-1 font-normal"><option value="landscape">أفقي (الافتراضي)</option><option value="portrait">عمودي</option></select></label>
           <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => printThermal('detail')} className={`${btn} w-full bg-emerald-700 text-white`}><Printer className="h-4 w-4" />طباعة حراري 7.8 سم — تفصيلي</button>
           <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => printThermal('summary')} className={`${btn} w-full border border-emerald-700 bg-white text-emerald-800`}><Printer className="h-4 w-4" />طباعة حراري 7.8 سم — ملخص (لكل لون سطر)</button>
+          <div className="grid grid-cols-2 gap-2"><button type="button" disabled={busy || !ctx.rolls.length} onClick={() => void savePdf(thermal.html, 'كشف-جرد-حراري-تفصيلي')} className={pdfBtn}><Download className="h-4 w-4" />حفظ PDF — تفصيلي</button><button type="button" disabled={busy || !ctx.rolls.length} onClick={() => void savePdf(thermalSummary.html, 'كشف-جرد-حراري-ملخص')} className={pdfBtn}><Download className="h-4 w-4" />حفظ PDF — ملخص</button></div>
           <div className="flex rounded-lg border text-xs font-bold" role="group" aria-label="نوع المعاينة"><button type="button" onClick={() => setThermalKind('detail')} className={`flex-1 rounded-r-lg px-2 py-1 ${thermalKind === 'detail' ? 'bg-slate-800 text-white' : 'bg-white'}`}>معاينة التفصيلي</button><button type="button" onClick={() => setThermalKind('summary')} className={`flex-1 rounded-l-lg px-2 py-1 ${thermalKind === 'summary' ? 'bg-slate-800 text-white' : 'bg-white'}`}>معاينة الملخص</button></div>
 
           <div className="rounded-xl border bg-slate-50 p-3">
@@ -92,6 +104,7 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
             : <>
               <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => void printSticker(stickerColors(ctx.rolls))} className={`${btn} w-full bg-indigo-700 text-white`}><Tag className="h-4 w-4" />ستيكر هذا اللون</button>
               <button type="button" disabled={busy} onClick={() => void printAllCartelaSticker()} className={`${btn} w-full border border-indigo-300 bg-white text-indigo-800`}><Tag className="h-4 w-4" />ستيكر يجمع ألوان الكارتيلة كلها</button></>}
+          <button type="button" disabled={busy || !ctx.rolls.length} onClick={() => void savePdf(stickerHtml(stickerColors(ctx.rolls)), 'ستيكر-جرد')} className={`${pdfBtn} w-full`}><Download className="h-4 w-4" />حفظ PDF — الستيكر</button>
           <label className="flex items-center justify-between gap-2 text-xs font-bold text-slate-600">عرض الستيكر (مم)<input type="number" min={40} max={72} value={s.stickerWidthMm} onChange={(e) => update({ stickerWidthMm: Math.min(72, Math.max(40, Number(e.target.value) || 72)) })} className="w-24 rounded-lg border px-2 py-1 font-normal" dir="ltr" /></label>
           <p className="text-[11px] text-slate-500">يحتوي: اسم الخامة، كودها الأساسي، كود الكارتيلة، تاريخ الجرد، ثم لكل لون اسمه وجزؤه المتغير من الكود وإجمالي أمتاره. الطول يتبع عدد الألوان.</p>
 
