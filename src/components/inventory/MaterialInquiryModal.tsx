@@ -27,7 +27,8 @@ type MaterialGroup = {
   rolls: FabricRollDto[];
 };
 
-const rollMeters = (roll: FabricRollDto) => Number.parseFloat(roll.length_m ?? '0') || 0;
+/** أمتار فعلية فقط: الأتواب المُدخلة بالوزن لا تُحتسب أمتاراً (طولها مشتق). */
+const rollMeters = (roll: FabricRollDto) => (roll.entry_basis === 'WEIGHT' ? 0 : Number.parseFloat(roll.length_m ?? '0') || 0);
 
 function buildBuckets(rolls: FabricRollDto[], pick: (roll: FabricRollDto) => string): Bucket[] {
   const map = new Map<string, Bucket>();
@@ -372,7 +373,7 @@ export const MaterialInquiryModal: React.FC<Props> = ({ open, onClose }) => {
                 <div><span className="text-slate-500">{t('roll.material')}: </span><span className="font-bold">{exactRoll.item_name || '—'}</span></div>
                 <div><span className="text-slate-500">{t('roll.code')}: </span><span className="font-mono font-bold">{exactRoll.internal_code || '—'}</span></div>
                 <div><span className="text-slate-500">{t('roll.color')}: </span><span className="font-bold">{exactRoll.color_name_ar || '—'}</span></div>
-                <div><span className="text-slate-500">{t('roll.meters')}: </span><span className="font-mono font-bold">{rollMeters(exactRoll).toFixed(2)}</span></div>
+                <div><span className="text-slate-500">{t('roll.meters')}: </span><span className="font-mono font-bold">{exactRoll.entry_basis === 'WEIGHT' ? '—' : rollMeters(exactRoll).toFixed(2)}</span></div>
                 <div><span className="text-slate-500">{t('roll.warehouse')}: </span><span className="font-bold">{exactRoll.warehouse_name || '—'}</span></div>
               </div>
             </section>

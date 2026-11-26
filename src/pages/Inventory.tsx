@@ -787,7 +787,8 @@ export const Inventory = () => {
   // إحصائيات الصفحة الحالية فقط (مع توضيح نطاق العرض في التسميات)
   const stats = {
     count: total,
-    meters: rolls.reduce((s, r) => s + parseFloat(r.length_m || '0'), 0),
+    // الأتواب المُدخلة بالوزن لا تدخل مجموع الأمتار (طولها مشتق وليس فعلياً)
+    meters: rolls.filter((r) => r.entry_basis !== 'WEIGHT').reduce((s, r) => s + parseFloat(r.length_m || '0'), 0),
     kg: rolls.reduce((s, r) => s + parseFloat(r.actual_weight_kg ?? r.calculated_weight_kg ?? '0'), 0),
   };
   const draftSaleRollCount = useMemo(
@@ -1640,7 +1641,7 @@ return (
                     </td>
                     <td className="py-2.5 px-4 font-mono text-xs text-slate-600 whitespace-nowrap">{roll.lot_no || '—'}</td>
                     <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap">
-                      {parseFloat(roll.length_m || '0').toFixed(2)}{t('main.metersUnitSuffix')}
+                      {roll.entry_basis === 'WEIGHT' ? '—' : <>{parseFloat(roll.length_m || '0').toFixed(2)}{t('main.metersUnitSuffix')}</>}
                     </td>
                     <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap">
                       {parseFloat(weight).toFixed(2)}{t('main.kgUnitSuffix')}

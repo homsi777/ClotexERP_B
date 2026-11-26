@@ -83,7 +83,8 @@ export function renderInventoryRollsAuditA4Html(opts: {
   const scopeLabel = String(opts.scopeLabel ?? '').trim() || '—';
   const warehouseLabel = String(opts.warehouseLabel ?? '').trim() || t('inventoryAudit.allWarehouses');
 
-  const totalMeters = rolls.reduce((sum, roll) => sum + getRollLengthMeters(roll), 0);
+  // المُدخلة بالوزن: لا أمتار فعلية، فلا تدخل مجموع الأمتار
+  const totalMeters = rolls.filter((roll) => roll.entry_basis !== 'WEIGHT').reduce((sum, roll) => sum + getRollLengthMeters(roll), 0);
   const totalKg = rolls.reduce((sum, roll) => sum + rollWeightKg(roll), 0);
 
   const subtitle = searchQuery
@@ -105,7 +106,8 @@ export function renderInventoryRollsAuditA4Html(opts: {
         materialCode: materialCode || '—',
         colorName,
         colorCode,
-        lengthM: getRollLengthMeters(roll),
+        lengthM: roll.entry_basis === 'WEIGHT' ? 0 : getRollLengthMeters(roll),
+        byWeight: roll.entry_basis === 'WEIGHT',
         weightKg: rollWeightKg(roll),
       };
     })
@@ -156,7 +158,7 @@ export function renderInventoryRollsAuditA4Html(opts: {
           <td class="cell mono center">${escapeHtml(row.materialCode)}</td>
           <td class="cell text center">${escapeHtml(row.colorName)}</td>
           <td class="cell mono center">${escapeHtml(row.colorCode)}</td>
-          <td class="cell num">${formatAr(row.lengthM)}</td>
+          <td class="cell num">${row.byWeight ? '—' : formatAr(row.lengthM)}</td>
           <td class="cell num">${formatAr(row.weightKg)}</td>
           <td class="cell text center">${escapeHtml(row.roll.warehouse_name || '—')}</td>
           <td class="cell center">${escapeHtml(rollStatusLabel(row.roll))}</td>

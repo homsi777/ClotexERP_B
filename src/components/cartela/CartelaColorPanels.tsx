@@ -135,8 +135,8 @@ export const CartelaColorScanPanel: React.FC<Props> = ({ onOpenCartela, onPrintC
   };
 
   /** إجمالي أمتار الأتواب المتوفرة بقائمة معيّنة — لعرضها مباشرة بنفس بطاقة النتيجة. */
-  const sumAvailableRolls = (rows: { length_m?: string | null }[]) =>
-    rows.reduce((sum, r) => sum + (Number.parseFloat(r.length_m ?? '0') || 0), 0);
+  const sumAvailableRolls = (rows: { length_m?: string | null; entry_basis?: string }[]) =>
+    rows.reduce((sum, r) => sum + (r.entry_basis === 'WEIGHT' ? 0 : Number.parseFloat(r.length_m ?? '0') || 0), 0);
 
   /** توزيع أتواب الخامة الكاملة على ألوانها — لعرض "كل شيء" بنفس البطاقة دون أي تنقّل. */
   const groupRollsByColor = (rows: FabricRollDto[]) => {
@@ -145,7 +145,7 @@ export const CartelaColorScanPanel: React.FC<Props> = ({ onOpenCartela, onPrintC
       const name = (roll.color_name_ar ?? '').trim() || t('colorPanels.scan.auditNoColor');
       const current = groups.get(name) ?? { name, rollCount: 0, totalMeters: 0, exhausted: false };
       current.rollCount += 1;
-      current.totalMeters += Number.parseFloat(roll.length_m ?? '0') || 0;
+      current.totalMeters += roll.entry_basis === 'WEIGHT' ? 0 : Number.parseFloat(roll.length_m ?? '0') || 0;
       groups.set(name, current);
     }
     return [...groups.values()].sort((a, b) => b.totalMeters - a.totalMeters);
