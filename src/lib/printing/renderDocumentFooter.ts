@@ -2,23 +2,24 @@ import i18n from '../../i18n/config';
 import { getBranchPrintInfo } from './branchPrintInfo';
 
 const t = (key: string) => i18n.t(key, { ns: 'terminology' });
-const getLocation = () => getBranchPrintInfo()?.location ?? t('documentFooter.location');
+// بيانات كل فرع مستقلة: عند غياب العنوان/الهاتف يبقى الحقل فارغاً ولا تُعرض بيانات فرع آخر.
+const getLocation = () => getBranchPrintInfo()?.location ?? '';
 
 export type DocumentFooterPreset = 'invoice' | 'voucher-receipt' | 'voucher-payment';
 
 const getPresets = (): Record<DocumentFooterPreset, { phone: string; slogan: string; icon: 'star' | 'shield' | 'thread' }> => ({
   invoice: {
-    phone: getBranchPrintInfo()?.phoneInvoice ?? '09 44 555 080',
+    phone: getBranchPrintInfo()?.phoneInvoice ?? '',
     slogan: t('documentFooter.invoiceSlogan'),
     icon: 'thread',
   },
   'voucher-receipt': {
-    phone: getBranchPrintInfo()?.phoneVoucher ?? '+963 944 555 080',
+    phone: getBranchPrintInfo()?.phoneVoucher ?? '',
     slogan: t('documentFooter.voucherReceiptSlogan'),
     icon: 'star',
   },
   'voucher-payment': {
-    phone: getBranchPrintInfo()?.phoneVoucher ?? '+963 944 555 080',
+    phone: getBranchPrintInfo()?.phoneVoucher ?? '',
     slogan: t('documentFooter.voucherPaymentSlogan'),
     icon: 'shield',
   },

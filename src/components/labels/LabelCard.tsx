@@ -831,7 +831,7 @@ ${lblBoxCss}
 .brand-mark { font-size: ${compactLabel ? '4.8mm' : '5.8mm'}; font-weight: 900; letter-spacing: 0.65mm; line-height: 1.05; }
 .brand-tag  { font-size: ${compactLabel ? '2.1mm' : '2.9mm'}; font-weight: 800; letter-spacing: ${compactLabel ? '0.45mm' : '0.9mm'}; color: #000; margin-top: ${compactLabel ? '0.25mm' : '0.6mm'}; text-transform: uppercase; line-height: 1.1; }
 
-.block { padding: 0.8mm 0 0.45mm 0; border-bottom: 0.25mm solid #000; flex-shrink: 0; }
+.block { padding: 0.8mm 2.2mm 0.45mm 2.2mm; border-bottom: 0.25mm solid #000; flex-shrink: 0; }
 .grid-2 { display: grid; grid-template-columns: 1.55fr 1fr; gap: 0.45mm; }
 .grid-2 .right-col {
   padding-left: 1mm;
@@ -879,7 +879,7 @@ ${lblBoxCss}
   gap: 0.8mm;
   min-height: 0;
   overflow: hidden;
-  padding-top: 0.35mm;
+  padding: 0.35mm 1.6mm 0 2.2mm;
 }
 .lower-fields { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .lower-list { min-height: 0; }

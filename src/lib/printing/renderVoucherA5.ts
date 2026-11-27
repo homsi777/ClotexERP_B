@@ -18,8 +18,8 @@ const GOLD = '#B89854';
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
 
 const getContact = () => ({
-  location: getBranchPrintInfo()?.location ?? t('documentFooter.location'),
-  phone: getBranchPrintInfo()?.phoneVoucher ?? '+963 944 555 080',
+  location: getBranchPrintInfo()?.location ?? '',
+  phone: getBranchPrintInfo()?.phoneVoucher ?? '',
   receiptSlogan: t('documentFooter.voucherReceiptSlogan'),
   paymentSlogan: t('documentFooter.voucherPaymentSlogan'),
 });
