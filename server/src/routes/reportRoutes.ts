@@ -24,7 +24,7 @@ const SUMMARY_FIELD_MODULES: Array<[string, string[]]> = [
   ['inventory.transfers', ['transfers_count']],
   ['inventory.waste', ['waste_records_count']],
   ['treasury.cashboxes', ['cashboxes_count', 'total_cash_by_currency']],
-  ['treasury.vouchers', ['vouchers_count', 'receipt_total', 'payment_total']],
+  ['treasury.vouchers', ['vouchers_count', 'receipt_by_currency', 'payment_by_currency']],
   ['sales.returns', ['return_invoices_count']],
 ];
 function maskSummaryFields(req: FastifyRequest, data: Record<string, unknown>) {
@@ -176,13 +176,19 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
       `SELECT
          COUNT(*) FILTER (WHERE status = 'DRAFT')::int AS draft,
          COUNT(*) FILTER (WHERE status = 'CONFIRMED')::int AS confirmed,
-         COUNT(*) FILTER (WHERE status = 'CANCELLED')::int AS cancelled,
-         COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric AS confirmed_receipts,
-         COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'PAYMENT'), 0)::numeric AS confirmed_payments
+         COUNT(*) FILTER (WHERE status = 'CANCELLED')::int AS cancelled
        FROM vouchers WHERE company_id = $1`,
       [companyId],
     );
-    return reply.send({ ok: true, data: r.rows[0] });
+    // مجاميع القبض/الصرف المؤكدة لكل عملة على حدة (لا جمع عبر العملات)
+    const byCur = await pool.query<{ voucher_type: string; currency_code: string; total: string }>(
+      `SELECT voucher_type, currency_code, SUM(amount)::numeric AS total
+       FROM vouchers WHERE company_id = $1 AND status = 'CONFIRMED' AND voucher_type IN ('RECEIPT','PAYMENT')
+       GROUP BY voucher_type, currency_code ORDER BY currency_code`,
+      [companyId],
+    );
+    const pick = (t: string) => byCur.rows.filter((x) => x.voucher_type === t).map((x) => ({ currency_code: x.currency_code, total: x.total }));
+    return reply.send({ ok: true, data: { ...r.rows[0], receipts_by_currency: pick('RECEIPT'), payments_by_currency: pick('PAYMENT') } });
   });
 
   app.get('/payroll-summary', { preHandler: [authenticateRequest, requirePayrollView] }, async (req, reply) => {

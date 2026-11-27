@@ -268,6 +268,7 @@ export async function getSalesSummaryByDateRange(companyId: string, from: string
   const toDate = to?.trim() || todayYmd();
   const { rows } = await pool.query(
     `SELECT
+       si.currency_code,
        COUNT(*)::int AS invoice_count,
        COALESCE(SUM(si.total_amount), 0)::numeric AS total_sales,
        COALESCE(SUM(si.paid_amount), 0)::numeric AS total_paid
@@ -275,16 +276,22 @@ export async function getSalesSummaryByDateRange(companyId: string, from: string
      WHERE si.company_id = $1
        AND si.invoice_date >= $2::date
        AND si.invoice_date <= $3::date
-       AND si.document_status = 'CONFIRMED'`,
+       AND si.document_status = 'CONFIRMED'
+     GROUP BY si.currency_code
+     ORDER BY si.currency_code`,
     [companyId, fromDate, toDate],
   );
-  const r = rows[0];
+  // كل عملة على حدة — لا جمع بين عملات مختلفة
   return {
     from: fromDate,
     to: toDate,
-    invoiceCount: Number(r?.invoice_count ?? 0),
-    totalSales: Number(r?.total_sales ?? 0),
-    totalPaid: Number(r?.total_paid ?? 0),
+    invoiceCount: rows.reduce((a, r) => a + Number(r.invoice_count ?? 0), 0),
+    byCurrency: rows.map((r) => ({
+      currency: r.currency_code as string,
+      invoiceCount: Number(r.invoice_count ?? 0),
+      totalSales: Number(r.total_sales ?? 0),
+      totalPaid: Number(r.total_paid ?? 0),
+    })),
   };
 }
 
@@ -293,19 +300,28 @@ export async function getTopSellingFabrics(companyId: string, from: string, to: 
   const fromDate = from?.trim() || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
   const toDate = to?.trim() || todayYmd();
   const { rows } = await pool.query(
-    `SELECT
-       COALESCE(fi.name, sil.description, 'غير محدد') AS fabric_name,
-       COALESCE(fi.internal_code, '') AS material_code,
-       COALESCE(SUM(sil.quantity), 0)::numeric AS total_length,
-       COALESCE(SUM(sil.line_total), 0)::numeric AS total_amount,
-       COUNT(DISTINCT si.id)::int AS invoice_count
-     FROM sales_invoice_lines sil
-     JOIN sales_invoices si ON si.id = sil.invoice_id AND si.company_id = sil.company_id
-     LEFT JOIN fabric_items fi ON fi.id = sil.fabric_item_id AND fi.company_id = sil.company_id
-     WHERE sil.company_id = $1
-       AND si.invoice_date >= $2::date
-       AND si.invoice_date <= $3::date
-       AND si.document_status = 'CONFIRMED'
+    `WITH x AS (
+       SELECT
+         COALESCE(fi.name, sil.description, 'غير محدد') AS fabric_name,
+         COALESCE(fi.internal_code, '') AS material_code,
+         si.currency_code AS cur,
+         COALESCE(SUM(sil.quantity), 0)::numeric AS len,
+         COALESCE(SUM(sil.line_total), 0)::numeric AS amt,
+         COUNT(DISTINCT si.id)::int AS n
+       FROM sales_invoice_lines sil
+       JOIN sales_invoices si ON si.id = sil.invoice_id AND si.company_id = sil.company_id
+       LEFT JOIN fabric_items fi ON fi.id = sil.fabric_item_id AND fi.company_id = sil.company_id
+       WHERE sil.company_id = $1
+         AND si.invoice_date >= $2::date
+         AND si.invoice_date <= $3::date
+         AND si.document_status = 'CONFIRMED'
+       GROUP BY 1, 2, 3
+     )
+     SELECT fabric_name, material_code,
+            SUM(len)::numeric AS total_length,
+            jsonb_agg(jsonb_build_object('currency', cur, 'amount', amt) ORDER BY cur) AS amounts,
+            SUM(n)::int AS invoice_count
+     FROM x
      GROUP BY fabric_name, material_code
      ORDER BY total_length DESC
      LIMIT $4`,
@@ -318,7 +334,8 @@ export async function getTopSellingFabrics(companyId: string, from: string, to: 
       name: r.fabric_name,
       materialCode: r.material_code,
       totalLength: Number(r.total_length),
-      totalAmount: Number(r.total_amount),
+      // المبالغ لكل عملة على حدة
+      amountsByCurrency: r.amounts as { currency: string; amount: number }[],
       invoiceCount: Number(r.invoice_count),
     })),
   };
@@ -348,19 +365,20 @@ export async function getSupplierSummary(companyId: string, supplierNameOrId: st
   if (!supplier) return { found: false, query: q };
 
   const { rows: invRows } = await pool.query(
-    `SELECT COUNT(*)::int AS invoice_count,
+    `SELECT currency_code, COUNT(*)::int AS invoice_count,
             COALESCE(SUM(total_amount), 0)::numeric AS total_purchases
      FROM purchase_invoices
-     WHERE company_id = $1 AND supplier_id = $2 AND document_status = 'CONFIRMED'`,
+     WHERE company_id = $1 AND supplier_id = $2 AND document_status = 'CONFIRMED'
+     GROUP BY currency_code ORDER BY currency_code`,
     [companyId, supplier.id],
   );
-  const inv = invRows[0];
   return {
     found: true,
     supplierId: supplier.id,
     supplierName: supplier.name,
-    purchaseInvoiceCount: Number(inv?.invoice_count ?? 0),
-    totalPurchases: Number(inv?.total_purchases ?? 0),
+    purchaseInvoiceCount: invRows.reduce((a, r) => a + Number(r.invoice_count ?? 0), 0),
+    // كل عملة على حدة — لا جمع بين عملات مختلفة
+    purchasesByCurrency: invRows.map((r) => ({ currency: r.currency_code as string, total: Number(r.total_purchases ?? 0) })),
   };
 }
 

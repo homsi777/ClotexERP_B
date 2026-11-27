@@ -2,6 +2,7 @@
  * Extended operational / ERP reports — all real PostgreSQL, no mock rows.
  * "Operational" financial reports are not formal double-entry GL.
  */
+import { formatTotalsByCurrency } from './currencyTotals.js';
 import { getPool } from '../db/pool.js';
 import type { UnifiedReportPayload } from './reportTypes.js';
 import { nowIso } from './reportTypes.js';
@@ -31,8 +32,8 @@ export async function reportExecutiveSummary(companyId: string): Promise<Unified
     { label: 'وزن (تقدير)', value: String(d.total_roll_weight_kg ?? 0) },
     { label: 'صناديق', value: String(d.cashboxes_count ?? 0) },
     { label: 'سندات', value: String(d.vouchers_count ?? 0) },
-    { label: 'إجمالي قبض (مؤكد)', value: String(d.receipt_total ?? 0) },
-    { label: 'إجمالي صرف (مؤكد)', value: String(d.payment_total ?? 0) },
+    { label: 'إجمالي قبض (مؤكد)', value: formatTotalsByCurrency(((d.receipt_by_currency as { currency_code: string; total: string }[] | undefined) ?? [])) },
+    { label: 'إجمالي صرف (مؤكد)', value: formatTotalsByCurrency(((d.payment_by_currency as { currency_code: string; total: string }[] | undefined) ?? [])) },
     { label: 'دفعات استيراد', value: String(d.purchase_import_batches_count ?? 0) },
     { label: 'مهام طباعة', value: String(d.print_jobs_count ?? 0) },
     { label: 'تحويلات مخزون', value: String(d.transfers_count ?? 0) },
@@ -219,26 +220,26 @@ export async function reportOperationalIncomeExpense(companyId: string): Promise
   const pool = getPool();
   const r = await pool.query(
     `WITH x AS (
-       SELECT 'قبض عملاء (سندات)'::text AS category,
+       SELECT 'قبض عملاء (سندات)'::text AS category, currency_code,
               COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS income,
               0::numeric AS expense
-       FROM vouchers WHERE company_id = $1
+       FROM vouchers WHERE company_id = $1 GROUP BY currency_code
        UNION ALL
-       SELECT 'صرف موردين (سندات)', 0,
+       SELECT 'صرف موردين (سندات)', currency_code, 0,
               COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='PAYMENT' AND party_type='SUPPLIER'),0)
-       FROM vouchers WHERE company_id = $1
+       FROM vouchers WHERE company_id = $1 GROUP BY currency_code
        UNION ALL
-       SELECT 'مرتجع مبيعات', 0, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED' AND return_type='SALES_RETURN'),0)
-       FROM return_invoices WHERE company_id = $1
+       SELECT 'مرتجع مبيعات', currency_code, 0, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED' AND return_type='SALES_RETURN'),0)
+       FROM return_invoices WHERE company_id = $1 GROUP BY currency_code
        UNION ALL
-       SELECT 'مرتجع مشتريات', COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED' AND return_type='PURCHASE_RETURN'),0), 0
-       FROM return_invoices WHERE company_id = $1
+       SELECT 'مرتجع مشتريات', currency_code, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED' AND return_type='PURCHASE_RETURN'),0), 0
+       FROM return_invoices WHERE company_id = $1 GROUP BY currency_code
        UNION ALL
-       SELECT 'رواتب مدفوعة/مؤكدة', 0, COALESCE(SUM(total_net) FILTER (WHERE status IN ('PAID','CONFIRMED')),0)
-       FROM payroll_runs WHERE company_id = $1
+       SELECT 'رواتب مدفوعة/مؤكدة', currency_code, 0, COALESCE(SUM(total_net) FILTER (WHERE status IN ('PAID','CONFIRMED')),0)
+       FROM payroll_runs WHERE company_id = $1 GROUP BY currency_code
      )
-     SELECT category, SUM(income) AS income, SUM(expense) AS expense, SUM(income)-SUM(expense) AS net
-     FROM x GROUP BY category ORDER BY category`,
+     SELECT category, currency_code, SUM(income) AS income, SUM(expense) AS expense, SUM(income)-SUM(expense) AS net
+     FROM x GROUP BY category, currency_code ORDER BY category, currency_code`,
     [companyId],
   );
   return buildReportPayload({
@@ -249,6 +250,7 @@ export async function reportOperationalIncomeExpense(companyId: string): Promise
     filtersApplied: {},
     columns: [
       textCol('category', 'البند'),
+      textCol('currency_code', 'عملة'),
       moneyCol('income', 'إيرادات'),
       moneyCol('expense', 'مصروفات'),
       moneyCol('net', 'الصافي'),
