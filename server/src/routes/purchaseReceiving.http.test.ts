@@ -42,7 +42,8 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     const a = randomUUID(), b = randomUUID(), acc = randomUUID(), wk = randomUUID(), viewer = randomUUID(), sup = randomUUID(), wh = randomUUID(), wh2 = randomUUID();
     await q("INSERT INTO companies(id,code,name,is_active) VALUES ($1,'A','فرع أ',true),($2,'B','فرع ب',true)", [a, b]);
     const mk = (id: string, name: string, role: string) => q("INSERT INTO users(id,company_id,username,password_hash,role,is_active) VALUES ($1,$2,$3,'x',$4,true)", [id, a, name, role]);
-    await mk(acc, 'acc', 'accountant'); await mk(wk, 'wk', 'inventory'); await mk(viewer, 'viewer', 'viewer');
+    const mgr = randomUUID();
+    await mk(acc, 'acc', 'accountant'); await mk(wk, 'wk', 'inventory'); await mk(viewer, 'viewer', 'viewer'); await mk(mgr, 'mgr', 'manager');
     await q("INSERT INTO suppliers(id,company_id,code,name) VALUES ($1,$2,'S1','مورد الأقمشة')", [sup, a]);
     await q("INSERT INTO warehouses(id,company_id,code,name) VALUES ($1,$3,'W1','الرئيسي'),($2,$3,'W2','مستودع ثان')", [wh, wh2, a]);
     const { setCompanyActivationStatus } = await import('../services/activationService.js');
@@ -52,6 +53,7 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     const { buildApp } = await import('../app.js');
     const app = await buildApp();
     const call = (method: 'GET' | 'POST', path: string, token: string, payload?: unknown) => app.inject({ method, url: path, headers: { authorization: `Bearer ${token}` }, payload: payload as never });
+    const tMgr = tok(mgr, 'mgr', 'manager', []);
     const tWk = tok(wk, 'wk', 'inventory', ['inventory.view', 'inventory.manage']), tViewer = tok(viewer, 'viewer', 'viewer', []);
     const today = new Date().toISOString().slice(0, 10);
 
@@ -98,8 +100,12 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     assert.deepEqual([d[0].status, d[0].remaining], ['PARTIAL', 10]);
     const rolls = await q("SELECT barcode, length_m::float AS len, unit_cost::float AS cost, purchase_invoice_no FROM fabric_rolls WHERE company_id=$1 ORDER BY barcode", [a]);
     assert.equal(rolls.length, 2); assert.equal(rolls.find((r) => r.barcode === 'RC-A')!.cost, 2, 'تكلفة التوب من بند الفاتورة (داخلياً)');
-    const r2 = await call('POST', '/api/purchase-receiving/receipts', tWk, { invoiceId: inv.id, warehouseId: wh, lines: [{ invoiceLineId: lFab.id, unit: 'meter', rolls: [{ lengthM: 20 }] }] });
-    assert.equal(r2.statusCode, 201);
+    const overBody = { invoiceId: inv.id, warehouseId: wh, lines: [{ invoiceLineId: lFab.id, unit: 'meter', rolls: [{ lengthM: 20 }] }] };
+    // تجاوز المتبقي (10م) مرفوض لموظف المخزن، ومسموح للمدير بتأكيد صريح فقط
+    assert.equal((await call('POST', '/api/purchase-receiving/receipts', tWk, { ...overBody, allowOver: true })).statusCode, 400, 'موظف المخزن لا يتجاوز المتبقي');
+    assert.equal((await call('POST', '/api/purchase-receiving/receipts', tMgr, overBody)).statusCode, 400, 'المدير بلا تأكيد صريح لا يتجاوز');
+    const r2 = await call('POST', '/api/purchase-receiving/receipts', tMgr, { ...overBody, allowOver: true });
+    assert.equal(r2.statusCode, 201, r2.body);
     d = (await call('GET', `/api/purchase-receiving/invoices/${inv.id}`, tWk)).json().data.invoice.lines;
     assert.deepEqual([d[0].status, d[0].diff], ['OVER', 10], 'الزيادة تظهر للمراجعة');
     assert.equal((await q('SELECT total_amount::float AS t FROM purchase_invoices WHERE id=$1', [inv.id]))[0].t, 1900, 'قيمة الفاتورة لا تتغير تلقائياً');
@@ -170,6 +176,16 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     assert.equal(((await call('GET', '/api/purchase-receiving/invoices?status=COMPLETE', tWk)).json().data as unknown[]).length, 3);
     assert.equal(((await call('GET', '/api/purchase-receiving/invoices?materialKind=YARN', tWk)).json().data as unknown[]).length, 1);
     assert.equal(((await call('GET', '/api/purchase-receiving/receipts', tWk)).json().data as unknown[]).length >= 6, true);
+    // تكرار الضغط على «حفظ» بنفس المعرّف لا يُدخل مخزوناً ثانياً
+    const rid = randomUUID();
+    const dupBody = { supplierId: sup, warehouseId: wh, clientRequestId: rid, lines: [{ materialKind: 'FABRIC', unit: 'meter', rolls: [{ lengthM: 5, barcode: 'DUP-1', materialName: 'مادة تجربة' }] }] };
+    const d1 = await call('POST', '/api/purchase-receiving/receipts', tWk, dupBody);
+    assert.equal(d1.statusCode, 201, d1.body);
+    const d2 = await call('POST', '/api/purchase-receiving/receipts', tWk, dupBody);
+    assert.equal(d2.statusCode, 200, d2.body);
+    assert.equal(d2.json().data.id, d1.json().data.id); assert.equal(d2.json().data.duplicate, true);
+    assert.equal((await q("SELECT count(*)::int AS n FROM fabric_rolls WHERE barcode='DUP-1'"))[0].n, 1, 'لا مخزون مكرر');
+    assert.equal((await q("SELECT count(*)::int AS n FROM purchase_receipts WHERE client_request_id=$1", [rid]))[0].n, 1);
     await app.close();
   } finally {
     setPoolOverrideForTests(null);

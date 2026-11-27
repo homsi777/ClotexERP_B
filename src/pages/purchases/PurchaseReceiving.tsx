@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FilePlus2, Link2, Loader2, PackagePlus, RefreshCw, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as api from '../../lib/api/purchaseReceivingApi';
 import type { LotInput, ReceiptLineInput, ReceiptView, ReceivingInvoice, ReceivingLine, RollInput } from '../../lib/api/purchaseReceivingApi';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
@@ -21,6 +21,7 @@ type Draft = { invoice?: ReceivingInvoice; line?: ReceivingLine; pending?: boole
 
 /** استلام المشتريات (للمخزن): بنود الفاتورة والكميات المطلوبة والمستلمة والمتبقية — بلا أسعار أو إجماليات أو دفع (الخادم لا يرسلها). */
 export function PurchaseReceiving() {
+  const nav = useNavigate();
   const [tab, setTab] = useState<'invoices' | 'pending'>('invoices');
   const [rows, setRows] = useState<ReceivingInvoice[]>([]), [pending, setPending] = useState<ReceiptView[]>([]), [loading, setLoading] = useState(true), [err, setErr] = useState('');
   const [wh, setWh] = useState<ApiWarehouse[]>([]), [sup, setSup] = useState<ApiSupplier[]>([]);
@@ -68,7 +69,7 @@ export function PurchaseReceiving() {
               <td className="p-2">{l.lineNo}</td><td className="p-2 font-bold">{l.description}{l.details.designCode ? <span className="mr-1 text-xs font-normal text-slate-500">({String(l.details.designCode)})</span> : null}{l.details.colorName ? <span className="mr-1 text-xs font-normal text-slate-500">{String(l.details.colorName)}</span> : null}</td>
               <td className="p-2">{KIND[l.materialKind]}</td><td className="p-2 font-mono">{nf(l.quantity)} {UNIT[l.unit] ?? l.unit}</td><td className="p-2 font-mono">{nf(l.received)}</td><td className="p-2 font-mono">{nf(l.remaining)}</td>
               <td className={`p-2 font-mono ${l.diff !== 0 ? 'font-bold text-rose-700' : ''}`}>{l.diff > 0 ? '+' : ''}{nf(l.diff)}</td><td className="p-2"><Chip s={l.status} /></td>
-              <td className="p-2">{(inv.receiveViaWarehouse || ['package', 'piece'].includes(l.unit)) && !l.autoReceived ? <button type="button" onClick={() => setDraft({ invoice: inv, line: l })} className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-bold text-white">استلام</button> : <span className="text-xs text-slate-400">{l.autoReceived ? 'تلقائي' : '—'}</span>}</td></tr>)}
+              <td className="p-2">{(inv.receiveViaWarehouse || ['package', 'piece'].includes(l.unit)) && !l.autoReceived ? <button type="button" onClick={() => (l.materialKind === 'FABRIC' ? nav(`/purchases/receiving/receive?invoice=${inv.id}&line=${l.id}`) : setDraft({ invoice: inv, line: l }))} className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-bold text-white">استلام</button> : <span className="text-xs text-slate-400">{l.autoReceived ? 'تلقائي' : '—'}</span>}</td></tr>)}
           </tbody></table></div>
           {detail.length > 0 && <div><b className="text-sm">سجل الاستلامات</b><ul className="mt-1 space-y-1 text-xs text-slate-600">{detail.map((r) => <li key={r.id} className="rounded bg-slate-50 p-2"><b>{r.receiptNo}</b> · {r.warehouseName} · {new Date(r.createdAt).toLocaleString('en-GB')} · {r.createdBy ?? ''} — {r.lines.map((x) => `${x.description} ${nf(x.quantity)} ${UNIT[x.unit] ?? x.unit}${x.conversionFactor && x.conversionFactor !== 1 ? ` (= ${nf(x.quantityInInvoiceUnit)} بوحدة الفاتورة)` : ''}`).join(' · ')}</li>)}</ul></div>}
           <p className="text-xs text-slate-500">فروقات الكمية للمراجعة فقط: لا تتغير قيمة الفاتورة تلقائياً، ويتولى المحاسب معالجتها.</p>

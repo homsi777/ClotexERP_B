@@ -20,7 +20,7 @@ export interface ReceiptView {
 export interface RollInput { barcode?: string; lengthM?: number; weightKg?: number; widthCm?: number; gsm?: number; lotNo?: string; colorName?: string; colorCode?: string; designCode?: string; materialName?: string }
 export interface LotInput { weightKg: number; lotNo?: string; batchNo?: string; colorName?: string; colorCode?: string; designCode?: string; materialName?: string; packages?: number }
 export interface ReceiptLineInput { catalogItemId?: string | null; operatingWarehouseId?: string | null; invoiceLineId?: string | null; description?: string; materialKind?: MaterialKind; unit: ReceiveUnit; quantity?: number; conversionFactor?: number; quantityInInvoiceUnit?: number; packageCount?: number; rolls?: RollInput[]; lots?: LotInput[] }
-export interface ReceiptInput { invoiceId?: string | null; supplierId?: string | null; warehouseId?: string | null; notes?: string; lines: ReceiptLineInput[] }
+export interface ReceiptInput { clientRequestId?: string; allowOver?: boolean; invoiceId?: string | null; supplierId?: string | null; warehouseId?: string | null; notes?: string; lines: ReceiptLineInput[] }
 
 export interface ReceivingFilters { search?: string; supplierId?: string; from?: string; to?: string; warehouseId?: string; materialKind?: string; status?: string; invoiceStatus?: string }
 const qs = (o: Record<string, string | undefined>) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v) p.set(k, v); return p.toString() ? `?${p}` : ''; };
