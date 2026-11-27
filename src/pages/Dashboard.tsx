@@ -30,17 +30,17 @@ const defaultLinkIds = ['create_item', 'inventory', 'warehouses', 'sales', 'purc
 
 const quickLinkDefs = [
   { id: 'create_item', labelKey: 'quickLinks.createItem', path: '/inventory/create', icon: PlusCircle, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
-  { id: 'inventory', labelKey: 'quickLinks.rolls', path: '/inventory', icon: Package, color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
-  { id: 'warehouses', labelKey: 'quickLinks.warehouses', path: '/inventory/warehouses', icon: Layers, color: 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100' },
-  { id: 'sales', labelKey: 'quickLinks.salesInvoice', path: '/invoices/sales', icon: ShoppingCart, color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' },
-  { id: 'purchases', labelKey: 'quickLinks.purchaseInvoice', path: '/invoices/purchases', icon: FileText, color: 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100' },
+  { id: 'inventory', labelKey: 'quickLinks.rolls', path: '/inventory', icon: Package, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'warehouses', labelKey: 'quickLinks.warehouses', path: '/inventory/warehouses', icon: Layers, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'sales', labelKey: 'quickLinks.salesInvoice', path: '/invoices/sales', icon: ShoppingCart, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'purchases', labelKey: 'quickLinks.purchaseInvoice', path: '/invoices/purchases', icon: FileText, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
   { id: 'bonds_in', labelKey: 'quickLinks.receiptVoucher', path: '/bonds/collection', icon: ArrowDownToLine, color: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' },
   { id: 'bonds_out', labelKey: 'quickLinks.paymentVoucher', path: '/bonds/payment', icon: ArrowUpFromLine, color: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' },
-  { id: 'customers', labelKey: 'quickLinks.customers', path: '/customers', icon: Users, color: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100' },
-  { id: 'suppliers', labelKey: 'quickLinks.suppliers', path: '/suppliers', icon: TrendingUp, color: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' },
-  { id: 'safes', labelKey: 'quickLinks.safes', path: '/treasury/safes', icon: Wallet, color: 'bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100' },
-  { id: 'cartela', labelKey: 'quickLinks.cartela', path: '/cartela', icon: ScrollText, color: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200 hover:bg-fuchsia-100' },
-  { id: 'orders', labelKey: 'quickLinks.orders', path: '/orders', icon: ClipboardList, color: 'bg-lime-50 text-lime-700 border-lime-200 hover:bg-lime-100' },
+  { id: 'customers', labelKey: 'quickLinks.customers', path: '/customers', icon: Users, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'suppliers', labelKey: 'quickLinks.suppliers', path: '/suppliers', icon: TrendingUp, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'safes', labelKey: 'quickLinks.safes', path: '/treasury/safes', icon: Wallet, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'cartela', labelKey: 'quickLinks.cartela', path: '/cartela', icon: ScrollText, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' },
+  { id: 'orders', labelKey: 'quickLinks.orders', path: '/orders', icon: ClipboardList, color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' },
 ];
 
 function numberValue(value: unknown): number {
@@ -108,11 +108,11 @@ export const Dashboard = () => {
     const d = summary;
     return [
       { key: 'cards.customers', module: 'customers', value: fmtNumber(d?.customers_count, numberLocale), icon: Users, bg: 'bg-indigo-50', color: 'text-indigo-700' },
-      { key: 'cards.suppliers', module: 'suppliers', value: fmtNumber(d?.suppliers_count, numberLocale), icon: TrendingUp, bg: 'bg-orange-50', color: 'text-orange-700' },
-      { key: 'cards.totalRolls', module: 'inventory.rolls', value: fmtNumber(d?.fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-cyan-50', color: 'text-cyan-700' },
-      { key: 'cards.activeRolls', module: 'inventory.rolls', value: fmtNumber(d?.active_fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-emerald-50', color: 'text-emerald-700' },
-      { key: 'cards.totalMeters', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_length_m, numberLocale, 2), icon: Layers, bg: 'bg-blue-50', color: 'text-blue-700' },
-      { key: 'cards.totalWeightKg', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_weight_kg, numberLocale, 2), icon: Layers, bg: 'bg-slate-50', color: 'text-slate-700' },
+      { key: 'cards.suppliers', module: 'suppliers', value: fmtNumber(d?.suppliers_count, numberLocale), icon: TrendingUp, bg: 'bg-amber-50', color: 'text-amber-700' },
+      { key: 'cards.totalRolls', module: 'inventory.rolls', value: fmtNumber(d?.fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-indigo-50', color: 'text-indigo-700' },
+      { key: 'cards.activeRolls', module: 'inventory.rolls', value: fmtNumber(d?.active_fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-indigo-50', color: 'text-indigo-700' },
+      { key: 'cards.totalMeters', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_length_m, numberLocale, 2), icon: Layers, bg: 'bg-indigo-50', color: 'text-indigo-700' },
+      { key: 'cards.totalWeightKg', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_weight_kg, numberLocale, 2), icon: Layers, bg: 'bg-indigo-50', color: 'text-indigo-700' },
       { key: 'cards.receiptVouchers', module: 'treasury.vouchers', value: fmtMoney(d?.receipt_total, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
       { key: 'cards.paymentVouchers', module: 'treasury.vouchers', value: fmtMoney(d?.payment_total, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
     ].filter((c) => canMod(c.module));
@@ -262,6 +262,17 @@ export const Dashboard = () => {
             </div>
           </div>}
         </div>
+      </div>
+
+
+      {/* بانر الهوية (الشعار الترويجي) */}
+      <div className="relative overflow-hidden rounded-2xl p-6 text-white shadow-md sm:p-8" style={{ background: 'linear-gradient(120deg, #1d0e45 0%, #2e1856 55%, #5b34a3 100%)' }}>
+        <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full opacity-30" preserveAspectRatio="none" viewBox="0 0 800 120">
+          <defs><pattern id="clx-weave" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 8h16M8 0v16" stroke="#e8c27a" strokeWidth="0.6" fill="none" /></pattern></defs>
+          <rect width="800" height="120" fill="url(#clx-weave)" />
+        </svg>
+        <p className="relative text-xl font-black sm:text-2xl">{i18n.language === 'tr' ? 'Kumaşımız, işinizin başarısının başlangıcı' : 'قماشنا بداية لنجاح شغلك'}</p>
+        <span aria-hidden className="relative mt-2 block h-1 w-24 rounded-full bg-gradient-to-l from-amber-300 to-amber-500" />
       </div>
 
       {isSettingsOpen && (

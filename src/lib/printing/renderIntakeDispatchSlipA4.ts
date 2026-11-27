@@ -83,7 +83,7 @@ export function renderIntakeDispatchSlipA4Html(opts: {
     .meta .lbl { color: #555; font-weight: 700; }
     .meta .val { font-weight: 700; }
     table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
-    thead th { background: #2C405A; color: #fff; padding: 2.2mm; text-align: ${dir === 'rtl' ? 'right' : 'left'}; }
+    thead th { background: #4C3890; color: #fff; padding: 2.2mm; text-align: ${dir === 'rtl' ? 'right' : 'left'}; }
     .cell { border: 0.2mm solid #ccc; padding: 2mm; }
     .center { text-align: center; }
     .num { font-family: monospace; }

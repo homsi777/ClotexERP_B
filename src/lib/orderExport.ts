@@ -24,8 +24,8 @@ function escapeHtml(s: string): string {
 
 /** إيقاع تصميم محاسبي هادئ — خطوط موحّدة */
 const PDF_BORDER = '#cbd5e1';
-const PDF_BORDER_STRONG = '#2C405A';
-const PDF_HEADER_BG = '#2C405A';
+const PDF_BORDER_STRONG = '#4C3890';
+const PDF_HEADER_BG = '#4C3890';
 const PDF_HEADER_TEXT = '#ffffff';
 const PDF_ALT_ROW = '#f8fafc';
 const PDF_TOTAL_FILL = '#f1f5f9';

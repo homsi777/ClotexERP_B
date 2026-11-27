@@ -5,7 +5,7 @@ import i18n from '../../i18n/config';
 
 const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns: 'terminology', ...options });
 
-const NAVY = '#2C405A';
+const NAVY = '#4C3890';
 const FONT = "Tahoma, Arial, 'Segoe UI', sans-serif";
 
 function escapeHtml(value: string | null | undefined): string {

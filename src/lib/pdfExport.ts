@@ -126,8 +126,8 @@ export function isAccountStatementHtml(html: string): boolean {
 /** تصدير PDF لسند قبض/صرف A5 (.page) — نفس HTML الطباعة، صفحة واحدة */
 export const A5_VOUCHER_PDF_OPTIONS: PdfExportOptions = {
   orientation: 'portrait',
-  pageFormat: 'a5',
-  containerWidth: '148mm',
+  pageFormat: 'a4',
+  containerWidth: '210mm',
   fitSinglePage: true,
   pageMarginMm: 0,
   canvasScale: PDF_SHARP_CANVAS_SCALE,

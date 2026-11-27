@@ -12,7 +12,7 @@ import i18n from '../../i18n/config';
 const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns: 'terminology', ...options });
 const ti = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns: 'inventory', ...options });
 
-const NAVY = '#2C405A';
+const NAVY = '#4C3890';
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
 const LABEL_GRAY = '#f2f2f2';
 const SUBTOTAL_GRAY = '#f6f6f6';

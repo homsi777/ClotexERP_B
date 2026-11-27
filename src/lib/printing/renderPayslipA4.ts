@@ -2,8 +2,8 @@ import { BRAND } from '../../branding';
 import { payslipItemRows, type PayslipItem } from './payslipItems';
 
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
-const NAVY = '#2C405A';
-const GOLD = '#C4A962';
+const NAVY = '#4C3890';
+const GOLD = '#B89854';
 
 export type PayslipData = {
   payrollNo: string;

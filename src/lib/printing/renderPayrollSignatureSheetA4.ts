@@ -1,7 +1,7 @@
 import { BRAND } from '../../branding';
 
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
-const NAVY = '#2C405A';
+const NAVY = '#4C3890';
 
 export type SignatureSheetLine = {
   employeeCode: string;

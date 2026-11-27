@@ -1,23 +1,24 @@
 import i18n from '../../i18n/config';
+import { getBranchPrintInfo } from './branchPrintInfo';
 
 const t = (key: string) => i18n.t(key, { ns: 'terminology' });
-const getLocation = () => t('documentFooter.location');
+const getLocation = () => getBranchPrintInfo()?.location || t('documentFooter.location');
 
 export type DocumentFooterPreset = 'invoice' | 'voucher-receipt' | 'voucher-payment';
 
 const getPresets = (): Record<DocumentFooterPreset, { phone: string; slogan: string; icon: 'star' | 'shield' | 'thread' }> => ({
   invoice: {
-    phone: '09 44 555 080',
+    phone: getBranchPrintInfo()?.phoneInvoice || '09 44 555 080',
     slogan: t('documentFooter.invoiceSlogan'),
     icon: 'thread',
   },
   'voucher-receipt': {
-    phone: '+963 944 555 080',
+    phone: getBranchPrintInfo()?.phoneVoucher || '+963 944 555 080',
     slogan: t('documentFooter.voucherReceiptSlogan'),
     icon: 'star',
   },
   'voucher-payment': {
-    phone: '+963 944 555 080',
+    phone: getBranchPrintInfo()?.phoneVoucher || '+963 944 555 080',
     slogan: t('documentFooter.voucherPaymentSlogan'),
     icon: 'shield',
   },
@@ -43,53 +44,39 @@ function footerIconSvg(kind: 'pin' | 'phone' | 'star' | 'shield' | 'thread'): st
   return `<svg class="doc-footer-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[kind]}"/></svg>`;
 }
 
-export function documentFooterStyles(navy = '#2C405A', gold = '#C4A962', bw = false): string {
-  const footerBg = bw ? '#ffffff' : navy;
-  const footerText = bw ? '#111111' : '#ffffff';
-  const footerIcon = bw ? '#333333' : gold;
-  const footerBorder = bw ? '2px solid #111' : 'none';
+export function documentFooterStyles(navy = '#4C3890', gold = '#B89854', bw = false): string {
+  const text = bw ? '#111111' : navy;
+  const rule = bw ? '#111111' : gold;
 
   return `
     .doc-footer-bar {
-      background: ${footerBg};
-      color: ${footerText};
-      border-top: ${footerBorder};
-      padding: 10px 12px;
+      background: #ffffff;
+      color: ${text};
+      border-top: 1.5px solid ${rule};
+      padding: 7px 4px 2px;
       margin-top: auto;
       flex-shrink: 0;
     }
     .doc-footer-bar, .doc-footer-bar * {
-      color: ${footerText} !important;
-      -webkit-text-fill-color: ${footerText} !important;
+      color: ${text} !important;
+      -webkit-text-fill-color: ${text} !important;
     }
     .doc-footer-table { width: 100%; border-collapse: collapse; }
     .doc-footer-table td {
       vertical-align: middle;
-      font-size: 8.5px;
+      font-size: 9px;
       line-height: 1.55;
-      font-weight: 700;
+      font-weight: 500;
     }
     .doc-footer-right { text-align: right; }
     .doc-footer-center { text-align: center; }
     .doc-footer-left { text-align: left; line-height: 1.45; }
-    .doc-footer-inline {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      max-width: 100%;
-    }
+    .doc-footer-inline { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
     .doc-footer-inline-center { justify-content: center; margin: 0 auto; }
-    .doc-footer-ico {
-      width: 11px;
-      height: 11px;
-      fill: ${footerIcon};
-      flex-shrink: 0;
-    }
+    .doc-footer-ico { display: none; }
     .doc-footer-phone {
-      color: ${footerText} !important;
-      -webkit-text-fill-color: ${footerText} !important;
       text-decoration: none !important;
-      font-weight: 800;
+      font-weight: 500;
       letter-spacing: 0.2px;
       white-space: nowrap;
       direction: ltr;
@@ -100,7 +87,6 @@ export function documentFooterStyles(navy = '#2C405A', gold = '#C4A962', bw = fa
     .doc-footer-bar a:visited,
     .doc-footer-bar a:hover,
     .doc-footer-bar a:active {
-      color: ${footerText} !important;
       text-decoration: none !important;
       pointer-events: none;
     }

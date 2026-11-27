@@ -531,7 +531,7 @@
   "voucherPrintModal.voucherHeader": "Fiş #{{no}}",
   "voucherPrintModal.statementPreviewLabel": "Fiş üzerindeki açıklama metni (A5):",
   "voucherPrintModal.printing": "Yazdırılıyor...",
-  "voucherPrintModal.printA5": "A5 Yazdır",
+  "voucherPrintModal.printA5": "A4 Yazdır",
   "voucherPrintModal.exporting": "Dışa aktarılıyor...",
   "voucherPrintModal.exportPdf": "PDF Dışa Aktar",
   "voucherPrintModal.close": "Kapat",

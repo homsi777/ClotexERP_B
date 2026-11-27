@@ -115,9 +115,9 @@ export function OrderDetailModal({ open, order, customer, onClose }: OrderDetail
         className="relative flex min-h-0 w-full max-w-[980px] flex-1 flex-col max-h-[calc(100dvh-1rem)] bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden mx-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-wrap items-center gap-2 justify-between px-4 py-3 border-b border-slate-200 bg-gradient-to-l from-[#2C405A]/10 to-white shrink-0">
+        <div className="flex flex-wrap items-center gap-2 justify-between px-4 py-3 border-b border-slate-200 bg-gradient-to-l from-[#4C3890]/10 to-white shrink-0">
           <div className="min-w-0">
-            <p id="order-detail-title" className="text-xs font-bold text-[#2C405A] uppercase tracking-wide">
+            <p id="order-detail-title" className="text-xs font-bold text-[#4C3890] uppercase tracking-wide">
               {i18n.t('orderDetail.title', { ns: 'terminology' })}
             </p>
             <p className="text-lg font-black text-slate-900 font-mono truncate">{order.orderNumber}</p>

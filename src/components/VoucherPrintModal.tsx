@@ -78,7 +78,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
       if (window.fabricApp?.printHtml) {
         const settings = await window.fabricApp.getSettings();
         const result = await window.fabricApp.printHtml(voucherHtml, {
-          pageSize: 'A5',
+          pageSize: 'A4',
           silent: Boolean(settings.silentA4PrintingEnabled),
           printerName: settings.defaultA4PrinterName ?? undefined,
           printBackground: true,
@@ -128,7 +128,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
       if (window.fabricApp?.printToPdf) {
         const result = await window.fabricApp.printToPdf(buildHtml(), {
-          pageSize: 'A5',
+          pageSize: 'A4',
           defaultFileName: pdfFileStem(fileName),
           margins: { ...ELECTRON_A5_EMBEDDED_MARGINS },
         });

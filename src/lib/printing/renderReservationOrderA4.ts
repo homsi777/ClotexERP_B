@@ -18,8 +18,8 @@ function orderTotalLength(order: CustomerOrder): number {
   return order.items.reduce((sum, line) => sum + line.length, 0);
 }
 
-const NAVY = '#2C405A';
-const GOLD = '#C4A962';
+const NAVY = '#4C3890';
+const GOLD = '#B89854';
 const BORDER = '#cbd5e1';
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
 

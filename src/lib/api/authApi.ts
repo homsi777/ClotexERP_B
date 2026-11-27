@@ -1,4 +1,5 @@
 import { apiFetch, setStoredToken } from './client';
+import { setBranchPrintInfo, type BranchPrintInfo } from '../printing/branchPrintInfo';
 
 export type AuthUser = {
   id: string;
@@ -12,6 +13,8 @@ export type AuthUser = {
   companyDefaultLanguage: 'ar' | 'tr';
   /** العملة الافتراضية للمعاملات المالية بالفرع الحالي (مصر=EGP) — قيمة ابتدائية للنماذج، وتغييرها يدوياً مسموح. USD إن لم تُضبط. */
   companyDefaultCurrency: string;
+  /** عنوان/هاتف الفرع لترويسة وتذييل المطبوعات (فارغ = القيم الافتراضية). */
+  branchPrint?: BranchPrintInfo;
   /** حساب المستخدم الأصلي في قاعدة البيانات — لا يتغيّر بتبديل الحساب. */
   homeCompanyId: string;
   role: string;
@@ -54,6 +57,7 @@ export async function loginApi(username: string, password: string, companyId?: s
   if (data.token) {
     setStoredToken(data.token);
   }
+  setBranchPrintInfo(data.user?.branchPrint);
   return data;
 }
 
@@ -67,6 +71,7 @@ export async function logoutApi(): Promise<void> {
 
 export async function fetchMe(): Promise<AuthUser> {
   const data = await apiFetch<MeResponse>('/api/auth/me');
+  setBranchPrintInfo(data.user.branchPrint);
   return data.user;
 }
 
@@ -79,6 +84,7 @@ export async function switchCompanyApi(companyId: string): Promise<AuthUser> {
   if (data.token) {
     setStoredToken(data.token);
   }
+  setBranchPrintInfo(data.user.branchPrint);
   return data.user;
 }
 

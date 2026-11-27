@@ -10,14 +10,14 @@ import { displayStoredInvoiceNo } from '../invoiceDbMappers';
 import { documentFooterStyles, renderDocumentFooterHtml } from './renderDocumentFooter';
 import { paginateInvoiceStatementRows } from './invoiceStatementPagination';
 
-const NAVY = '#2C405A';
-const GOLD = '#C4A962';
+const NAVY = '#4C3890';
+const GOLD = '#B89854';
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
 /** رمادي فاتح للتسميات والمجاميع — قريب من النموذج الأساسي */
-const LABEL_GRAY = '#f2f2f2';
-const SUBTOTAL_GRAY = '#f6f6f6';
+const LABEL_GRAY = '#f4f0fb';
+const SUBTOTAL_GRAY = '#f1edfa';
 /** خط فصل خفيف بين الخانات */
-const CELL_LINE = '#c8c8c8';
+const CELL_LINE = '#e3dcf1';
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -610,13 +610,20 @@ export function renderInvoiceStatementA4Html(opts: {
       (content, pageIndex) => `
   <div class="page${pageIndex === 0 ? '' : ' page--continuation'}" data-clotex-doc="invoice-statement-a4">
     ${isDraft ? `<div class="draft-watermark">${escapeHtml(draftLabel)}</div>` : ''}
-    <div class="page-no-box">${pageIndex + 1} / ${totalPages}</div>
+    ${totalPages > 1 ? `<div class="page-no-box">${pageIndex + 1} / ${totalPages}</div>` : ''}
     <div class="page-body">
       ${pageIndex === 0 ? `
-      <div class="brand-wrap">
-        <img src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" class="brand-logo" />
+      <div class="doc-head">
+        <div class="doc-head-text">
+          <div class="doc-title">${escapeHtml(title)}</div>
+          <div class="doc-sub"><span>${escapeHtml(invoiceNo)}</span><span class="doc-sub-sep">|</span><span>${escapeHtml(invoiceDate)}</span></div>
+        </div>
+        <div class="doc-head-brand">
+          <img src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" class="brand-logo" />
+          <span class="brand-tag">${escapeHtml(BRAND.taglineDocs)}</span>
+        </div>
       </div>
-      <div class="doc-title">${escapeHtml(title)}</div>
+      <div class="gold-rule"></div>
       ${isDraft ? `<div class="draft-banner">${escapeHtml(draftLabel)}</div>` : ''}
       ${metaRowsHtml}` : ''}
       ${content}
@@ -665,7 +672,7 @@ export function renderInvoiceStatementA4Html(opts: {
     .page--continuation .page-body { padding-top: 7mm; }
     .page-no-box {
       position: absolute;
-      top: 7mm;
+      bottom: 16mm;
       left: 10mm;
       font-size: 9px;
       font-weight: 700;
@@ -673,25 +680,15 @@ export function renderInvoiceStatementA4Html(opts: {
       direction: ltr;
       unicode-bidi: embed;
     }
-    .brand-wrap {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 0 0 6px;
-    }
-    .brand-logo {
-      height: 102px;
-      width: auto;
-      object-fit: contain;
-    }
-    .doc-title {
-      text-align: center;
-      font-size: 17px;
-      font-weight: 900;
-      color: ${NAVY};
-      margin: 0 0 10px;
-      line-height: 1.2;
-    }
+    .doc-head { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; direction: rtl; }
+    .doc-head-text { text-align: right; }
+    .doc-head-brand { display: flex; align-items: center; gap: 10px; direction: ltr; }
+    .brand-logo { height: 66px; width: auto; object-fit: contain; }
+    .brand-tag { font-size: 11px; color: ${NAVY}; font-weight: 500; }
+    .doc-title { text-align: right; font-size: 24px; font-weight: 900; color: ${NAVY}; margin: 0 0 6px; line-height: 1.2; }
+    .doc-sub { display: flex; gap: 8px; justify-content: flex-start; font-size: 13px; color: #222; direction: ltr; font-weight: 500; }
+    .doc-sub-sep { color: #555; }
+    .gold-rule { height: 2px; background: ${GOLD}; margin: 0 0 12px; }
     .draft-banner {
       text-align: center;
       font-size: 14px;
@@ -730,34 +727,20 @@ export function renderInvoiceStatementA4Html(opts: {
       margin-bottom: 10px;
       direction: rtl;
     }
-    .meta-card {
-      flex: 1;
-      border: 1px solid ${CELL_LINE};
-    }
+    .meta-card { flex: 1; border: none; }
     .meta-card td {
       border-bottom: 1px solid ${CELL_LINE};
-      padding: 7px 8px;
-      font-size: 10px;
+      padding: 6px 4px;
+      font-size: 10.5px;
       line-height: 1.3;
       vertical-align: middle;
-      font-weight: 700;
-      color: #000;
+      font-weight: 500;
+      color: #1f1f1f;
     }
-    .meta-card tr:last-child td { border-bottom: none; }
-    .meta-lbl {
-      width: 42%;
-      text-align: center;
-      background: ${LABEL_GRAY};
-      white-space: nowrap;
-      border-left: 1px solid ${CELL_LINE};
-    }
-    .meta-val {
-      text-align: right;
-      background: #fff;
-      padding-right: 10px;
-    }
+    .meta-lbl { width: 34%; text-align: right; background: none; white-space: nowrap; color: ${NAVY}; font-weight: 900 !important; }
+    .meta-val { text-align: right; background: #fff; }
     .data-table {
-      border: 1px solid #000;
+      border: 1px solid ${CELL_LINE};
       margin-bottom: 0;
     }
     .main-table {
@@ -818,7 +801,7 @@ export function renderInvoiceStatementA4Html(opts: {
       text-align: center;
       border-bottom: 1px solid ${CELL_LINE};
       border-left: 1px solid ${CELL_LINE};
-      color: #000;
+      color: ${NAVY};
       background: ${SUBTOTAL_GRAY};
       vertical-align: middle;
       line-height: 1.3;
@@ -849,7 +832,7 @@ export function renderInvoiceStatementA4Html(opts: {
       unicode-bidi: embed;
     }
     .section-title {
-      text-align: center;
+      text-align: right;
       font-size: 17px;
       font-weight: 900;
       color: ${NAVY};
@@ -896,9 +879,11 @@ export function renderInvoiceStatementA4Html(opts: {
       padding-left: 8px;
     }
     .financial-final td {
-      border-bottom: 3px solid ${NAVY};
+      border-bottom: none;
       font-weight: 900;
+      color: ${NAVY};
     }
+    .financial-final td { background: ${LABEL_GRAY} !important; }
     .notes-box {
       flex: 0 0 48%;
       text-align: right;
@@ -935,17 +920,17 @@ export function renderInvoiceStatementA4Html(opts: {
       justify-content: center;
       padding: 8px 12px;
       text-align: center;
-      font-size: 10px;
+      font-size: 10.5px;
       font-weight: 900;
-      color: #000;
-      background: #fafafa;
+      color: ${NAVY};
+      background: #fff;
+      align-items: flex-start;
     }
     ${documentFooterStyles(NAVY, GOLD)}
     .doc-footer-bar {
       flex-shrink: 0;
-      margin: 4px -10mm 0;
-      width: calc(100% + 20mm);
-      padding: 9px 12px;
+      margin: 4px 0 0;
+      width: 100%;
     }
     .col-material { width: 20%; }
     .col-design { width: 11%; }

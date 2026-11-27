@@ -39,11 +39,11 @@ export function renderExternalJobPricingA4Html(opts: { data: ManufacturingOvervi
 html,body{width:210mm;font-family:Tahoma,Arial,sans-serif;color:#111;background:#fff;direction:${dir};-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .page{width:210mm;min-height:297mm;padding:10mm}
 .brand{text-align:center;padding-bottom:4mm;border-bottom:.4mm solid #333;margin-bottom:4mm}.brand img{height:16mm;object-fit:contain}
-h1{text-align:center;font-size:15pt;margin:2mm 0 5mm}h2{font-size:11pt;margin:5mm 0 2mm;color:#2C405A}
+h1{text-align:center;font-size:15pt;margin:2mm 0 5mm}h2{font-size:11pt;margin:5mm 0 2mm;color:#4C3890}
 .meta{display:grid;grid-template-columns:1fr 1fr;gap:2mm 6mm;font-size:10pt;margin-bottom:3mm}.meta b{color:#555}
-table{width:100%;border-collapse:collapse;font-size:9.5pt}th{background:#2C405A;color:#fff;padding:2mm;text-align:${dir === 'rtl' ? 'right' : 'left'}}
+table{width:100%;border-collapse:collapse;font-size:9.5pt}th{background:#4C3890;color:#fff;padding:2mm;text-align:${dir === 'rtl' ? 'right' : 'left'}}
 td{border:.2mm solid #ccc;padding:1.8mm}.c{text-align:center}.n{font-family:monospace}
-.tot{margin-top:4mm;border:.5mm solid #2C405A;padding:3mm;font-size:12pt;font-weight:700;display:flex;justify-content:space-between}
+.tot{margin-top:4mm;border:.5mm solid #4C3890;padding:3mm;font-size:12pt;font-weight:700;display:flex;justify-content:space-between}
 .sign{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:14mm;font-size:10pt}.sign .l{font-weight:700;color:#555;margin-bottom:10mm}.sign .line{border-bottom:.3mm solid #999;height:8mm}
 </style></head><body><div class="page">
 <div class="brand"><img src="${BRAND.logoInline}" alt="${esc(BRAND.name)}"/></div>

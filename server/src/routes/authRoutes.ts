@@ -146,8 +146,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       fullName: user.full_name,
     });
 
-    const companyRow = await pool.query<{ code: string; name: string; default_language: string; default_currency_code: string | null }>(
-      `SELECT code, name, default_language, default_currency_code FROM companies WHERE id = $1`,
+    const companyRow = await pool.query<{ code: string; name: string; default_language: string; default_currency_code: string | null; print_location: string | null; print_phone_invoice: string | null; print_phone_voucher: string | null }>(
+      `SELECT code, name, default_language, default_currency_code, print_location, print_phone_invoice, print_phone_voucher FROM companies WHERE id = $1`,
       [user.company_id],
     );
 
@@ -162,6 +162,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         companyCode: companyRow.rows[0]?.code ?? '',
         companyName: companyRow.rows[0]?.name ?? '',
         companyDefaultLanguage: companyRow.rows[0]?.default_language === 'tr' ? 'tr' : 'ar',
+        branchPrint: { location: companyRow.rows[0]?.print_location ?? null, phoneInvoice: companyRow.rows[0]?.print_phone_invoice ?? null, phoneVoucher: companyRow.rows[0]?.print_phone_voucher ?? null },
         companyDefaultCurrency: effectiveDefaultCurrency(companyRow.rows[0]?.default_currency_code),
         homeCompanyId: user.company_id,
         role: user.role,
@@ -228,8 +229,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return sendError(reply, 401, ArabicErrors.unauthorized, 'UNAUTHORIZED');
     }
 
-    const companyRow = await pool.query<{ code: string; name: string; default_language: string; default_currency_code: string | null; is_active: boolean }>(
-      `SELECT code, name, default_language, default_currency_code, is_active FROM companies WHERE id = $1`,
+    const companyRow = await pool.query<{ code: string; name: string; default_language: string; default_currency_code: string | null; print_location: string | null; print_phone_invoice: string | null; print_phone_voucher: string | null; is_active: boolean }>(
+      `SELECT code, name, default_language, default_currency_code, print_location, print_phone_invoice, print_phone_voucher, is_active FROM companies WHERE id = $1`,
       [activeCompanyId],
     );
     if (companyRow.rows.length === 0 || !companyRow.rows[0].is_active) {
@@ -248,6 +249,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         companyCode: companyRow.rows[0].code,
         companyName: companyRow.rows[0].name,
         companyDefaultLanguage: companyRow.rows[0].default_language === 'tr' ? 'tr' : 'ar',
+        branchPrint: { location: companyRow.rows[0].print_location ?? null, phoneInvoice: companyRow.rows[0].print_phone_invoice ?? null, phoneVoucher: companyRow.rows[0].print_phone_voucher ?? null },
         companyDefaultCurrency: effectiveDefaultCurrency(companyRow.rows[0].default_currency_code),
         homeCompanyId: user.company_id,
         role: user.role,
@@ -289,8 +291,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const parsed = switchCompanyBodySchema.safeParse(request.body);
     if (!parsed.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
 
-    const companyRow = await pool.query<{ id: string; code: string; name: string; default_language: string; default_currency_code: string | null; is_active: boolean }>(
-      'SELECT id, code, name, default_language, default_currency_code, is_active FROM companies WHERE id = $1',
+    const companyRow = await pool.query<{ id: string; code: string; name: string; default_language: string; default_currency_code: string | null; print_location: string | null; print_phone_invoice: string | null; print_phone_voucher: string | null; is_active: boolean }>(
+      'SELECT id, code, name, default_language, default_currency_code, print_location, print_phone_invoice, print_phone_voucher, is_active FROM companies WHERE id = $1',
       [parsed.data.companyId],
     );
     if (companyRow.rows.length === 0) {
@@ -341,6 +343,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         companyCode: companyRow.rows[0].code,
         companyName: companyRow.rows[0].name,
         companyDefaultLanguage: companyRow.rows[0].default_language === 'tr' ? 'tr' : 'ar',
+        branchPrint: { location: companyRow.rows[0].print_location ?? null, phoneInvoice: companyRow.rows[0].print_phone_invoice ?? null, phoneVoucher: companyRow.rows[0].print_phone_voucher ?? null },
         companyDefaultCurrency: effectiveDefaultCurrency(companyRow.rows[0].default_currency_code),
         homeCompanyId: user.company_id,
         role: user.role,

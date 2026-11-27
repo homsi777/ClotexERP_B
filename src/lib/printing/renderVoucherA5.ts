@@ -7,18 +7,19 @@ import {
 } from './voucherNarrative';
 import { voucherPurposeAr } from '../voucherPurpose';
 import i18n from '../../i18n/config';
+import { getBranchPrintInfo } from './branchPrintInfo';
 
 const t = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns: 'terminology', ...options });
 const amountToWords = (amount: number, currencyCode: string) =>
   i18n.language === 'ar' ? amountToArabicWords(amount, currencyCode) : amountToTurkishWords(amount, currencyCode);
 
-const NAVY = '#2C405A';
-const GOLD = '#C4A962';
+const NAVY = '#4C3890';
+const GOLD = '#B89854';
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
 
 const getContact = () => ({
-  location: t('documentFooter.location'),
-  phone: '+963 944 555 080',
+  location: getBranchPrintInfo()?.location || t('documentFooter.location'),
+  phone: getBranchPrintInfo()?.phoneVoucher || '+963 944 555 080',
   receiptSlogan: t('documentFooter.voucherReceiptSlogan'),
   paymentSlogan: t('documentFooter.voucherPaymentSlogan'),
 });
@@ -81,10 +82,10 @@ function formatAmountDisplay(amount: string, currencyCode: string): string {
   const code = currencyCode.trim().toUpperCase() || 'USD';
   const formatted = Number.isFinite(num)
     ? num % 1 === 0
-      ? String(Math.round(num))
-      : num.toFixed(2)
+      ? Math.round(num).toLocaleString('en-US')
+      : num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : String(amount ?? '0');
-  return `${formatted} ${code}`;
+  return `${code} ${formatted}`;
 }
 
 function iconSvg(kind: 'user' | 'pin' | 'tag' | 'calendar' | 'wallet' | 'doc' | 'receipt' | 'phone' | 'mail' | 'check' | 'star' | 'shield'): string {
@@ -116,22 +117,13 @@ function metaRow(icon: string, label: string, value: string): string {
 function renderVoucherFooterHtml(isReceipt: boolean): string {
   const contact = getContact();
   const slogan = isReceipt ? contact.receiptSlogan : contact.paymentSlogan;
-  const sloganIcon = isReceipt ? iconSvg('star') : iconSvg('shield');
-  const phoneHtml = `<span class="footer-phone ltr">${esc(contact.phone)}</span>`;
-
   return `
       <div class="footer-bar">
         <table class="footer-table" dir="rtl">
           <tr>
-            <td class="footer-right" style="width:34%;">
-              <span class="footer-inline">${iconSvg('pin')}<span>${esc(contact.location)}</span></span>
-            </td>
-            <td class="footer-center" style="width:32%;">
-              <span class="footer-inline footer-inline-center">${iconSvg('phone')}${phoneHtml}</span>
-            </td>
-            <td class="footer-left" style="width:34%;">
-              <span class="footer-inline">${sloganIcon}<span>${esc(slogan)}</span></span>
-            </td>
+            <td class="footer-right" style="width:34%;"><span>${esc(contact.location)}</span></td>
+            <td class="footer-center" style="width:32%;"><span class="footer-phone ltr">${esc(contact.phone)}</span></td>
+            <td class="footer-left" style="width:34%;"><span>${esc(slogan)}</span></td>
           </tr>
         </table>
       </div>`;
@@ -168,252 +160,74 @@ function renderSignFieldsHtml(): string {
 }
 
 function voucherStyles(accent: string, accentSoft: string, bw: boolean): string {
-  const accentColor = bw ? '#111111' : accent;
-  const accentBg = bw ? '#f5f5f5' : accentSoft;
-  const footerBg = bw ? '#ffffff' : NAVY;
-  const footerText = bw ? '#111111' : '#ffffff';
-  const footerIcon = bw ? '#333333' : GOLD;
-  const footerBorder = bw ? '2px solid #111' : 'none';
+  const ink = bw ? '#111111' : NAVY;
+  const soft = bw ? '#f5f5f5' : '#f1edfa';
+  const line = bw ? '#999999' : '#ddd5ee';
+  const gold = bw ? '#111111' : GOLD;
 
   return `
-    @page { size: A5 portrait; margin: 0; }
+    @page { size: A4 portrait; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 148mm;
-      min-height: 210mm;
+      width: 210mm;
+      min-height: 297mm;
       font-family: ${FONT};
-      color: #111;
+      color: #1f1f1f;
       background: #fff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .page {
-      width: 148mm;
-      min-height: 210mm;
-      display: flex;
-      flex-direction: column;
-      padding: 7mm 8mm 0;
-    }
+    .page { width: 210mm; min-height: 297mm; display: flex; flex-direction: column; padding: 8mm 10mm 6mm; }
     .page-content { flex: 1 1 auto; }
-    .header-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+    .header-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
     .header-table td { vertical-align: middle; }
-    .logo { height: 42px; width: auto; object-fit: contain; }
-    .page-no { font-size: 9px; color: #64748b; text-align: left; direction: ltr; }
-    .doc-title {
-      text-align: center;
-      font-size: 26px;
-      font-weight: 900;
-      color: ${accentColor};
-      margin: 2px 0 6px;
-    }
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: ${accentBg};
-      color: ${accentColor};
-      border: 1px solid ${accentColor};
-      border-radius: 999px;
-      padding: 4px 12px;
-      font-size: 10px;
-      font-weight: 800;
-    }
-    .status-wrap { text-align: center; margin-bottom: 8px; }
-    .status-badge .ico { width: 12px; height: 12px; fill: ${accentColor}; }
-    .accent-bar {
-      height: 3px;
-      background: ${accentColor};
-      border-radius: 2px;
-      margin-bottom: 10px;
-    }
-    .cards-table { width: 100%; border-collapse: separate; border-spacing: 6px 0; margin-bottom: 8px; }
+    .brand-cell { display: flex; align-items: center; gap: 10px; direction: ltr; }
+    .logo { height: 62px; width: auto; object-fit: contain; }
+    .brand-tag { font-size: 11px; color: ${ink}; font-weight: 500; }
+    .page-no { font-size: 9px; color: #444; text-align: right; direction: ltr; vertical-align: top; }
+    .doc-title { text-align: center; font-size: 30px; font-weight: 900; color: ${ink}; margin: 0 0 4px; line-height: 1.2; }
+    .doc-sub { text-align: center; font-size: 12px; color: ${ink}; font-weight: 500; }
+    .gold-rule { height: 1.5px; background: ${gold}; margin: 8px 0 30px; }
+    .cards-table { width: 100%; border-collapse: separate; border-spacing: 14px 0; margin: 0 -14px 30px; width: calc(100% + 28px); }
     .cards-table td { width: 50%; vertical-align: top; }
-    .card {
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      padding: 8px 10px;
-      min-height: 118px;
-      background: #fff;
-    }
-    .card-head {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 10px;
-      font-weight: 900;
-      color: ${accentColor};
-      margin-bottom: 6px;
-      padding-bottom: 4px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .card-head .ico { width: 13px; height: 13px; fill: ${accentColor}; }
-    .meta-table { width: 100%; border-collapse: collapse; }
-    .meta-label {
-      font-size: 8.5px;
-      color: #64748b;
-      font-weight: 700;
-      padding: 3px 0;
-      white-space: nowrap;
-      vertical-align: top;
-      width: 38%;
-    }
-    .meta-label .ico {
-      width: 11px; height: 11px; fill: #94a3b8;
-      vertical-align: -2px; margin-inline-end: 3px;
-    }
-    .meta-value {
-      font-size: 9px;
-      font-weight: 800;
-      color: #0f172a;
-      padding: 3px 0;
-      text-align: left;
-      word-break: break-word;
-    }
-    .type-pill {
-      display: inline-block;
-      background: ${accentBg};
-      color: ${accentColor};
-      border: 1px solid ${accentColor};
-      border-radius: 999px;
-      padding: 1px 8px;
-      font-size: 8px;
-      font-weight: 900;
-    }
-    .amount-box {
-      border: 2px solid ${accentColor};
-      border-radius: 12px;
-      padding: 10px 12px;
-      text-align: center;
-      margin: 8px 0;
-      background: ${bw ? '#fff' : accentBg};
-    }
-    .amount-label {
-      font-size: 10px;
-      font-weight: 800;
-      color: ${accentColor};
-      margin-bottom: 4px;
-    }
-    .amount-value {
-      font-size: 30px;
-      font-weight: 900;
-      color: ${accentColor};
-      line-height: 1.1;
-      letter-spacing: 0.5px;
-    }
-    .amount-words {
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px dashed #cbd5e1;
-      font-size: 9px;
-      color: #334155;
-      font-weight: 700;
-      line-height: 1.5;
-    }
-    .narrative-box {
-      border: 1px solid #cbd5e1;
-      border-right: 4px solid ${accentColor};
-      border-radius: 8px;
-      padding: 10px 12px;
-      margin: 8px 0 10px;
-      background: #fafafa;
-    }
-    .narrative-head {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 10px;
-      font-weight: 900;
-      color: ${accentColor};
-      margin-bottom: 6px;
-    }
-    .narrative-head .ico { width: 13px; height: 13px; fill: ${accentColor}; }
-    .narrative-text {
-      font-size: 10.5px;
-      line-height: 1.65;
-      color: #1e293b;
-      font-weight: 600;
-    }
-    .sign-table { width: 100%; border-collapse: separate; border-spacing: 8px 0; }
-    .sign-table td {
-      width: 50%;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      padding: 8px 10px;
-      vertical-align: top;
-    }
-    .sign-title {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 9px;
-      font-weight: 900;
-      color: ${accentColor};
-      margin-bottom: 6px;
-    }
-    .sign-title .ico { width: 12px; height: 12px; fill: ${accentColor}; }
-    .sign-fields { width: 100%; border-collapse: collapse; }
-    .sign-key { font-size: 8.5px; color: #64748b; font-weight: 700; padding: 3px 0; width: 34%; }
-    .sign-val { font-size: 8.5px; font-weight: 700; padding: 3px 0; }
-    .sign-underline { border-bottom: 1px solid #94a3b8; min-width: 60px; }
-    .footer-bar {
-      background: ${footerBg};
-      color: ${footerText};
-      border-top: ${footerBorder};
-      padding: 10px 12px;
-      margin: 10px -8mm 0;
-      width: calc(100% + 16mm);
-      flex-shrink: 0;
-    }
-    .footer-bar, .footer-bar * {
-      color: ${footerText} !important;
-      -webkit-text-fill-color: ${footerText} !important;
-    }
+    .card { border: 1px solid ${line}; background: #fff; min-height: 205px; }
+    .card-head { background: ${soft}; font-size: 15px; font-weight: 900; color: ${ink}; padding: 9px 12px; text-align: right; border-bottom: 1px solid ${line}; }
+    .card-head .ico, .meta-label .ico, .narrative-head .ico, .sign-title .ico { display: none; }
+    .meta-table { width: 100%; border-collapse: collapse; margin: 4px 12px; width: calc(100% - 24px); }
+    .meta-table tr { border-bottom: 1px solid ${line}; }
+    .meta-label { font-size: 12.5px; color: ${ink}; font-weight: 900; padding: 8px 0; white-space: nowrap; vertical-align: middle; width: 40%; text-align: right; }
+    .meta-value { font-size: 11px; font-weight: 500; color: #1f1f1f; padding: 8px 0; text-align: left; word-break: break-word; vertical-align: middle; }
+    .type-pill { display: inline; background: none; border: none; color: inherit; padding: 0; font-size: inherit; font-weight: inherit; }
+    .amount-box { border: 1px solid ${line}; background: ${soft}; padding: 14px 22px 16px; text-align: center; margin: 0 0 32px; padding-top: 18px; }
+    .amount-label { font-size: 15px; font-weight: 900; color: ${ink}; margin-bottom: 14px; }
+    .amount-value { font-size: 40px; font-weight: 900; color: ${ink}; line-height: 1.1; letter-spacing: 0.5px; direction: ltr; }
+    .amount-words { margin-top: 14px; padding-top: 12px; border-top: 1px solid ${line}; font-size: 13px; color: #222; font-weight: 700; line-height: 1.6; }
+    .narrative-box { border: 1px solid ${line}; background: #fff; margin: 0 0 44px; }
+    .narrative-head { background: ${soft}; font-size: 15px; font-weight: 900; color: ${ink}; padding: 9px 12px; border-bottom: 1px solid ${line}; }
+    .narrative-text { font-size: 12.5px; line-height: 1.9; color: #1f1f1f; font-weight: 500; padding: 14px 14px 22px; min-height: 70px; }
+    .narrative-text strong { color: #1f1f1f !important; font-weight: 500; }
+    .sign-table { width: calc(100% + 28px); margin: 0 -14px; border-collapse: separate; border-spacing: 14px 0; }
+    .sign-table td { width: 50%; border: 1px solid ${line}; padding: 0; vertical-align: top; background: #fff; }
+    .sign-title { background: ${soft}; text-align: center; font-size: 14px; font-weight: 900; color: ${ink}; padding: 8px 10px; border-bottom: 1px solid ${line}; }
+    .sign-table .sign-fields td { border: none; border-radius: 0; background: none; width: auto; }
+    .sign-fields { width: calc(100% - 28px); margin: 14px 14px 18px; border-collapse: collapse; }
+    .sign-key { font-size: 12px; color: ${ink}; font-weight: 500; padding: 12px 0 6px; width: 28%; text-align: right; }
+    .sign-val { padding: 12px 0 6px; }
+    .sign-table .sign-fields td.sign-underline { border-bottom: 1px solid ${line}; min-width: 60px; }
+    .footer-bar { border-top: 1.5px solid ${gold}; padding: 8px 4px 0; margin: 14px 0 0; width: 100%; flex-shrink: 0; }
+    .footer-bar, .footer-bar * { color: ${ink} !important; -webkit-text-fill-color: ${ink} !important; }
     .footer-table { width: 100%; border-collapse: collapse; }
-    .footer-table td { vertical-align: middle; font-size: 7.5px; line-height: 1.55; font-weight: 700; }
+    .footer-table td { vertical-align: middle; font-size: 9.5px; line-height: 1.55; font-weight: 500; }
     .footer-right { text-align: right; }
     .footer-center { text-align: center; }
     .footer-left { text-align: left; }
-    .footer-inline {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      max-width: 100%;
-    }
-    .footer-inline-center { justify-content: center; margin: 0 auto; }
-    .footer-inline .ico {
-      width: 11px;
-      height: 11px;
-      fill: ${footerIcon};
-      flex-shrink: 0;
-    }
-    .footer-phone {
-      color: ${footerText} !important;
-      -webkit-text-fill-color: ${footerText} !important;
-      text-decoration: none !important;
-      font-weight: 800;
-      letter-spacing: 0.2px;
-      white-space: nowrap;
-    }
-    .footer-bar a,
-    .footer-bar a:link,
-    .footer-bar a:visited,
-    .footer-bar a:hover,
-    .footer-bar a:active {
-      color: ${footerText} !important;
-      text-decoration: none !important;
-      pointer-events: none;
-    }
+    .footer-phone { text-decoration: none !important; font-weight: 500; letter-spacing: 0.2px; white-space: nowrap; }
     .ltr { direction: ltr; unicode-bidi: embed; }
 
     @media print {
-      html, body {
-        width: 148mm;
-        margin: 0;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
+      html, body { width: 210mm; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .page { min-height: auto; overflow: visible; }
-      .card, .amount-box, .narrative-box, .footer-bar, .status-badge, .type-pill {
+      .card, .amount-box, .narrative-box, .footer-bar, .card-head, .narrative-head, .sign-title {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
@@ -424,7 +238,7 @@ function voucherStyles(accent: string, accentSoft: string, bw: boolean): string 
 /** أنماط html2canvas — نفس قواعد الطباعة، مصدر واحد مع القالب */
 export const VOUCHER_A5_PDF_EXPORT_CSS = `
   html, body {
-    width: 148mm !important;
+    width: 210mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
@@ -432,102 +246,27 @@ export const VOUCHER_A5_PDF_EXPORT_CSS = `
     print-color-adjust: exact !important;
   }
   .page {
-    width: 148mm !important;
-    min-height: 210mm !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
     display: flex !important;
     flex-direction: column !important;
-    padding: 7mm 8mm 0 !important;
+    padding: 8mm 10mm 6mm !important;
     overflow: visible !important;
     background: #ffffff !important;
   }
   .page-content { flex: 1 1 auto !important; }
-  .status-wrap { text-align: center !important; width: 100% !important; margin-bottom: 8px !important; }
-  .status-badge {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 5px !important;
-    border-radius: 14px !important;
-    padding: 4px 12px !important;
-    line-height: 1.25 !important;
-    box-sizing: border-box !important;
-    white-space: nowrap !important;
-    overflow: visible !important;
+  .brand-cell { display: flex !important; align-items: center !important; }
+  .cards-table, .sign-table, .header-table, .meta-table, .footer-table { border-collapse: collapse !important; }
+  .cards-table { border-collapse: separate !important; border-spacing: 14px 0 !important; }
+  .sign-table { border-collapse: separate !important; border-spacing: 14px 0 !important; }
+  .meta-table { table-layout: fixed !important; width: calc(100% - 24px) !important; }
+  .meta-label { width: 40% !important; }
+  .meta-value { width: 60% !important; text-align: left !important; overflow: visible !important; vertical-align: middle !important; }
+  .card, .amount-box, .narrative-box, .footer-bar, .card-head, .narrative-head, .sign-title, .doc-title, .amount-value {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  .status-badge img, .status-badge .ico {
-    width: 12px !important;
-    height: 12px !important;
-    flex-shrink: 0 !important;
-    margin: 0 !important;
-    vertical-align: middle !important;
-  }
-  .status-badge span, .status-text {
-    display: inline !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    color: inherit !important;
-    -webkit-text-fill-color: inherit !important;
-    line-height: 1.25 !important;
-  }
-  .type-pill {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border-radius: 10px !important;
-    padding: 2px 10px 3px !important;
-    min-width: 40px !important;
-    min-height: 17px !important;
-    text-align: center !important;
-    line-height: 1.25 !important;
-    box-sizing: border-box !important;
-    white-space: nowrap !important;
-    vertical-align: middle !important;
-    overflow: visible !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .meta-value .type-pill { float: none !important; }
-  .card-head, .narrative-head, .sign-title {
-    display: block !important;
-    line-height: 1.4 !important;
-  }
-  .card-head span, .narrative-head span, .sign-title span {
-    display: inline !important;
-    vertical-align: middle !important;
-  }
-  .card-head img, .narrative-head img, .sign-title img,
-  .meta-label img, .footer-inline img, .status-badge img {
-    display: inline-block !important;
-    vertical-align: middle !important;
-  }
-  .cards-table, .sign-table, .header-table, .meta-table, .footer-table {
-    border-collapse: collapse !important;
-  }
-  .cards-table { border-collapse: separate !important; border-spacing: 6px 0 !important; }
-  .sign-table { border-collapse: separate !important; border-spacing: 8px 0 !important; }
-  .meta-table { table-layout: fixed !important; width: 100% !important; }
-  .meta-label { width: 38% !important; }
-  .meta-value { width: 62% !important; text-align: left !important; overflow: visible !important; vertical-align: middle !important; }
-  .card, .amount-box, .narrative-box, .footer-bar,
-  .status-badge, .type-pill, .doc-title, .amount-value {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .amount-box { border-width: 2px !important; border-style: solid !important; }
-  .narrative-text { font-weight: 600 !important; }
-  .footer-bar {
-    flex-shrink: 0 !important;
-    margin: 10px -8mm 0 !important;
-    width: calc(100% + 16mm) !important;
-  }
-  .footer-bar, .footer-bar * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  .footer-inline { display: inline-flex !important; align-items: center !important; }
-  .ico, img.ico { display: inline-block !important; vertical-align: middle !important; }
+  .footer-bar { flex-shrink: 0 !important; margin: 14px 0 0 !important; width: 100% !important; }
 `;
 
 /** html2canvas لا يرسم SVG — نحوّلها لصور قبل الالتقاط */
@@ -583,13 +322,13 @@ export function prepareVoucherDocumentForCanvas(doc: Document): void {
   });
 }
 
-export const A5_CAPTURE_WIDTH_PX = Math.round((148 / 25.4) * 96);
+export const A5_CAPTURE_WIDTH_PX = Math.round((210 / 25.4) * 96); // الاسم قديم: القالب المعتمد صار A4
 
 export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: VoucherRenderOptions = {}): string {
   const bw = options.colorMode === 'bw';
   const isReceipt = data.voucherType === 'RECEIPT';
-  const accent = isReceipt ? '#059669' : '#dc2626';
-  const accentSoft = isReceipt ? '#ecfdf5' : '#fef2f2';
+  const accent = NAVY;
+  const accentSoft = '#f1edfa';
   const accentColor = bw ? '#111111' : accent;
   const typeLabel = isReceipt ? t('voucher.typeReceipt') : t('voucher.typePayment');
   const docTitle = isReceipt ? t('voucher.docTitleReceipt') : t('voucher.docTitlePayment');
@@ -622,16 +361,12 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
       <div class="page-content">
         <table class="header-table">
           <tr>
-            <td style="width:34%;"><img src="${BRAND.logoInline}" alt="${esc(BRAND.name)}" class="logo" /></td>
-            <td style="width:32%;"></td>
-            <td style="width:34%;"><div class="page-no">1 / 1</div></td>
+            <td style="width:25%;"><div class="page-no">1 / 1</div></td>
+            <td style="width:40%;"><div class="doc-title">${docTitle}</div><div class="doc-sub">${statusText}</div></td>
+            <td style="width:35%;"><div class="brand-cell"><img src="${BRAND.logoInline}" alt="${esc(BRAND.name)}" class="logo" /><span class="brand-tag">${esc(BRAND.taglineDocs)}</span></div></td>
           </tr>
         </table>
-        <div class="doc-title">${docTitle}</div>
-        <div class="status-wrap">
-          <div class="status-badge">${iconSvg('check')}<span class="status-text">${statusText}</span></div>
-        </div>
-        <div class="accent-bar"></div>
+        <div class="gold-rule"></div>
 
         <table class="cards-table">
           <tr>
@@ -695,7 +430,7 @@ export function renderVoucherA5BodyHtml(data: VoucherPrintData, options: Voucher
 
 export function renderVoucherA5Html(data: VoucherPrintData, options: VoucherRenderOptions = {}): string {
   const isReceipt = data.voucherType === 'RECEIPT';
-  const accent = isReceipt ? '#059669' : '#dc2626';
+  const accent = NAVY;
   const bw = options.colorMode === 'bw';
   const body = renderVoucherA5BodyHtml(data, options);
   return `<!DOCTYPE html>
@@ -704,7 +439,7 @@ export function renderVoucherA5Html(data: VoucherPrintData, options: VoucherRend
   <meta charset="UTF-8" />
   <meta name="format-detection" content="telephone=no,email=no,address=no" />
   <title>${isReceipt ? t('voucher.docTitleReceipt') : t('voucher.docTitlePayment')}</title>
-  <style>${voucherStyles(accent, isReceipt ? '#ecfdf5' : '#fef2f2', bw)}</style>
+  <style>${voucherStyles(accent, '#f1edfa', bw)}</style>
 </head>
 <body>${body}</body>
 </html>`;

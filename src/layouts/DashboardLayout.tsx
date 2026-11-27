@@ -312,24 +312,24 @@ const Topbar = () => {
   };
 
   const parentBtn = (parentActive: boolean) =>
-    `flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors font-medium text-sm border ${
+    `flex items-center gap-1.5 px-3 py-2 rounded-xl transition-colors font-medium text-sm border ${
       parentActive
-        ? 'bg-[var(--ui-nav-active-bg)] text-[var(--ui-nav-active-text)] border-[var(--ui-nav-active-border)] shadow-sm'
+        ? 'bg-[var(--ui-accent)] text-white border-transparent shadow-md shadow-[var(--ui-accent)]/25'
         : 'text-[var(--text-muted)] border-transparent hover:bg-[var(--border-subtle)] hover:text-[var(--text-heading)]'
     }`;
 
   const parentIcon = (parentActive: boolean) =>
-    parentActive ? 'text-[var(--ui-nav-active-icon)]' : '';
+    parentActive ? 'text-white' : '';
 
   const chevronCls = (parentActive: boolean) =>
     `w-3 h-3 transition-transform group-hover:rotate-180 ${
-      parentActive ? 'text-[var(--ui-accent-muted)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-heading)]'
+      parentActive ? 'text-white/80' : 'text-[var(--text-muted)] group-hover:text-[var(--text-heading)]'
     }`;
 
   const linkTopCls = (parentActive: boolean) =>
-    `flex shrink-0 items-center gap-1.5 px-3 py-2 rounded-lg transition-colors font-medium text-sm border ${
+    `flex shrink-0 items-center gap-1.5 px-3 py-2 rounded-xl transition-colors font-medium text-sm border ${
       parentActive
-        ? 'bg-[var(--ui-nav-active-bg)] text-[var(--ui-nav-active-text)] border-[var(--ui-nav-active-border)] shadow-sm'
+        ? 'bg-[var(--ui-accent)] text-white border-transparent shadow-md shadow-[var(--ui-accent)]/25'
         : 'text-[var(--text-muted)] border-transparent hover:bg-[var(--border-subtle)] hover:text-[var(--text-heading)]'
     }`;
 
@@ -543,22 +543,13 @@ const Topbar = () => {
             className="flex min-w-0 flex-1 items-center justify-center gap-2 md:flex-none md:gap-3 rounded-xl transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ui-accent)]"
             aria-label={t('home', { ns: 'nav', defaultValue: 'الصفحة الرئيسية' })}
           >
-            <div className="grid h-10 w-10 md:h-12 md:w-12 place-items-center rounded-xl bg-white ring-1 ring-[var(--border-default)] shadow-sm transition-colors duration-300 shrink-0">
-              <img
-                src={BRAND.logoPng}
-                alt=""
-                className="h-8 w-8 md:h-9 md:w-9 object-contain"
-                draggable={false}
-              />
-            </div>
-            <div className="leading-tight min-w-0 text-center md:text-start">
-              <h1 className="text-lg md:text-2xl font-bold tracking-wider text-[var(--text-heading)] truncate">
-                {BRAND.name}
-              </h1>
-              <span className="text-[9px] md:text-[10px] font-medium uppercase tracking-[0.18em] md:tracking-[0.22em] text-[var(--text-muted)]">
-                {BRAND.tagline}
-              </span>
-            </div>
+            <img
+              src={BRAND.logoPng}
+              alt={BRAND.name}
+              className="h-12 w-auto select-none object-contain md:h-[4.25rem]"
+              draggable={false}
+            />
+            <h1 className="sr-only">{BRAND.name}</h1>
           </Link>
         </div>
         <div className="flex items-center gap-2 shrink-0 md:order-1 md:justify-self-start md:gap-3">
