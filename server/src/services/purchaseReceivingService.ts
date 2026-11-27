@@ -122,13 +122,13 @@ const lineIn = z.object({
   unit: z.enum(['meter', 'yard', 'kg', 'package', 'piece']), quantity: z.coerce.number().positive().optional(), conversionFactor: z.coerce.number().positive().optional(), quantityInInvoiceUnit: z.coerce.number().nonnegative().optional(),
   packageCount: z.coerce.number().nonnegative().optional(), catalogItemId: z.string().uuid().nullable().optional(), operatingWarehouseId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(), rolls: z.array(rollIn).max(500).optional(), lots: z.array(lotIn).max(200).optional(),
 }).strict();
-export const receiptInput = z.object({ invoiceId: z.string().uuid().nullable().optional(), supplierId: z.string().uuid().nullable().optional(), warehouseId: z.string().uuid().nullable().optional(), notes: z.string().trim().max(500).optional(), lines: z.array(lineIn).min(1).max(100) }).strict();
+export const receiptInput = z.object({ invoiceId: z.string().uuid().nullable().optional(), supplierId: z.string().uuid().nullable().optional(), warehouseId: z.string().uuid().nullable().optional(), notes: z.string().trim().max(500).optional(), clientRequestId: z.string().uuid().optional(), allowOver: z.boolean().optional(), lines: z.array(lineIn).min(1).max(100) }).strict();
 export type ReceiptInput = z.infer<typeof receiptInput>;
 
 interface InvRow { id: string; invoice_no: string; supplier_id: string; currency_code: string; receive_via_warehouse: boolean; document_status: string }
 interface InvLineRow { id: string; invoice_id: string; line_no: number; unit: string; quantity: string; unit_cost: string; description: string; material_kind: string | null; metadata: Record<string, unknown>; warehouse_id: string | null; catalog_item_id?: string | null }
 
-export async function createReceipt(client: PoolClient, companyId: string, userId: string, raw: unknown, opts: { warehouseScope?: string[] | null } = {}): Promise<{ id: string; receiptNo: string; status: string }> {
+export async function createReceipt(client: PoolClient, companyId: string, userId: string, raw: unknown, opts: { warehouseScope?: string[] | null; canOver?: boolean } = {}): Promise<{ id: string; receiptNo: string; status: string; duplicate?: boolean; rollIds: string[] }> {
   const parsed = receiptInput.safeParse(raw);
   if (!parsed.success) throw fail('بيانات الاستلام غير صالحة');
   const d = parsed.data;
@@ -150,12 +150,21 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
     if (!(await client.query('SELECT 1 FROM suppliers WHERE id=$1 AND company_id=$2', [d.supplierId, companyId])).rows.length) throw fail('المورد غير موجود', 'NOT_FOUND');
   }
 
+  // تكرار الضغط/إعادة الإرسال بنفس المعرّف: يُرجَع الاستلام المحفوظ ولا يُدخَل مخزون ثانٍ
+  if (d.clientRequestId) {
+    const dup = (await client.query<{ id: string; receipt_no: string; status: string }>('SELECT id, receipt_no, status FROM purchase_receipts WHERE company_id=$1 AND client_request_id=$2', [companyId, d.clientRequestId])).rows[0];
+    if (dup) {
+      const prev = await client.query<{ rid: string }>('SELECT unnest(roll_ids)::text AS rid FROM purchase_receipt_lines WHERE receipt_id=$1 AND company_id=$2', [dup.id, companyId]);
+      return { id: dup.id, receiptNo: dup.receipt_no, status: dup.status, duplicate: true, rollIds: prev.rows.map((r) => r.rid) };
+    }
+  }
   const receiptNo = await generateSequentialDocumentNo(client, companyId, 'PURCHASE_RECEIPT');
   const rIns = await client.query<{ id: string }>(
-    `INSERT INTO purchase_receipts (company_id, receipt_no, invoice_id, supplier_id, warehouse_id, status, notes, created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [companyId, receiptNo, inv?.id ?? null, inv?.supplier_id ?? d.supplierId ?? null, d.warehouseId ?? null, inv ? 'RECEIVED' : 'PENDING_INVOICE', d.notes ?? null, userId]);
+    `INSERT INTO purchase_receipts (company_id, receipt_no, invoice_id, supplier_id, warehouse_id, status, notes, created_by_user_id, client_request_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+    [companyId, receiptNo, inv?.id ?? null, inv?.supplier_id ?? d.supplierId ?? null, d.warehouseId ?? null, inv ? 'RECEIVED' : 'PENDING_INVOICE', d.notes ?? null, userId, d.clientRequestId ?? null]);
   const receiptId = rIns.rows[0].id;
   const supplierId = inv?.supplier_id ?? d.supplierId ?? null;
+  const allRollIds: string[] = [];
 
   for (const ln of d.lines) {
     let il: InvLineRow | null = null;
@@ -242,14 +251,23 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
 
     // مقارنة بوحدة الفاتورة (إن وُجد بند)
     const conv = il ? toInvoiceUnit(qty, unit, il.unit, ln.conversionFactor, ln.quantityInInvoiceUnit) : { qty, factor: null };
+    // يُمنع تجاوز المتبقي من بند الفاتورة إلا بصلاحية (مدير/مسؤول) وبتأكيد صريح allowOver
+    if (il) {
+      const prev = Number((await client.query<{ s: string }>(`SELECT COALESCE(SUM(rl.quantity_in_invoice_unit),0)::text AS s FROM purchase_receipt_lines rl JOIN purchase_receipts r ON r.id=rl.receipt_id AND r.status <> 'CANCELLED' WHERE rl.company_id=$1 AND rl.invoice_line_id=$2`, [companyId, il.id])).rows[0].s);
+      const remainingBefore = Math.max(0, Number(il.quantity) - prev);
+      if (conv.qty > remainingBefore + 0.0005 && !(opts.canOver && d.allowOver)) {
+        throw fail(`الكمية المستلمة (${Math.round(conv.qty * 1000) / 1000}) تتجاوز المتبقي (${Math.round(remainingBefore * 1000) / 1000}) لهذا البند — تجاوز المتبقي يتطلب صلاحية المدير`);
+      }
+    }
     await client.query(
       `INSERT INTO purchase_receipt_lines (company_id, receipt_id, invoice_line_id, description, material_kind, unit, quantity, quantity_in_invoice_unit, conversion_factor, package_count, location_id, details, roll_ids, yarn_lot_ids, catalog_item_id, operating_warehouse_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::uuid[],$14::uuid[],$15,$16)`,
       [companyId, receiptId, il?.id ?? null, description, kind, unit, qty, Math.round(conv.qty * 1000) / 1000, conv.factor, ln.packageCount ?? null, ln.locationId ?? null,
         JSON.stringify({ rolls: ln.rolls?.length ?? 0, lots: ln.lots?.length ?? 0, supplierSideUnit: il?.unit ?? null }), rollIds, lotIds, catalogItemId, opWhId]);
+    allRollIds.push(...rollIds);
     if (il && !il.warehouse_id && d.warehouseId) await client.query('UPDATE purchase_invoice_lines SET warehouse_id=$3 WHERE id=$1 AND company_id=$2', [il.id, companyId, d.warehouseId]);
   }
-  return { id: receiptId, receiptNo, status: inv ? 'RECEIVED' : 'PENDING_INVOICE' };
+  return { id: receiptId, receiptNo, status: inv ? 'RECEIVED' : 'PENDING_INVOICE', rollIds: allRollIds };
 }
 
 /** ربط استلام معلّق بفاتورة وصلت لاحقاً: لا قيد مالي؛ تُحدَّث تكلفة الأتواب/الدفعات من بند الفاتورة. */

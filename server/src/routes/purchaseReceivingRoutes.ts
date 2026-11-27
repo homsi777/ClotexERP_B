@@ -61,10 +61,22 @@ export const purchaseReceivingRoutes: FastifyPluginAsync = async (app) => {
     const client = await getPool().connect();
     try {
       await client.query('BEGIN');
-      const r = await createReceipt(client, req.user!.companyId, req.user!.sub, req.body, { warehouseScope: req.user!.warehouseIds });
+      const u = req.user!;
+      const canOver = u.role === 'admin' || u.role === 'manager';
+      const r = await createReceipt(client, u.companyId, u.sub, req.body, { warehouseScope: u.warehouseIds, canOver });
       await client.query('COMMIT');
-      return reply.status(201).send({ ok: true, data: r });
-    } catch (e) { await client.query('ROLLBACK'); return handle(reply, e); } finally { client.release(); }
+      return reply.status(r.duplicate ? 200 : 201).send({ ok: true, data: r });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      // سباق ضغطتين متزامنتين بنفس المعرّف: الثانية تُرجع الاستلام المحفوظ
+      const err = e as { code?: string; constraint?: string };
+      const rid = (req.body as { clientRequestId?: string } | undefined)?.clientRequestId;
+      if (err.code === '23505' && /client_request/.test(err.constraint ?? '') && rid) {
+        const dup = await getPool().query<{ id: string; receipt_no: string; status: string }>('SELECT id, receipt_no, status FROM purchase_receipts WHERE company_id=$1 AND client_request_id=$2', [req.user!.companyId, rid]);
+        if (dup.rows[0]) return reply.status(200).send({ ok: true, data: { id: dup.rows[0].id, receiptNo: dup.rows[0].receipt_no, status: dup.rows[0].status, duplicate: true, rollIds: (await getPool().query<{ rid: string }>('SELECT unnest(roll_ids)::text AS rid FROM purchase_receipt_lines WHERE receipt_id=$1', [dup.rows[0].id])).rows.map((x) => x.rid) } });
+      }
+      return handle(reply, e);
+    } finally { client.release(); }
   });
 
   app.post('/receipts/:id/link', async (req, reply) => {
