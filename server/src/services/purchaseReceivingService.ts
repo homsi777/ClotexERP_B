@@ -128,7 +128,7 @@ export type ReceiptInput = z.infer<typeof receiptInput>;
 interface InvRow { id: string; invoice_no: string; supplier_id: string; currency_code: string; receive_via_warehouse: boolean; document_status: string }
 interface InvLineRow { id: string; invoice_id: string; line_no: number; unit: string; quantity: string; unit_cost: string; description: string; material_kind: string | null; metadata: Record<string, unknown>; warehouse_id: string | null; catalog_item_id?: string | null }
 
-export async function createReceipt(client: PoolClient, companyId: string, userId: string, raw: unknown, opts: { warehouseScope?: string[] | null; canOver?: boolean } = {}): Promise<{ id: string; receiptNo: string; status: string; duplicate?: boolean }> {
+export async function createReceipt(client: PoolClient, companyId: string, userId: string, raw: unknown, opts: { warehouseScope?: string[] | null; canOver?: boolean } = {}): Promise<{ id: string; receiptNo: string; status: string; duplicate?: boolean; rollIds: string[] }> {
   const parsed = receiptInput.safeParse(raw);
   if (!parsed.success) throw fail('بيانات الاستلام غير صالحة');
   const d = parsed.data;
@@ -153,7 +153,10 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
   // تكرار الضغط/إعادة الإرسال بنفس المعرّف: يُرجَع الاستلام المحفوظ ولا يُدخَل مخزون ثانٍ
   if (d.clientRequestId) {
     const dup = (await client.query<{ id: string; receipt_no: string; status: string }>('SELECT id, receipt_no, status FROM purchase_receipts WHERE company_id=$1 AND client_request_id=$2', [companyId, d.clientRequestId])).rows[0];
-    if (dup) return { id: dup.id, receiptNo: dup.receipt_no, status: dup.status, duplicate: true };
+    if (dup) {
+      const prev = await client.query<{ rid: string }>('SELECT unnest(roll_ids)::text AS rid FROM purchase_receipt_lines WHERE receipt_id=$1 AND company_id=$2', [dup.id, companyId]);
+      return { id: dup.id, receiptNo: dup.receipt_no, status: dup.status, duplicate: true, rollIds: prev.rows.map((r) => r.rid) };
+    }
   }
   const receiptNo = await generateSequentialDocumentNo(client, companyId, 'PURCHASE_RECEIPT');
   const rIns = await client.query<{ id: string }>(
@@ -161,6 +164,7 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
     [companyId, receiptNo, inv?.id ?? null, inv?.supplier_id ?? d.supplierId ?? null, d.warehouseId ?? null, inv ? 'RECEIVED' : 'PENDING_INVOICE', d.notes ?? null, userId, d.clientRequestId ?? null]);
   const receiptId = rIns.rows[0].id;
   const supplierId = inv?.supplier_id ?? d.supplierId ?? null;
+  const allRollIds: string[] = [];
 
   for (const ln of d.lines) {
     let il: InvLineRow | null = null;
@@ -260,9 +264,10 @@ export async function createReceipt(client: PoolClient, companyId: string, userI
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::uuid[],$14::uuid[],$15,$16)`,
       [companyId, receiptId, il?.id ?? null, description, kind, unit, qty, Math.round(conv.qty * 1000) / 1000, conv.factor, ln.packageCount ?? null, ln.locationId ?? null,
         JSON.stringify({ rolls: ln.rolls?.length ?? 0, lots: ln.lots?.length ?? 0, supplierSideUnit: il?.unit ?? null }), rollIds, lotIds, catalogItemId, opWhId]);
+    allRollIds.push(...rollIds);
     if (il && !il.warehouse_id && d.warehouseId) await client.query('UPDATE purchase_invoice_lines SET warehouse_id=$3 WHERE id=$1 AND company_id=$2', [il.id, companyId, d.warehouseId]);
   }
-  return { id: receiptId, receiptNo, status: inv ? 'RECEIVED' : 'PENDING_INVOICE' };
+  return { id: receiptId, receiptNo, status: inv ? 'RECEIVED' : 'PENDING_INVOICE', rollIds: allRollIds };
 }
 
 /** ربط استلام معلّق بفاتورة وصلت لاحقاً: لا قيد مالي؛ تُحدَّث تكلفة الأتواب/الدفعات من بند الفاتورة. */

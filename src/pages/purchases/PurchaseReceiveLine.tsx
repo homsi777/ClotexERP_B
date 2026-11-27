@@ -1,10 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Eye, Loader2, Plus, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowRight, Eye, Loader2, Plus, Printer, Trash2, Wand2, X } from 'lucide-react';
 import * as api from '../../lib/api/purchaseReceivingApi';
 import type { ReceivingInvoice, ReceivingLine } from '../../lib/api/purchaseReceivingApi';
 import { createCategory, getCategoryTree, type ApiCategory } from '../../lib/api/fabricCategoriesApi';
 import { getNextRollBarcode } from '../../lib/api/fabricRollsApi';
+import { previewRollLabels } from '../../lib/api/labelsApi';
+import { printRollLabels } from '../../lib/printing/printRollLabels';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useToast } from '../../components/NonBlockingToast';
@@ -14,13 +16,15 @@ import { useToast } from '../../components/NonBlockingToast';
  * (مع «إضافة تصنيف جديد»)، وقائمة أتواب بالباركود والطول أو الوزن. لا تُنشئ فاتورة ولا قيداً مالياً: تسجّل الكمية الفعلية فقط.
  */
 const UNIT_LABEL: Record<string, string> = { meter: 'م', yard: 'ياردة', kg: 'كغ' };
+const UNIT_NAME: Record<string, string> = { meter: 'متر', yard: 'ياردة', kg: 'كيلو' };
 const STATUS_LABEL: Record<string, string> = { NOT_RECEIVED: 'لم يُستلم', PARTIAL: 'استلام جزئي', COMPLETE: 'اكتمل الاستلام', OVER: 'زيادة' };
 const nf = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 3 });
 const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
 const inp = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100';
 const bump = (b: string) => { const m = /^(.*?)(\d+)$/.exec(b); return m ? `${m[1]}${String(Number(m[2]) + 1).padStart(m[2].length, '0')}` : b; };
 
-interface RollRow { barcode: string; qty: number; lot: string; widthCm: string; gsm: string }
+/** لقطة تفاصيل التوب وقت إضافته (الخامة/الكود/اللون قد تتغير بين توب وآخر). */
+interface RollRow { barcode: string; qty: number; lot: string; widthCm: string; gsm: string; weight: string; material: string; designCode: string; colorName: string; colorCode: string }
 type Level = 1 | 2 | 3 | 4;
 const LEVEL_LABEL: Record<Level, string> = { 1: 'الخامة', 2: 'كود الخامة', 3: 'اللون', 4: 'كود اللون' };
 
@@ -34,7 +38,8 @@ export function PurchaseReceiveLine() {
   const [sel, setSel] = useState<Record<Level, string>>({ 1: '', 2: '', 3: '', 4: '' });
   const [warehouseId, setWarehouseId] = useState(''), [notes, setNotes] = useState('');
   const [rolls, setRolls] = useState<RollRow[]>([]);
-  const [barcode, setBarcode] = useState(''), [qty, setQty] = useState(''), [lot, setLot] = useState(''), [widthCm, setWidthCm] = useState(''), [gsm, setGsm] = useState('');
+  const [barcode, setBarcode] = useState(''), [qty, setQty] = useState(''), [weight, setWeight] = useState(''), [lot, setLot] = useState(''), [widthCm, setWidthCm] = useState(''), [gsm, setGsm] = useState('');
+  const [saved, setSaved] = useState<{ receiptNo: string; rollIds: string[] } | null>(null), [printing, setPrinting] = useState(false), [printMsg, setPrintMsg] = useState('');
   const [busy, setBusy] = useState(false), [err, setErr] = useState(''), [eye, setEye] = useState(false), [newCat, setNewCat] = useState<Level | null>(null), [allowOver, setAllowOver] = useState(false);
   const requestId = useRef(crypto.randomUUID());
   const done = useRef(false);
@@ -85,10 +90,20 @@ export function PurchaseReceiveLine() {
     const q = Number(qty);
     if (!(q > 0)) { setErr(byWeight ? 'أدخل وزن التوب بالكيلو' : 'أدخل طول التوب بالمتر'); return; }
     if (barcode && rolls.some((r) => r.barcode === barcode)) { setErr('الباركود مكرر في القائمة'); return; }
-    setRolls((rs) => [...rs, { barcode, qty: q, lot, widthCm, gsm }]);
-    setBarcode((b) => (b ? bump(b) : b)); setQty(''); qtyRef.current?.focus();
+    setRolls((rs) => [...rs, { barcode, qty: q, lot, widthCm, gsm, weight, material: node(1)?.name ?? line?.description ?? '', designCode: node(2)?.code ?? '', colorName: node(3)?.name ?? '', colorCode: node(4)?.code ?? '' }]);
+    setBarcode((b) => (b ? bump(b) : b)); setQty(''); setWeight(''); qtyRef.current?.focus();
   };
   const genBarcode = async () => { try { setBarcode(await getNextRollBarcode()); } catch { /* */ } };
+
+  const printStickers = async () => {
+    if (!saved?.rollIds.length || printing) return;
+    setPrinting(true); setPrintMsg('');
+    try {
+      const pv = await previewRollLabels(saved.rollIds);
+      const r = await printRollLabels(pv.data, { template: pv.template });
+      setPrintMsg(r.ok ? 'أُرسلت الستيكرات للطباعة' : r.error || 'تعذرت الطباعة');
+    } catch (e) { setPrintMsg(e instanceof Error ? e.message : 'تعذرت الطباعة'); } finally { setPrinting(false); }
+  };
 
   const save = async () => {
     if (busy || done.current || !line || !invoice) return;
@@ -100,24 +115,38 @@ export function PurchaseReceiveLine() {
     setBusy(true);
     try {
       const names = { materialName: node(1)?.name ?? line.description, designCode: node(2)?.code ?? undefined, colorName: node(3)?.name ?? undefined, colorCode: node(4)?.code ?? undefined };
-      await api.createReceipt({
+      const created = await api.createReceipt({
         invoiceId: invoice.id, warehouseId, notes: notes || undefined, clientRequestId: requestId.current, allowOver: over && canOver && allowOver ? true : undefined,
         lines: [{
           invoiceLineId: line.id, materialKind: 'FABRIC', unit: unit as api.ReceiveUnit, description: line.description,
           rolls: rolls.map((r) => ({
-            barcode: r.barcode || undefined, ...(byWeight ? { weightKg: r.qty } : { lengthM: r.qty }), lotNo: r.lot || undefined,
-            widthCm: Number(r.widthCm) || undefined, gsm: Number(r.gsm) || undefined, ...names,
+            barcode: r.barcode || undefined, ...(byWeight ? { weightKg: r.qty } : { lengthM: r.qty, ...(Number(r.weight) > 0 ? { weightKg: Number(r.weight) } : {}) }), lotNo: r.lot || undefined,
+            widthCm: Number(r.widthCm) || undefined, gsm: Number(r.gsm) || undefined,
+            materialName: r.material || names.materialName, designCode: r.designCode || undefined, colorName: r.colorName || undefined, colorCode: r.colorCode || undefined,
           })),
         }],
       } as api.ReceiptInput);
       done.current = true;
+      setSaved({ receiptNo: created.receiptNo, rollIds: created.rollIds ?? [] });
       showToast({ type: 'success', message: 'تم تسجيل الاستلام وإضافة الكمية للمخزن' });
-      nav('/purchases/receiving');
     } catch (e) { setErr(e instanceof Error ? e.message : 'تعذر حفظ الاستلام'); } finally { setBusy(false); }
   };
 
   if (!invoiceId || !lineId) return <div className="p-6 text-center text-slate-600" dir="rtl">لم يُحدَّد بند للاستلام. <Link to="/purchases/receiving" className="font-bold text-indigo-700">عودة لاستلام المشتريات</Link></div>;
   if (invoice && !line) return <div className="p-6 text-center text-slate-600" dir="rtl">البند غير موجود. <Link to="/purchases/receiving" className="font-bold text-indigo-700">عودة</Link></div>;
+
+  if (saved && line) return <div className="mx-auto max-w-5xl space-y-4" dir="rtl">
+    <section className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+      <h1 className="text-2xl font-black text-emerald-900">تم تسجيل الاستلام {saved.receiptNo}</h1>
+      <p className="text-sm text-emerald-800">أُضيفت {rolls.length} أتواب إلى المخزن. اطبع الستيكرات الآن أو عُد لاستلام المشتريات.</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={printing || !saved.rollIds.length} onClick={() => void printStickers()} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">{printing && <Loader2 className="h-4 w-4 animate-spin" />}<Printer className="h-4 w-4" />طباعة الستيكرات ({saved.rollIds.length})</button>
+        <Link to="/purchases/receiving" className="rounded-xl border bg-white px-5 py-2.5 text-sm font-bold text-slate-700">عودة لاستلام المشتريات</Link>
+      </div>
+      {printMsg && <p role="status" className="text-sm font-bold text-slate-700">{printMsg}</p>}
+    </section>
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><b className="text-lg">الأتواب المستلمة</b><div className="mt-2"><RollsTable rolls={rolls} unit={unit} /></div></section>
+  </div>;
 
   return <div className="mx-auto max-w-5xl space-y-4" dir="rtl">
     <div className="flex items-center justify-between gap-3">
@@ -156,6 +185,7 @@ export function PurchaseReceiveLine() {
         <div className="grid gap-2 sm:grid-cols-6">
           <label className="text-xs font-bold text-slate-600 sm:col-span-2">الباركود<div className="mt-1 flex gap-1.5"><input value={barcode} onChange={(e) => setBarcode(e.target.value)} className={`${inp} font-mono font-normal`} dir="ltr" /><button type="button" onClick={() => void genBarcode()} className="shrink-0 rounded-lg border bg-slate-50 px-2" aria-label="توليد باركود"><Wand2 className="h-4 w-4" /></button></div></label>
           <label className="text-xs font-bold text-slate-600">{byWeight ? 'الوزن (كغ)' : 'الطول (م)'}<input ref={qtyRef} type="number" min="0" step="0.01" value={qty} onChange={(e) => setQty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addRoll(); } }} className={`${inp} mt-1 font-mono font-normal`} dir="ltr" autoFocus /></label>
+          {!byWeight && <label className="text-xs font-bold text-slate-600">الوزن (كغ) <span className="font-normal text-slate-400">اختياري</span><input type="number" min="0" step="0.01" value={weight} onChange={(e) => setWeight(e.target.value)} className={`${inp} mt-1 font-mono font-normal`} dir="ltr" /></label>}
           <label className="text-xs font-bold text-slate-600">اللوط<input value={lot} onChange={(e) => setLot(e.target.value)} className={`${inp} mt-1 font-normal`} /></label>
           <label className="text-xs font-bold text-slate-600">العرض (سم) <span className="font-normal text-slate-400">معلومة</span><input type="number" min="0" value={widthCm} onChange={(e) => setWidthCm(e.target.value)} className={`${inp} mt-1 font-normal`} dir="ltr" /></label>
           <label className="text-xs font-bold text-slate-600">gsm <span className="font-normal text-slate-400">معلومة</span><input type="number" min="0" value={gsm} onChange={(e) => setGsm(e.target.value)} className={`${inp} mt-1 font-normal`} dir="ltr" /></label>
@@ -167,9 +197,7 @@ export function PurchaseReceiveLine() {
       <section className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-lg">الأتواب المُدخلة ({rolls.length})</b>
           <span className={`text-sm font-bold ${over ? 'text-rose-700' : 'text-slate-700'}`}>المُدخل {nf(enteredInUnit)} {UNIT_LABEL[unit]} من المتبقي {nf(remaining)}</span></div>
-        {rolls.length > 0 && <div className="overflow-x-auto"><table className="w-full min-w-[480px] text-sm"><thead className="bg-slate-50 text-xs text-slate-600"><tr><th className="p-2 text-right">#</th><th className="p-2 text-right">الباركود</th><th className="p-2">{byWeight ? 'الوزن' : 'الطول'}</th><th className="p-2">اللوط</th><th className="p-2" /></tr></thead>
-          <tbody>{rolls.map((r, i) => <tr key={i} className="border-t"><td className="p-2">{i + 1}</td><td className="p-2 font-mono" dir="ltr">{r.barcode || '—'}</td><td className="p-2 text-center font-mono">{nf(r.qty)} {byWeight ? 'كغ' : 'م'}</td><td className="p-2 text-center">{r.lot || '—'}</td>
-            <td className="p-2"><button type="button" aria-label="حذف" onClick={() => setRolls(rolls.filter((_, j) => j !== i))} className="rounded-lg border p-1 text-rose-600"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody></table></div>}
+        {rolls.length > 0 && <RollsTable rolls={rolls} unit={unit} onDelete={(i) => setRolls(rolls.filter((_, j) => j !== i))} />}
         {over && <div className="rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700">الكمية تتجاوز المتبقي. {canOver ? <label className="mr-2 inline-flex items-center gap-1.5 font-normal"><input type="checkbox" checked={allowOver} onChange={(e) => setAllowOver(e.target.checked)} />تأكيد تجاوز المتبقي (بصلاحية المدير)</label> : 'تجاوز المتبقي يتطلب صلاحية المدير.'}</div>}
       </section>
 
@@ -219,4 +247,19 @@ function NewCategoryDialog({ level, parent, onClose, onCreated }: { level: Level
     {err && <p role="alert" className="rounded-lg bg-rose-50 p-2 text-sm font-bold text-rose-700">{err}</p>}
     <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded-xl border px-4 py-2 text-sm font-bold">إلغاء</button><button type="button" disabled={busy || !(name.trim() || code.trim())} onClick={() => void submit()} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? '...' : 'حفظ'}</button></div>
   </div></div>;
+}
+
+/** جدول تفاصيل الأتواب المُدخلة: الباركود، الخامة، كود الخامة، اللون، كود اللون، المتر، الوزن، الوحدة. */
+function RollsTable({ rolls, unit, onDelete }: { rolls: RollRow[]; unit: string; onDelete?: (i: number) => void }) {
+  const byWeight = unit === 'kg';
+  const th = 'p-2 text-right whitespace-nowrap';
+  return <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm">
+    <thead className="bg-slate-50 text-xs text-slate-600"><tr><th className={th}>#</th><th className={th}>الباركود</th><th className={th}>الخامة</th><th className={th}>كود الخامة</th><th className={th}>اللون</th><th className={th}>كود اللون</th><th className="p-2 text-center">المتر</th><th className="p-2 text-center">الوزن (كغ)</th><th className="p-2 text-center">الوحدة</th>{onDelete && <th className="p-2" />}</tr></thead>
+    <tbody>{rolls.map((r, i) => <tr key={i} className="border-t">
+      <td className="p-2">{i + 1}</td><td className="p-2 font-mono" dir="ltr">{r.barcode || '—'}</td><td className="p-2 font-bold">{r.material || '—'}</td><td className="p-2 font-mono" dir="ltr">{r.designCode || '—'}</td><td className="p-2">{r.colorName || '—'}</td><td className="p-2 font-mono" dir="ltr">{r.colorCode || '—'}</td>
+      <td className="p-2 text-center font-mono">{byWeight ? '—' : nf(r.qty)}</td>
+      <td className="p-2 text-center font-mono">{byWeight ? nf(r.qty) : Number(r.weight) > 0 ? nf(Number(r.weight)) : '—'}</td>
+      <td className="p-2 text-center">{UNIT_NAME[unit] ?? unit}</td>
+      {onDelete && <td className="p-2"><button type="button" aria-label="حذف" onClick={() => onDelete(i)} className="rounded-lg border p-1 text-rose-600"><Trash2 className="h-4 w-4" /></button></td>}
+    </tr>)}</tbody></table></div>;
 }

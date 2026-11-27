@@ -28,6 +28,6 @@ const qs = (o: Record<string, string | undefined>) => { const p = new URLSearchP
 export const listReceivingInvoices = async (f: ReceivingFilters = {}) => (await apiFetch<{ ok: boolean; data: ReceivingInvoice[] }>(`/api/purchase-receiving/invoices${qs({ ...f })}`)).data;
 export const getReceivingInvoice = async (id: string) => (await apiFetch<{ ok: boolean; data: { invoice: ReceivingInvoice; receipts: ReceiptView[] } }>(`/api/purchase-receiving/invoices/${id}`)).data;
 export const listReceipts = async (pending = false) => (await apiFetch<{ ok: boolean; data: ReceiptView[] }>(`/api/purchase-receiving/receipts${pending ? '?pending=1' : ''}`)).data;
-export const createReceipt = async (body: ReceiptInput) => (await apiFetch<{ ok: boolean; data: { id: string; receiptNo: string; status: string } }>('/api/purchase-receiving/receipts', { method: 'POST', body: JSON.stringify(body) })).data;
+export const createReceipt = async (body: ReceiptInput) => (await apiFetch<{ ok: boolean; data: { id: string; receiptNo: string; status: string; duplicate?: boolean; rollIds?: string[] } }>('/api/purchase-receiving/receipts', { method: 'POST', body: JSON.stringify(body) })).data;
 export const linkReceipt = (id: string, body: { invoiceId: string; map: Array<{ receiptLineId: string; invoiceLineId: string; conversionFactor?: number; quantityInInvoiceUnit?: number }> }) =>
   apiFetch<{ ok: boolean }>(`/api/purchase-receiving/receipts/${id}/link`, { method: 'POST', body: JSON.stringify(body) });
