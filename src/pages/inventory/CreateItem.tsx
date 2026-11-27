@@ -741,6 +741,7 @@ const CreateItemForm = ({ receiptJobId }: { receiptJobId?: string }) => {
       colorNameTr: null,
       colorCode: resolved.colorCode,
       lengthM: draft.byWeight ? 0 : lengthM, // توب الوزن: لا أمتار في QR/اللصاقة
+      entryBasis: draft.byWeight ? 'WEIGHT' : 'LENGTH',
       widthCm,
       gsm: gsmNum,
       actualWeightKg: Number(draft.weight) > 0 ? Number(draft.weight) : null,

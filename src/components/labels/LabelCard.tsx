@@ -138,7 +138,7 @@ function pickWeight(roll: RollLabelPreviewDto): string {
   const a = roll.actualWeightKg;
   const c = roll.calculatedWeightKg;
   const v = a != null && Number(a) > 0 ? a : c;
-  return v != null && Number(v) > 0 ? `${fmt(v)} KGS.` : '';
+  return v != null && Number(v) > 0 ? `${fmt(v)} KG` : '';
 }
 
 function pickMeters(roll: RollLabelPreviewDto): string {
@@ -477,9 +477,9 @@ export function buildPrintDocument(
   const safeMm = LABEL_SAFE_MARGIN_MM;
   const ultraCompactLabel = pageSize === 'label' && heightMm <= 62;
   const compactLabel = pageSize === 'label' && heightMm <= 65;
-  const brandLogoHmm = ultraCompactLabel ? 11 : compactLabel ? 13 : 17;
+  const brandLogoHmm = ultraCompactLabel ? 11 : compactLabel ? 13 : 11;
   const brandLogoMaxWmm = ultraCompactLabel ? 68 : compactLabel ? 72 : 78;
-  const BARCODE_PRINT_H = ultraCompactLabel ? 28 : compactLabel ? 32 : 38;
+  const BARCODE_PRINT_H = ultraCompactLabel ? 28 : compactLabel ? 32 : 40;
   const singleLabel = rolls.length === 1;
   /** لصاقة أعرض من ارتفاعها: تدوير 90° — للمتصفح نستخدم normal دائماً */
   const isWideRollLabel =
@@ -495,6 +495,8 @@ export function buildPrintDocument(
   const renderLabel = (roll: RollLabelPreviewDto): string => {
     const meters = pickMeters(roll);
     const weight = pickWeight(roll);
+    /** توب مُدخل بالوزن: الكمية الرئيسية بالكيلو (لا أمتار على اللصاقة). */
+    const weightMain = roll.entryBasis === 'WEIGHT';
     const lot    = pickLot(roll);
     const color  = pickColorName(roll);
     const printableBarcode = pickPrintableBarcode(roll);
@@ -505,7 +507,7 @@ export function buildPrintDocument(
   <div class="brand">
     ${
       cfg.showBrandLogo
-        ? thermalBrandLogoHtml({ heightMm: brandLogoHmm, maxWidthMm: brandLogoMaxWmm })
+        ? `${thermalBrandLogoHtml({ heightMm: brandLogoHmm, maxWidthMm: brandLogoMaxWmm })}<div class="brand-tag">${cfg.subtitle}</div>`
         : `<div class="brand-empty" aria-hidden="true"></div>`
     }
   </div>
@@ -538,8 +540,10 @@ export function buildPrintDocument(
       <div class="lower-list">
         ${fieldRow(labelT('labelCard.noteLabel'),       '')}
         ${fieldRow(labelT('labelCard.batchNumberLabel'),     lot)}
-        ${cfg.showLength       ? fieldRow(labelT('labelCard.metersLabel'),     meters, true) : ''}
-        ${cfg.showActualWeight ? fieldRow(labelT('labelCard.netWeightLabel'), weight, true) : ''}
+        ${cfg.showLength && !weightMain ? `<div class="row row-ltr meter-row"><span class="rk">${labelT('labelCard.metersLabel')}</span><span class="rc">:</span><span class="rv rv-box">${meters}</span></div>` : ''}
+        ${cfg.showActualWeight ? (weightMain
+          ? `<div class="row row-ltr meter-row"><span class="rk">${labelT('labelCard.netWeightLabel')}</span><span class="rc">:</span><span class="rv rv-box">${weight}</span></div>`
+          : fieldRow(labelT('labelCard.netWeightLabel'), weight, true)) : ''}
       </div>
     </div>
     ${cfg.showQr ? `<div class="qr">${qrSvg}</div>` : ''}
@@ -551,7 +555,7 @@ export function buildPrintDocument(
     <div class="bc-text">${printableBarcode}</div>
   </div>` : ''}
 
-  ${cfg.disclaimer ? `<div class="disc text-${textDir}">${cfg.disclaimer}</div>` : ''}`;
+  ${cfg.disclaimer ? `<div class="disc text-${textDir}"><span class="disc-line"></span><span class="disc-text">${cfg.disclaimer}</span><span class="disc-line"></span></div>` : ''}`;
 
     if (pageSize === 'A4' || pageSize === 'A4_SHEET_6') {
       return `<div class="lbl">${inner}</div>`;
@@ -781,8 +785,8 @@ export function buildPrintDocument(
   width: 100%;
   height: 100%;
   min-height: 0;
-  border: 0.35mm solid #000;
-  border-radius: 0;
+  border: ${compactLabel ? '0.35mm' : '0.6mm'} solid #000;
+  border-radius: ${compactLabel ? '0' : '3mm'};
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   background: #fff;
@@ -825,7 +829,7 @@ ${lblBoxCss}
 }
 .brand-empty { height: ${brandLogoHmm}mm; }
 .brand-mark { font-size: ${compactLabel ? '4.8mm' : '5.8mm'}; font-weight: 900; letter-spacing: 0.65mm; line-height: 1.05; }
-.brand-tag  { font-size: ${compactLabel ? '2.1mm' : '2.4mm'}; letter-spacing: 0.45mm; color: #222; margin-top: 0.25mm; }
+.brand-tag  { font-size: ${compactLabel ? '2.1mm' : '2.9mm'}; font-weight: 800; letter-spacing: ${compactLabel ? '0.45mm' : '0.9mm'}; color: #000; margin-top: ${compactLabel ? '0.25mm' : '0.6mm'}; text-transform: uppercase; line-height: 1.1; }
 
 .block { padding: 0.8mm 0 0.45mm 0; border-bottom: 0.25mm solid #000; flex-shrink: 0; }
 .grid-2 { display: grid; grid-template-columns: 1.55fr 1fr; gap: 0.45mm; }
@@ -857,15 +861,17 @@ ${lblBoxCss}
 .row-rtl .rv { flex: 0 1 auto; min-width: 0; text-align: right; unicode-bidi: plaintext; }
 .text-rtl { direction: rtl; unicode-bidi: plaintext; }
 .text-ltr { direction: ltr; unicode-bidi: plaintext; }
-.rk { font-size: 2.5mm; font-weight: 500; color: #1f2937; }
+.rk { font-size: ${compactLabel ? '2.5mm' : '2.6mm'}; font-weight: 500; color: #1f2937; }
 .rc { font-size: 2.5mm; font-weight: 500; color: #1f2937; text-align: center; }
-.rv { font-size: 3mm; font-weight: 700; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv { font-size: ${compactLabel ? '3mm' : '3.4mm'}; font-weight: 800; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rv-em { font-size: 3.2mm; font-weight: 800; }
-.rv-cd { font-size: 3.3mm; font-weight: 800; }
+.rv-cd { font-size: ${compactLabel ? '3.3mm' : '4.8mm'}; font-weight: 900; }
+.meter-row { margin: 0.5mm 0; align-items: center; }
+.rv-box { display: inline-block; border: 0.5mm solid #000; border-radius: 2mm; padding: 0.4mm 2.5mm; font-size: ${compactLabel ? '4mm' : '6.6mm'}; font-weight: 900; line-height: 1.1; overflow: visible; }
 
 .quality { text-align: center; margin-top: 0.35mm; }
 .quality .ql { font-size: 2.5mm; font-weight: 500; color: #1f2937; }
-.quality .qv { font-size: 11pt; font-weight: 800; line-height: 1; }
+.quality .qv { font-size: ${compactLabel ? '11pt' : '15pt'}; font-weight: 900; line-height: 1; }
 
 .lower {
   display: grid;
@@ -888,7 +894,7 @@ ${lblBoxCss}
      ضغط الأرقام الطويلة (كالباركود التسلسلي 7 خانات) أفقياً لتظهر مزدحمة. */
   width: ${ultraCompactLabel ? '50mm' : compactLabel ? '55mm' : '60mm'};
   max-width: 100%;
-  height: ${ultraCompactLabel ? '10mm' : compactLabel ? '11mm' : '12.5mm'};
+  height: ${ultraCompactLabel ? '10mm' : compactLabel ? '11mm' : '11mm'};
   margin: 0 auto;
   padding: 0 1mm;
   display: flex;
@@ -901,18 +907,18 @@ ${lblBoxCss}
      تباعد الأعمدة) — الارتفاع فقط مضبوط، والصندوق أعلاه يحدّ أقصى عرض ممكن. */
   width: auto !important;
   max-width: ${ultraCompactLabel ? '50mm' : compactLabel ? '55mm' : '60mm'} !important;
-  height: ${ultraCompactLabel ? '10mm' : compactLabel ? '11mm' : '12.5mm'} !important;
+  height: ${ultraCompactLabel ? '10mm' : compactLabel ? '11mm' : '11mm'} !important;
   display: block;
 }
 .footer-bc .bc-text {
   font-family: Consolas, monospace;
-  font-size: ${ultraCompactLabel ? '2.4mm' : '2.6mm'};
-  font-weight: 700;
-  letter-spacing: 0.18mm;
+  font-size: ${ultraCompactLabel ? '2.4mm' : compactLabel ? '3mm' : '5.2mm'};
+  font-weight: 900;
+  letter-spacing: ${compactLabel ? '0.18mm' : '0.5mm'};
   line-height: 1.15;
   margin-top: 0.2mm;
   padding-bottom: 0.15mm;
-  max-width: 62mm;
+  max-width: 80mm;
   margin-left: auto;
   margin-right: auto;
   white-space: nowrap;
@@ -938,14 +944,18 @@ ${lblBoxCss}
   flex-shrink: 0;
   border-top: 0.25mm solid #000;
   margin-top: 0;
-  padding: 0.45mm 1.5mm 0.3mm;
-  text-align: center;
-  font-size: ${ultraCompactLabel ? '4.8pt' : '5.2pt'};
-  font-weight: 700;
-  letter-spacing: 0.12pt;
+  padding: 0.4mm 3mm 0.5mm;
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  justify-content: center;
+  font-size: ${ultraCompactLabel ? '4.8pt' : compactLabel ? '5.2pt' : '7.5pt'};
+  font-weight: 800;
   line-height: 1.2;
   color: #000;
 }
+.disc-line { flex: 1 1 0; height: 0; border-top: 0.3mm solid #000; }
+.disc-text { flex: 0 0 auto; white-space: nowrap; }
 </style>
 </head>
 <body>${labelsHtml}</body>
@@ -972,6 +982,7 @@ export interface AdHocLabelInput {
   colorNameTr?: string | null;
   colorCode?: string | null;
   lengthM?: number | null;
+  entryBasis?: 'LENGTH' | 'WEIGHT';
   widthCm?: number | null;
   gsm?: number | null;
   actualWeightKg?: number | null;
@@ -1007,6 +1018,7 @@ export function buildSingleRollPrintHtml(
     supplierColorCode: null,
     variantCode:       null,
     lengthM:            input.lengthM            ?? null,
+    entryBasis:         input.entryBasis,
     widthCm:            input.widthCm            ?? null,
     gsm:                input.gsm                ?? null,
     calculatedWeightKg: input.calculatedWeightKg ?? null,

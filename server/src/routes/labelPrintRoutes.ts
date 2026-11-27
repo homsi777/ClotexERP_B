@@ -25,6 +25,7 @@ function toDto(row: RollLabelRow) {
   const toNum = (value: string | null): number | null => (value !== null ? parseFloat(value) : null);
   // توب مُدخل بالوزن: لا أمتار على اللصاقة ولا في رمز QR (الكمية بالكيلو في حقل الوزن)
   const lengthM = row.entry_basis === 'WEIGHT' ? null : toNum(row.length_m);
+  const entryBasis = row.entry_basis === 'WEIGHT' ? 'WEIGHT' : 'LENGTH';
   const weightKg = toNum(row.actual_weight_kg) ?? toNum(row.calculated_weight_kg);
   const widthCm = toNum(row.width_cm);
   const gsm = toNum(row.gsm);
@@ -62,6 +63,7 @@ function toDto(row: RollLabelRow) {
     supplierColorCode: row.supplier_color_code,
     variantCode: row.variant_code,
     lengthM,
+    entryBasis,
     widthCm,
     gsm,
     calculatedWeightKg: toNum(row.calculated_weight_kg),

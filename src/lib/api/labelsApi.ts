@@ -30,6 +30,8 @@ export interface RollLabelPreviewDto {
   supplierColorCode: string | null;
   variantCode: string | null;
   lengthM: number | null;
+  /** WEIGHT: توب مُدخل بالوزن — الكمية الرئيسية على اللصاقة بالكيلو. */
+  entryBasis?: 'LENGTH' | 'WEIGHT';
   widthCm: number | null;
   gsm: number | null;
   calculatedWeightKg: number | null;
