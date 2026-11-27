@@ -31,6 +31,8 @@ export interface ThermalStatementOptions {
   summary?: boolean;
   /** شعار CLOTEX (data-URI) واسم العلامة؛ يمرّرهما المستدعي كي يبقى المُصيّر نقياً وقابلاً للاختبار. */
   logoSrc?: string; brandName?: string;
+  /** تذييل الكشف (عنوان الفرع/هاتفه/الشعار) — يمرّره المستدعي من بيانات الفرع. */
+  footer?: { location?: string | null; phone?: string | null; slogan?: string | null };
 }
 
 /**
@@ -50,32 +52,33 @@ export function renderInventoryRollsThermal78(o: ThermalStatementOptions): { htm
   const summary = o.summary === true;
   const summaryHtml = `<div class="sh"><span>اللون</span><span>الأتواب</span><span>الأمتار</span></div>` + groups.map((g) => {
     const gm = g.rows.filter((r) => !r.byW).reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0), allW = g.rows.every((r) => r.byW);
-    return `<div class="srow"><div class="sn">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div><div class="sc">${g.rows.length.toLocaleString('en')}</div><div class="sm">${allW ? `${fmt(gk, 1)}<small>كغ</small>` : fmt(gm)}${!allW && gk > 0 ? `<small>${fmt(gk, 1)} كغ</small>` : ''}</div></div>`;
+    return `<div class="srow"><div class="sn">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div><div class="sc">${g.rows.length.toLocaleString('en')}</div><div class="sm">${allW ? `${fmt(gk, 1)}<small>kg</small>` : fmt(gm)}${!allW && gk > 0 ? `<small>${fmt(gk, 1)} كغ</small>` : ''}</div></div>`;
   }).join('');
   const rollsHtml = summary ? summaryHtml : groups.map((g) => {
     const gm = g.rows.filter((r) => !r.byW).reduce((a, r) => a + r.meters, 0), gk = g.rows.reduce((a, r) => a + r.kg, 0), allW = g.rows.every((r) => r.byW);
     const cells = g.rows.map((r, i) => {
       const extra = [r.kg > 0 && !r.byW ? `${fmt(r.kg, 1)} كغ` : '', r.status, warehouses.size > 1 ? r.warehouse : ''].filter(Boolean).join(' · ');
-      return `<div class="cell"><div class="m">${r.byW ? fmt(r.kg, 1) : fmt(r.meters)}<small> ${r.byW ? 'كغ' : 'م'}</small></div><div class="bc"><span class="n">#${i + 1}</span> ${esc(r.barcode)}</div>${extra ? `<div class="x">${esc(extra)}</div>` : ''}</div>`;
+      return `<div class="cell"><div class="m">${r.byW ? fmt(r.kg, 1) : fmt(r.meters)}<small> ${r.byW ? 'kg' : 'm'}</small></div><div class="bc"><span class="n">#${i + 1}</span> ${esc(r.barcode)}</div>${extra ? `<div class="x">${esc(extra)}</div>` : ''}</div>`;
     });
     const rows: string[] = [];
     for (let i = 0; i < cells.length; i += 2) rows.push(`<div class="row">${cells[i]}<div class="sep"></div>${cells[i + 1] ?? '<div class="cell empty"></div>'}</div>`);
     return `<section class="grp"><div class="gh">${esc(g.colorName)}${g.colorCode && g.colorCode !== '—' ? ` <span class="gc">${esc(g.colorCode)}</span>` : ''}</div>${rows.join('')}
-      <div class="tot"><span>${g.rows.length.toLocaleString('en')} توب</span><b>${allW ? `${fmt(gk, 1)} كغ` : `${fmt(gm)} م`}</b>${!allW && gk > 0 ? `<span>${fmt(gk, 1)} كغ</span>` : ''}</div></section>`;
+      <div class="tot"><span>${g.rows.length.toLocaleString('en')} توب</span><b>${allW ? `${fmt(gk, 1)} kg` : `${fmt(gm)} m`}</b>${!allW && gk > 0 ? `<span>${fmt(gk, 1)} كغ</span>` : ''}</div></section>`;
   }).join('');
 
   // ارتفاع تقديري يتبع المحتوى (لا فراغ كبير ولا قص): الرأس + مجموعات + الإجمالي
   const rowMm = 12.5 * s, ghMm = 7 * s, totMm = 7 * s;
+  const footMm = o.footer ? 16 * s : 0;
   const heightMm = summary
-    ? Math.ceil(46 * s + 8 * s + groups.length * 10 * s + 16 * s + 8)
-    : Math.ceil(46 * s + groups.reduce((a, g) => a + ghMm + Math.ceil(g.rows.length / 2) * rowMm + totMm + 2, 0) + 16 * s + 8);
+    ? Math.ceil(52 * s + 8 * s + groups.length * 10 * s + 16 * s + 8 + footMm)
+    : Math.ceil(52 * s + groups.reduce((a, g) => a + ghMm + Math.ceil(g.rows.length / 2) * rowMm + totMm + 2, 0) + 16 * s + 8 + footMm);
   const title = o.title ?? (summary ? 'كشف جرد ملخص' : 'كشف جرد الأتواب');
   const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>
 @page { size: ${rollW}mm ${heightMm}mm; margin: 0; }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:${rollW}mm;background:#fff;color:#000;font-family:Tahoma,Arial,'Segoe UI',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .page{width:72mm;margin:0 auto;padding:${2 * s}mm 0 ${4 * s}mm}
-.logo{display:block;margin:0 auto ${1.5 * s}mm;height:${11 * s}mm;width:auto}
+.logo{display:block;margin:0 auto ${1.5 * s}mm;height:${17 * s}mm;width:auto}
 h1{text-align:center;font-size:${11 * s}pt;font-weight:900;margin-bottom:${1 * s}mm}
 .meta{font-size:${7 * s}pt;font-weight:700;line-height:1.5;border-top:.3mm solid #000;border-bottom:.3mm solid #000;padding:${1 * s}mm 0;margin-bottom:${2 * s}mm}
 .meta div{display:flex;justify-content:space-between;gap:2mm}
@@ -91,9 +94,9 @@ h1{text-align:center;font-size:${11 * s}pt;font-weight:900;margin-bottom:${1 * s
 .bc{font-size:${8 * s}pt;font-weight:700;font-family:Consolas,'Courier New',monospace;direction:ltr;unicode-bidi:embed;margin-top:.4mm}
 .bc .n{font-weight:900}
 .x{font-size:${6.5 * s}pt;font-weight:700;color:#222;margin-top:.3mm;line-height:1.25}
-.tot{display:flex;justify-content:space-between;align-items:baseline;gap:2mm;background:#e4e4e4;border:.3mm solid #000;padding:${1 * s}mm ${1.5 * s}mm;margin-top:${1 * s}mm;font-size:${8.5 * s}pt;font-weight:700}
+.tot{display:flex;justify-content:space-between;align-items:baseline;gap:2mm;background:#fff;border-bottom:.3mm solid #000;padding:${1 * s}mm ${.5 * s}mm;margin-top:${.5 * s}mm;font-size:${8.5 * s}pt;font-weight:700}
 .tot b{font-size:${11 * s}pt;font-weight:900;font-family:Consolas,'Courier New',monospace;direction:ltr;unicode-bidi:embed}
-.grand{background:#d2d2d2;border:.5mm solid #000;padding:${1.8 * s}mm ${1.5 * s}mm;margin-top:${2 * s}mm;text-align:center}
+.grand{background:#fff;border:.4mm solid #000;padding:${1.5 * s}mm ${1.5 * s}mm;margin-top:${2 * s}mm;text-align:center}
 .grand .t{font-size:${8 * s}pt;font-weight:900}
 .grand .v{font-size:${14 * s}pt;font-weight:900;font-family:Consolas,'Courier New',monospace;direction:ltr;unicode-bidi:embed}
 .grand .k{font-size:${8 * s}pt;font-weight:700}
@@ -103,7 +106,8 @@ h1{text-align:center;font-size:${11 * s}pt;font-weight:900;margin-bottom:${1 * s
 .sc{width:12mm;text-align:center;font-size:${9 * s}pt;font-weight:700;font-family:Consolas,'Courier New',monospace}
 .sm{width:26mm;text-align:left;font-size:${12 * s}pt;font-weight:900;font-family:Consolas,'Courier New',monospace;direction:ltr;unicode-bidi:embed;line-height:1.1}
 .sm small{display:block;font-size:${6.5 * s}pt;font-weight:700;color:#222}
-.foot{text-align:center;font-size:${6.5 * s}pt;margin-top:${2 * s}mm}
+.foot{text-align:center;font-size:${7.5 * s}pt;font-weight:700;margin-top:${2.5 * s}mm;line-height:1.7}
+.foot .ph{direction:ltr;unicode-bidi:embed}
 </style></head><body><div class="page">
 ${o.logoSrc ? `<img class="logo" src="${o.logoSrc}" alt="${esc(o.brandName ?? 'CLOTEX')}"/>` : ''}
 <h1>${esc(title)}</h1>
@@ -113,8 +117,8 @@ ${o.searchQuery ? `<div><span>البحث</span><span>${esc(o.searchQuery)}</span
 <div><span>المستودع</span><span>${esc(o.warehouseLabel || 'كل المستودعات')}</span></div>
 </div>
 ${rollsHtml || '<p style="text-align:center;font-size:9pt">لا أتواب.</p>'}
-<div class="grand"><div class="t">الإجمالي العام — ${totalRolls.toLocaleString('en')} توب</div><div class="v">${allWeight ? `${fmt(totalKg, 1)} كغ` : `${fmt(totalM)} م`}</div>${!allWeight && totalKg > 0 ? `<div class="k">${fmt(totalKg, 1)} كغ</div>` : ''}</div>
-<div class="foot">${esc(o.brandName ?? 'CLOTEX')}</div>
+<div class="grand"><div class="t">الإجمالي العام — ${totalRolls.toLocaleString('en')} توب</div><div class="v">${allWeight ? `${fmt(totalKg, 1)} kg` : `${fmt(totalM)} m`}</div>${!allWeight && totalKg > 0 ? `<div class="k">${fmt(totalKg, 1)} كغ</div>` : ''}</div>
+<div class="foot">${o.footer?.location ? `<div>${esc(o.footer.location)}</div>` : ''}${o.footer?.phone ? `<div class="ph">${esc(o.footer.phone)}</div>` : ''}${o.footer?.slogan ? `<div style="margin-top:${1.5 * s}mm">${esc(o.footer.slogan)}</div>` : ''}${!o.footer ? esc(o.brandName ?? 'CLOTEX') : ''}</div>
 </div></body></html>`;
   return { html, heightMm };
 }

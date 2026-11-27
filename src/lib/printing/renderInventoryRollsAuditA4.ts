@@ -14,9 +14,9 @@ const ti = (key: string, options?: Record<string, unknown>) => i18n.t(key, { ns:
 
 const NAVY = '#4C3890';
 const FONT = "Tahoma, Arial, 'Segoe UI', 'Arabic Typesetting', sans-serif";
-const LABEL_GRAY = '#f2f2f2';
-const SUBTOTAL_GRAY = '#f6f6f6';
-const CELL_LINE = '#c8c8c8';
+const LABEL_GRAY = '#f4f0fb';
+const SUBTOTAL_GRAY = '#f1edfa';
+const CELL_LINE = '#e3dcf1';
 
 const getStatusLabels = (): Record<string, string> => ({
   AVAILABLE: ti('rollStatus.available'),
@@ -141,6 +141,8 @@ export function renderInventoryRollsAuditA4Html(opts: {
     .map((group) => {
       const first = group[0];
       const groupMeters = group.reduce((sum, row) => sum + row.lengthM, 0);
+      const groupKgOnly = group.every((row) => row.byWeight);
+      const groupKg = group.reduce((sum, row) => sum + row.weightKg, 0);
       const colorIdentity =
         first.colorCode && first.colorCode !== '—'
           ? `${first.colorName} (${first.colorCode})`
@@ -172,7 +174,7 @@ export function renderInventoryRollsAuditA4Html(opts: {
             ${t('inventoryAudit.colorTotal', { color: escapeHtml(colorIdentity) })}
             <strong>${group.length.toLocaleString('en-US')} ${t('inventoryAudit.rollUnit')}</strong>
             <span class="color-summary-separator">—</span>
-            <strong class="num">${formatAr(groupMeters)} ${t('inventoryAudit.meterUnit')}</strong>
+            <strong class="num">${groupKgOnly ? `${formatAr(groupKg)} كغ` : `${formatAr(groupMeters)} ${t('inventoryAudit.meterUnit')}`}</strong>
           </td>
         </tr>`;
     })
@@ -237,27 +239,22 @@ export function renderInventoryRollsAuditA4Html(opts: {
       padding: 7mm 8mm 5mm;
     }
     .page-body { flex: 1 1 auto; min-height: 0; }
-    .brand-wrap {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 0 0 6px;
-    }
-    .brand-logo {
-      height: 88px;
-      width: auto;
-      object-fit: contain;
-    }
+    .doc-head { display: flex; justify-content: space-between; align-items: center; margin: 0 0 6px; direction: rtl; }
+    .doc-head-text { text-align: right; }
+    .doc-head-brand { display: flex; align-items: center; gap: 10px; direction: ltr; }
+    .brand-logo { height: 56px; width: auto; object-fit: contain; }
+    .brand-tag { font-size: 9px; color: ${NAVY}; font-weight: 500; }
+    .gold-rule { height: 1.5px; background: #B89854; margin: 0 0 8px; }
     .doc-title {
-      text-align: center;
-      font-size: 16px;
+      text-align: right;
+      font-size: 22px;
       font-weight: 900;
       color: ${NAVY};
-      margin: 0 0 4px;
+      margin: 0 0 3px;
       line-height: 1.2;
     }
     .doc-subtitle {
-      text-align: center;
+      text-align: right;
       font-size: 10px;
       font-weight: 700;
       color: #333;
@@ -272,33 +269,20 @@ export function renderInventoryRollsAuditA4Html(opts: {
       margin-bottom: 10px;
       direction: rtl;
     }
-    .meta-card {
-      flex: 1;
-      border: 1px solid ${CELL_LINE};
-    }
+    .meta-card { flex: 1; border: none; }
     .meta-card td {
       border-bottom: 1px solid ${CELL_LINE};
-      padding: 6px 8px;
-      font-size: 9.5px;
+      padding: 5px 4px;
+      font-size: 10px;
       line-height: 1.3;
-      font-weight: 700;
-      color: #000;
+      font-weight: 500;
+      color: #1f1f1f;
     }
     .meta-card tr:last-child td { border-bottom: none; }
-    .meta-lbl {
-      width: 42%;
-      text-align: center;
-      background: ${LABEL_GRAY};
-      white-space: nowrap;
-      border-left: 1px solid ${CELL_LINE};
-    }
-    .meta-val {
-      text-align: right;
-      background: #fff;
-      padding-right: 8px;
-    }
+    .meta-lbl { width: 38%; text-align: right; background: none; white-space: nowrap; color: ${NAVY}; font-weight: 900 !important; }
+    .meta-val { text-align: right; background: #fff; }
     .data-table {
-      border: 1px solid #000;
+      border: 1px solid ${CELL_LINE};
       margin-bottom: 0;
     }
     .data-table thead th {
@@ -332,14 +316,15 @@ export function renderInventoryRollsAuditA4Html(opts: {
       background: ${SUBTOTAL_GRAY};
       font-weight: 900;
       font-size: 9.5px;
-      border-top: 1px solid #000;
+      border-top: 1px solid ${CELL_LINE};
+      color: ${NAVY};
     }
     .data-table tbody .color-summary-cell {
       padding: 1px 6px;
-      background: #eef0f3;
-      border-top: 1px solid #a8afb8;
-      border-bottom: 1px solid #a8afb8;
-      color: #263244;
+      background: ${SUBTOTAL_GRAY};
+      border-top: 1px solid ${CELL_LINE};
+      border-bottom: 1px solid ${CELL_LINE};
+      color: ${NAVY};
       text-align: center;
       font-size: ${landscape ? 10 : 8}px;
       font-weight: 700;
@@ -396,11 +381,17 @@ export function renderInventoryRollsAuditA4Html(opts: {
 <body>
   <div class="page" data-clotex-doc="inventory-rolls-audit-a4">
     <div class="page-body">
-      <div class="brand-wrap">
-        <img class="brand-logo" src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" />
+      <div class="doc-head">
+        <div class="doc-head-text">
+          <h1 class="doc-title">${t('inventoryAudit.title')}</h1>
+          <p class="doc-subtitle">${escapeHtml(subtitle)}</p>
+        </div>
+        <div class="doc-head-brand">
+          <img class="brand-logo" src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" />
+          <span class="brand-tag">${escapeHtml(BRAND.taglineDocs)}</span>
+        </div>
       </div>
-      <h1 class="doc-title">${t('inventoryAudit.title')}</h1>
-      <p class="doc-subtitle">${escapeHtml(subtitle)}</p>
+      <div class="gold-rule"></div>
       ${metaRowsHtml}
       <table class="data-table">
         <thead>
@@ -429,7 +420,7 @@ export function renderInventoryRollsAuditA4Html(opts: {
       </table>
       <p class="print-note">${t('inventoryAudit.printNote')}</p>
     </div>
-    ${renderDocumentFooterHtml('invoice')}
+    ${renderDocumentFooterHtml('invoice', false, { slogan: i18n.language === 'tr' ? 'Her metre hesaplı, her detay önemli' : 'كل متر محسوب.. وكل تفصيلة تفرق' })}
   </div>
 </body>
 </html>`;

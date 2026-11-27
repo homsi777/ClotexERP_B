@@ -20,7 +20,7 @@ test('thermal statement: 72mm content on 78mm roll, two rolls per row, shaded to
   assert.ok(html.includes('000675') && html.includes('000678'), 'باركود التوب كرقم');
   assert.ok(!/<svg|<canvas|code128/i.test(html), 'لا رسم خطوط باركود');
   // التظليل على مجموع اللون والإجمالي العام فقط
-  assert.match(html, /\.tot\{[^}]*background:#e4e4e4/); assert.match(html, /\.grand\{background:#d2d2d2/);
+  assert.match(html, /\.tot\{[^}]*border-bottom:\.3mm/); assert.match(html, /\.grand\{background:#fff;border:\.4mm/);
   assert.ok(!/\.(row|cell|m|bc)\{[^}]*background/.test(html), 'صفوف الأتواب بلا تظليل');
   assert.ok(html.includes('198.00') || html.includes('198,00') || html.includes('198.00 م'), 'مجموع خاكي 198');
   assert.ok(html.includes('298.00'), 'الإجمالي العام 298 م');
@@ -90,7 +90,7 @@ test('invoice statement: kg lines show kilograms, never meters', () => {
 test('thermal statement: rolls entered by weight show kg, not derived meters', () => {
   const w = [roll('W1', 4444.44, 'خام', 'K22', { entry_basis: 'WEIGHT', actual_weight_kg: '1000' } as never)];
   const { html } = renderInventoryRollsThermal78({ rolls: w });
-  assert.ok(html.includes('1,000.0') && html.includes('كغ'), 'الوزن ظاهر');
+  assert.ok(html.includes('1,000.0') && html.includes('kg'), 'الوزن ظاهر');
   assert.ok(!html.includes('4,444.44'), 'لا أمتار مشتقة');
   const s = renderInventoryRollsThermal78({ rolls: w, summary: true });
   assert.ok(!s.html.includes('4,444.44'));

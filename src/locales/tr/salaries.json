@@ -216,7 +216,8 @@
     "colSalaryPeriod": "Maaş Türü",
     "colStatus": "Durum",
     "noData": "Veri bulunamadı",
-    "printDate": "Yazdırma Tarihi: {{date}}"
+    "printDate": "Yazdırma Tarihi: {{date}}",
+    "employeesCount": "Çalışan sayısı: {{count}}"
   },
   "lineItems": {
     "title": "Maaş kalemleri — {{name}}",

@@ -10,6 +10,7 @@ import { getRollLengthMeters } from '../../lib/inventory/rollAvailability';
 import { openDocumentPrintWindow } from '../../lib/printing/documentPrint';
 import { downloadPrintPdf } from '../../lib/api/documentPdfApi';
 import { BRAND } from '../../branding';
+import { getBranchPrintInfo } from '../../lib/printing/branchPrintInfo';
 
 export interface InventoryPrintContext {
   rolls: FabricRollDto[];
@@ -37,8 +38,9 @@ export function InventoryPrintOptionsModal({ ctx, onClose }: { ctx: InventoryPri
   const update = (patch: Partial<InventoryPrintSettings>) => setS((cur) => { const next = { ...cur, ...patch }; saveInventoryPrintSettings(next); return next; });
   const changePrinter = (name: string) => { const loaded = loadInventoryPrintSettings(name); setS(loaded); saveInventoryPrintSettings(loaded); };
 
-  const thermal = useMemo(() => renderInventoryRollsThermal78({ rolls: ctx.rolls, title: 'كشف جرد الأتواب', searchQuery: ctx.searchQuery, warehouseLabel: ctx.warehouseLabel, fontScale: s.thermalFontScale, rollWidthMm: s.rollWidthMm, logoSrc: BRAND.logoInline, brandName: BRAND.name }), [ctx, s.thermalFontScale, s.rollWidthMm]);
-  const thermalSummary = useMemo(() => renderInventoryRollsThermal78({ rolls: ctx.rolls, summary: true, searchQuery: ctx.searchQuery, warehouseLabel: ctx.warehouseLabel, fontScale: s.thermalFontScale, rollWidthMm: s.rollWidthMm, logoSrc: BRAND.logoInline, brandName: BRAND.name }), [ctx, s.thermalFontScale, s.rollWidthMm]);
+  const branch = getBranchPrintInfo();
+  const thermal = useMemo(() => renderInventoryRollsThermal78({ rolls: ctx.rolls, title: 'كشف جرد الأتواب', searchQuery: ctx.searchQuery, warehouseLabel: ctx.warehouseLabel, fontScale: s.thermalFontScale, rollWidthMm: s.rollWidthMm, logoSrc: BRAND.logoThermalInline, brandName: BRAND.name, footer: { location: branch?.location ?? null, phone: branch?.phoneInvoice ?? null, slogan: 'كل التفاصيل قدامك.. والاختيار ليك' } }), [ctx, s.thermalFontScale, s.rollWidthMm]);
+  const thermalSummary = useMemo(() => renderInventoryRollsThermal78({ rolls: ctx.rolls, summary: true, searchQuery: ctx.searchQuery, warehouseLabel: ctx.warehouseLabel, fontScale: s.thermalFontScale, rollWidthMm: s.rollWidthMm, logoSrc: BRAND.logoThermalInline, brandName: BRAND.name, footer: { location: branch?.location ?? null, phone: branch?.phoneInvoice ?? null, slogan: 'قماشنا بداية لنجاح شغلك' } }), [ctx, s.thermalFontScale, s.rollWidthMm]);
   const [thermalKind, setThermalKind] = useState<'detail' | 'summary'>('detail');
   const totalM = ctx.rolls.reduce((a, r) => a + getRollLengthMeters(r), 0);
 

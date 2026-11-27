@@ -1,3 +1,4 @@
+import { renderEmployeesListA4Html } from '../lib/printing/renderEmployeesListA4';
 import { DateInput } from '../components/common/DateInput';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -523,63 +524,13 @@ export const Salaries = () => {
   };
 
   const printEmployeesA4 = () => {
-    const rows = filteredEmployees
-      .map(
-        (emp, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td>${emp.employee_code}</td>
-            <td>${emp.full_name}</td>
-            <td>${emp.address || '-'}</td>
-            <td>${emp.phone || '-'}</td>
-            <td>${money(emp.base_salary, emp.currency_code)}</td>
-            <td>${salaryPeriodLabel(emp.salary_period)}</td>
-            <td>${statusLabel(emp.is_active)}</td>
-          </tr>
-        `,
-      )
-      .join('');
-    const html = `
-      <!doctype html>
-      <html lang="ar" dir="rtl">
-      <head>
-        <meta charset="utf-8" />
-        <title>${t('print.documentTitle')}</title>
-        <style>
-          @page { size: A4; margin: 12mm; }
-          body { font-family: Arial, Tahoma, sans-serif; color: #0f172a; }
-          .logo { text-align:center; font-weight:900; font-size:28px; letter-spacing:2px; margin-bottom:4px; }
-          .sub { text-align:center; color:#64748b; font-size:11px; letter-spacing:3px; margin-bottom:18px; }
-          h1 { text-align:center; font-size:20px; margin:0 0 14px; }
-          table { width:100%; border-collapse:collapse; font-size:11px; }
-          th, td { border:1px solid #111; padding:6px 5px; text-align:center; }
-          th { background:#e2e8f0; font-weight:800; }
-          .foot { margin-top:12px; font-size:11px; font-weight:700; }
-        </style>
-      </head>
-      <body>
-        <div class="logo">CLOTEX</div>
-        <div class="sub">CLOTHES TEXTILE</div>
-        <h1>${t('print.heading')}</h1>
-        <table>
-          <thead>
-            <tr>
-              <th>${t('print.colIndex')}</th>
-              <th>${t('print.colEmployeeCode')}</th>
-              <th>${t('print.colFullName')}</th>
-              <th>${t('print.colAddress')}</th>
-              <th>${t('print.colPhone')}</th>
-              <th>${t('print.colSalary')}</th>
-              <th>${t('print.colSalaryPeriod')}</th>
-              <th>${t('print.colStatus')}</th>
-            </tr>
-          </thead>
-          <tbody>${rows || `<tr><td colspan="8">${t('print.noData')}</td></tr>`}</tbody>
-        </table>
-        <div class="foot">${t('print.printDate', { date: todayIso() })}</div>
-      </body>
-      </html>
-    `;
+    const html = renderEmployeesListA4Html(
+      filteredEmployees.map((emp) => ({ code: emp.employee_code, fullName: emp.full_name, address: emp.address || '', phone: emp.phone || '', salary: money(emp.base_salary, emp.currency_code), period: salaryPeriodLabel(emp.salary_period), status: statusLabel(emp.is_active) })),
+      {
+        title: t('print.heading'), printDate: t('print.printDate', { date: todayIso() }), count: t('print.employeesCount', { count: filteredEmployees.length }), index: t('print.colIndex'), code: t('print.colEmployeeCode'), fullName: t('print.colFullName'),
+        address: t('print.colAddress'), phone: t('print.colPhone'), salary: t('print.colSalary'), period: t('print.colSalaryPeriod'), status: t('print.colStatus'), noData: t('print.noData'),
+      },
+    );
     const win = window.open('', '_blank', 'width=1100,height=800');
     if (!win) return;
     win.document.open();

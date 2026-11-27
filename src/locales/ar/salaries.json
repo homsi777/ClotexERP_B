@@ -216,7 +216,8 @@
     "colSalaryPeriod": "نوع الراتب",
     "colStatus": "الحالة",
     "noData": "لا توجد بيانات",
-    "printDate": "تاريخ الطباعة: {{date}}"
+    "printDate": "تاريخ الطباعة: {{date}}",
+    "employeesCount": "عدد الموظفين: {{count}}"
   },
   "lineItems": {
     "title": "بنود الراتب — {{name}}",
