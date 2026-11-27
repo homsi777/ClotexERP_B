@@ -22,6 +22,8 @@ export interface DashboardSummary {
   total_roll_length_m?: string;
   total_roll_weight_kg?: string;
   total_cash_by_currency?: { currency_code: string; total: string }[];
+  receipt_by_currency?: { currency_code: string; total: string }[];
+  payment_by_currency?: { currency_code: string; total: string }[];
   receipt_total?: string;
   payment_total?: string;
 }

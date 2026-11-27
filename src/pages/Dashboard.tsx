@@ -59,6 +59,11 @@ function fmtMoney(value: unknown, locale: string, currency = 'USD'): string {
   return `${fmtNumber(value, locale, 2)} ${currency}`;
 }
 
+function fmtMoneyByCurrency(rows: { currency_code: string; total: string }[] | undefined, locale: string): string {
+  if (!rows || rows.length === 0) return fmtNumber(0, locale, 2);
+  return rows.map((r) => `${r.currency_code} ${fmtNumber(r.total, locale, 2)}`).join('\n');
+}
+
 export const Dashboard = () => {
   const { t, i18n } = useTranslation(['dashboard', 'common']);
   const numberLocale = i18n.language === 'tr' ? 'tr-TR' : 'ar-SY';
@@ -113,8 +118,8 @@ export const Dashboard = () => {
       { key: 'cards.activeRolls', module: 'inventory.rolls', value: fmtNumber(d?.active_fabric_rolls_count, numberLocale), icon: Package, bg: 'bg-indigo-50', color: 'text-indigo-700' },
       { key: 'cards.totalMeters', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_length_m, numberLocale, 2), icon: Layers, bg: 'bg-indigo-50', color: 'text-indigo-700' },
       { key: 'cards.totalWeightKg', module: 'inventory.rolls', value: fmtNumber(d?.total_roll_weight_kg, numberLocale, 2), icon: Layers, bg: 'bg-indigo-50', color: 'text-indigo-700' },
-      { key: 'cards.receiptVouchers', module: 'treasury.vouchers', value: fmtMoney(d?.receipt_total, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
-      { key: 'cards.paymentVouchers', module: 'treasury.vouchers', value: fmtMoney(d?.payment_total, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
+      { key: 'cards.receiptVouchers', module: 'treasury.vouchers', value: fmtMoneyByCurrency(d?.receipt_by_currency, numberLocale), icon: ArrowDownToLine, bg: 'bg-green-50', color: 'text-green-700' },
+      { key: 'cards.paymentVouchers', module: 'treasury.vouchers', value: fmtMoneyByCurrency(d?.payment_by_currency, numberLocale), icon: ArrowUpFromLine, bg: 'bg-rose-50', color: 'text-rose-700' },
     ].filter((c) => canMod(c.module));
   }, [summary, numberLocale, user]);
 
@@ -216,7 +221,7 @@ export const Dashboard = () => {
             </div>
             <div>
               <p className="text-sm font-bold text-slate-500">{t(card.key)}</p>
-              <p className="mt-1 text-2xl font-black text-slate-950">{loading ? '...' : card.value}</p>
+              <p className="mt-1 whitespace-pre-line text-2xl font-black text-slate-950">{loading ? '...' : card.value}</p>
             </div>
           </div>
         ))}
