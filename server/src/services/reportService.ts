@@ -1,3 +1,4 @@
+import { formatTotalsByCurrency } from './currencyTotals.js';
 import { getPool } from '../db/pool.js';
 import type { UnifiedReportPayload } from './reportTypes.js';
 import { nowIso } from './reportTypes.js';
@@ -39,11 +40,7 @@ export async function fetchExtendedDashboardSummary(companyId: string): Promise<
          (SELECT COUNT(*)::int FROM inventory_waste_records WHERE company_id = $1) AS waste_records_count,
          (SELECT COALESCE(SUM(CASE WHEN entry_basis='WEIGHT' THEN 0 ELSE length_m END), 0)::numeric FROM fabric_rolls WHERE company_id = $1) AS total_roll_length_m,
          (SELECT COALESCE(SUM(COALESCE(actual_weight_kg, calculated_weight_kg, 0)), 0)::numeric
-            FROM fabric_rolls WHERE company_id = $1) AS total_roll_weight_kg,
-         (SELECT COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'RECEIPT'), 0)::numeric
-            FROM vouchers WHERE company_id = $1) AS receipt_total,
-         (SELECT COALESCE(SUM(amount) FILTER (WHERE status = 'CONFIRMED' AND voucher_type = 'PAYMENT'), 0)::numeric
-            FROM vouchers WHERE company_id = $1) AS payment_total`,
+            FROM fabric_rolls WHERE company_id = $1) AS total_roll_weight_kg`,
       [companyId],
     ),
     pool.query<{ currency_code: string; total: string }>(
@@ -1029,11 +1026,12 @@ export async function reportVouchers(
   }
   const where = conditions.join(' AND ');
 
-  const sumQ = await pool.query(
-    `SELECT
+  const sumQ = await pool.query<{ currency_code: string; tr: string; tp: string }>(
+    `SELECT v.currency_code,
        COALESCE(SUM(v.amount) FILTER (WHERE v.status = 'CONFIRMED' AND v.voucher_type = 'RECEIPT'), 0)::numeric AS tr,
        COALESCE(SUM(v.amount) FILTER (WHERE v.status = 'CONFIRMED' AND v.voucher_type = 'PAYMENT'), 0)::numeric AS tp
-     FROM vouchers v WHERE ${where}`,
+     FROM vouchers v WHERE ${where}
+     GROUP BY v.currency_code ORDER BY v.currency_code`,
     params,
   );
 
@@ -1062,8 +1060,15 @@ export async function reportVouchers(
     [...params, pageSize, offset],
   );
 
-  const tr = parseFloat(sumQ.rows[0].tr);
-  const tp = parseFloat(sumQ.rows[0].tp);
+  // مجاميع كل عملة على حدة — لا جمع بين عملات مختلفة.
+  const voucherTotals: Record<string, string> = {};
+  for (const r of sumQ.rows) {
+    const tr = parseFloat(r.tr);
+    const tp = parseFloat(r.tp);
+    voucherTotals[`إجمالي القبض المؤكد (${r.currency_code})`] = tr.toFixed(2);
+    voucherTotals[`إجمالي الصرف المؤكد (${r.currency_code})`] = tp.toFixed(2);
+    voucherTotals[`الصافي المؤكد (${r.currency_code})`] = (tr - tp).toFixed(2);
+  }
 
   return {
     title: 'سجل السندات',
@@ -1083,11 +1088,7 @@ export async function reportVouchers(
       { key: 'description', label: 'الوصف', type: 'text' },
     ],
     rows: dataQ.rows as Record<string, unknown>[],
-    totals: {
-      total_receipts_confirmed: tr.toFixed(2),
-      total_payments_confirmed: tp.toFixed(2),
-      net_confirmed: (tr - tp).toFixed(2),
-    },
+    totals: voucherTotals,
     meta: { page, pageSize, total: parseInt(countQ.rows[0].c, 10) },
   };
 }
@@ -1283,15 +1284,17 @@ export async function reportPayrollSummary(companyId: string): Promise<UnifiedRe
   const pool = getPool();
   const emp = await pool.query(
     `SELECT COUNT(*) FILTER (WHERE is_active)::int AS active,
-            COALESCE(SUM(base_salary) FILTER (WHERE is_active), 0)::numeric AS sum_base
-     FROM payroll_employees WHERE company_id = $1`,
+            COALESCE(SUM(base_salary) FILTER (WHERE is_active), 0)::numeric AS sum_base,
+            currency_code
+     FROM payroll_employees WHERE company_id = $1
+     GROUP BY currency_code ORDER BY currency_code`,
     [companyId],
   );
   const runs = await pool.query(
-    `SELECT status, COUNT(*)::int AS n,
+    `SELECT status, currency_code, COUNT(*)::int AS n,
             COALESCE(SUM(total_net) FILTER (WHERE status IN ('CONFIRMED','PAID')), 0)::numeric AS net_sum
      FROM payroll_runs WHERE company_id = $1
-     GROUP BY status`,
+     GROUP BY status, currency_code ORDER BY status, currency_code`,
     [companyId],
   );
 
@@ -1305,7 +1308,7 @@ export async function reportPayrollSummary(companyId: string): Promise<UnifiedRe
 
   let confirmedRuns = 0;
   let paidRuns = 0;
-  for (const r of runs.rows as { status: string; n: string }[]) {
+  for (const r of runs.rows as { status: string; n: string; currency_code: string }[]) {
     if (r.status === 'CONFIRMED') confirmedRuns += parseInt(r.n, 10);
     if (r.status === 'PAID') paidRuns += parseInt(r.n, 10);
   }
@@ -1325,8 +1328,9 @@ export async function reportPayrollSummary(companyId: string): Promise<UnifiedRe
     ],
     rows: runRows.rows as Record<string, unknown>[],
     summaryCards: [
-      { label: 'موظفون نشطون', value: emp.rows[0].active },
-      { label: 'مجموع الرواتب الأساسية (نشط)', value: String(emp.rows[0].sum_base) },
+      { label: 'موظفون نشطون', value: (emp.rows as { active: number }[]).reduce((a, r) => a + Number(r.active), 0) },
+      // الرواتب الأساسية لكل عملة على حدة — لا جمع بين عملات مختلفة
+      { label: 'مجموع الرواتب الأساسية (نشط)', value: formatTotalsByCurrency((emp.rows as { sum_base: string; currency_code: string }[]).map((r) => ({ currency_code: r.currency_code, total: r.sum_base }))) },
       { label: 'مسيرات مؤكدة', value: confirmedRuns },
       { label: 'مسيرات مدفوعة', value: paidRuns },
     ],

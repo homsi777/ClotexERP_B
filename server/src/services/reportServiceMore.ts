@@ -1,3 +1,4 @@
+import { formatTotalsByCurrency } from './currencyTotals.js';
 import { getPool } from '../db/pool.js';
 import type { UnifiedReportPayload } from './reportTypes.js';
 import { nowIso } from './reportTypes.js';
@@ -66,23 +67,30 @@ export async function reportSalesSummary(companyId: string): Promise<UnifiedRepo
   const si = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE document_status = 'CONFIRMED')::int AS confirmed_count,
-       COALESCE(SUM(total_amount) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS confirmed_total,
-       COALESCE(SUM(total_amount_usd) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS confirmed_total_usd,
-       COALESCE(SUM(paid_amount) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS paid_total,
-       COALESCE(SUM(remaining_amount) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS remaining_total
+       COALESCE(SUM(total_amount_usd) FILTER (WHERE document_status = 'CONFIRMED'), 0)::numeric AS confirmed_total_usd
      FROM sales_invoices WHERE company_id = $1`,
     [companyId],
   );
-  const v = await pool.query(
-    `SELECT
-       COUNT(*) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER')::int AS customer_receipts,
-       COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS receipt_sum
-     FROM vouchers WHERE company_id = $1`,
+  // الإجماليات الأصلية لكل عملة على حدة (لا جمع بين عملات مختلفة)
+  const siCur = await pool.query<{ currency_code: string; t: string; paid: string; rem: string }>(
+    `SELECT currency_code,
+            COALESCE(SUM(total_amount),0)::numeric AS t,
+            COALESCE(SUM(paid_amount),0)::numeric AS paid,
+            COALESCE(SUM(remaining_amount),0)::numeric AS rem
+     FROM sales_invoices WHERE company_id = $1 AND document_status = 'CONFIRMED'
+     GROUP BY currency_code ORDER BY currency_code`,
     [companyId],
   );
-  const p = await pool.query(
-    `SELECT COUNT(*)::int AS n, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED'),0)::numeric AS t
-     FROM return_invoices WHERE company_id = $1 AND return_type='SALES_RETURN'`,
+  const v = await pool.query<{ customer_receipts: number; currency_code: string; receipt_sum: string }>(
+    `SELECT currency_code,
+       COUNT(*) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER')::int AS customer_receipts,
+       COALESCE(SUM(amount) FILTER (WHERE status='CONFIRMED' AND voucher_type='RECEIPT' AND party_type='CUSTOMER'),0)::numeric AS receipt_sum
+     FROM vouchers WHERE company_id = $1 GROUP BY currency_code ORDER BY currency_code`,
+    [companyId],
+  );
+  const p = await pool.query<{ n: number; currency_code: string; t: string }>(
+    `SELECT currency_code, COUNT(*)::int AS n, COALESCE(SUM(total_amount) FILTER (WHERE status='CONFIRMED'),0)::numeric AS t
+     FROM return_invoices WHERE company_id = $1 AND return_type='SALES_RETURN' GROUP BY currency_code ORDER BY currency_code`,
     [companyId],
   );
   const l = await pool.query(
@@ -98,14 +106,14 @@ export async function reportSalesSummary(companyId: string): Promise<UnifiedRepo
     columns: [textCol('k', 'المؤشر'), textCol('v', 'القيمة')],
     rows: [
       { k: 'فواتير بيع مؤكدة (عدد)', v: si.rows[0].confirmed_count },
-      { k: 'إجمالي فواتير بيع مؤكدة', v: String(si.rows[0].confirmed_total) },
-      { k: 'إجمالي فواتير بيع (USD)', v: String(si.rows[0].confirmed_total_usd) },
-      { k: 'محصل على فواتير البيع', v: String(si.rows[0].paid_total) },
-      { k: 'متبقي ذمم فواتير البيع', v: String(si.rows[0].remaining_total) },
-      { k: '— سندات قبض عملاء (عدد مؤكد)', v: v.rows[0].customer_receipts },
-      { k: '— إجمالي قبض عملاء (سندات)', v: String(v.rows[0].receipt_sum) },
-      { k: 'مرتجع مبيعات (عدد مؤكد)', v: p.rows[0].n },
-      { k: 'إجمالي مرتجع مبيعات', v: String(p.rows[0].t) },
+      { k: 'إجمالي فواتير بيع مؤكدة', v: formatTotalsByCurrency(siCur.rows.map((r) => ({ currency_code: r.currency_code, total: r.t }))) },
+      { k: 'إجمالي فواتير بيع (USD)', v: `USD ${Number(si.rows[0].confirmed_total_usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+      { k: 'محصل على فواتير البيع', v: formatTotalsByCurrency(siCur.rows.map((r) => ({ currency_code: r.currency_code, total: r.paid }))) },
+      { k: 'متبقي ذمم فواتير البيع', v: formatTotalsByCurrency(siCur.rows.map((r) => ({ currency_code: r.currency_code, total: r.rem }))) },
+      { k: '— سندات قبض عملاء (عدد مؤكد)', v: v.rows.reduce((a, r) => a + Number(r.customer_receipts), 0) },
+      { k: '— إجمالي قبض عملاء (سندات)', v: formatTotalsByCurrency(v.rows.map((r) => ({ currency_code: r.currency_code, total: r.receipt_sum }))) },
+      { k: 'مرتجع مبيعات (عدد مؤكد)', v: p.rows.reduce((a, r) => a + Number(r.n), 0) },
+      { k: 'إجمالي مرتجع مبيعات', v: formatTotalsByCurrency(p.rows.map((r) => ({ currency_code: r.currency_code, total: r.t }))) },
       { k: 'سجلات نشاط عملاء', v: l.rows[0].n },
     ],
     meta: { dataCompleteness: 'FULL' },

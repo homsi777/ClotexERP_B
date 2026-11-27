@@ -55,7 +55,7 @@ function fmtNumber(value: unknown, locale: string, digits = 0): string {
   });
 }
 
-function fmtMoney(value: unknown, locale: string, currency = 'USD'): string {
+function fmtMoney(value: unknown, locale: string, currency: string): string {
   return `${fmtNumber(value, locale, 2)} ${currency}`;
 }
 

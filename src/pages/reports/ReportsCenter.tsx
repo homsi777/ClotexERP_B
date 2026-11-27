@@ -146,6 +146,23 @@ const reportCollator = new Intl.Collator('ar', {
   numeric: true,
 });
 
+type CurrencyTotal = { currency_code: string; total: string };
+const fmtTotal = (v: string | number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** مجاميع لكل عملة على حدة، سطر لكل عملة — بلا جمع بين عملات مختلفة. */
+function totalsByCurrencyText(rows: CurrencyTotal[] | undefined): string {
+  if (!rows || rows.length === 0) return '—';
+  return rows.map((r) => `${r.currency_code} ${fmtTotal(r.total)}`).join('\n');
+}
+
+/** «قبض / صرف» لكل عملة: سطر لكل عملة. */
+function voucherTotalsByCurrency(receipts: CurrencyTotal[] | undefined, payments: CurrencyTotal[] | undefined): string {
+  const codes = Array.from(new Set([...(receipts ?? []), ...(payments ?? [])].map((r) => r.currency_code))).sort();
+  if (codes.length === 0) return '—';
+  const get = (rows: CurrencyTotal[] | undefined, c: string) => fmtTotal(rows?.find((r) => r.currency_code === c)?.total ?? 0);
+  return codes.map((c) => `${c} ${get(receipts, c)} / ${get(payments, c)}`).join('\n');
+}
+
 function sortableText(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -771,7 +788,7 @@ function ExecutiveDashboardPanel() {
           },
           {
             label: t('dashboard.kpis.receiptPayment'),
-            value: `${Number(dash.receipt_total ?? 0).toLocaleString()} / ${Number(dash.payment_total ?? 0).toLocaleString()}`,
+            value: voucherTotalsByCurrency(dash.receipt_by_currency, dash.payment_by_currency),
             icon: Wallet,
             bg: 'bg-violet-50',
             color: 'text-violet-700',
@@ -841,7 +858,7 @@ function ExecutiveDashboardPanel() {
               <div key={idx} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500 mb-1">{kpi.label}</p>
-                  <h4 className="text-3xl font-bold text-slate-900 tracking-tight">
+                  <h4 className="text-3xl font-bold text-slate-900 tracking-tight whitespace-pre-line">
                     {kpi.value}{' '}
                     {'unit' in kpi && kpi.unit ? (
                       <span className="text-sm font-normal text-slate-500 ml-1">{kpi.unit}</span>
@@ -872,11 +889,11 @@ function ExecutiveDashboardPanel() {
                 </div>
                 <div className="py-3 flex justify-between">
                   <span className="text-slate-600">{t('dashboard.vouchers.totalConfirmedReceipts')}</span>
-                  <span className="font-mono">{Number(vch?.confirmed_receipts ?? 0).toLocaleString()}</span>
+                  <span className="font-mono whitespace-pre-line text-left">{totalsByCurrencyText(vch?.receipts_by_currency)}</span>
                 </div>
                 <div className="py-3 flex justify-between">
                   <span className="text-slate-600">{t('dashboard.vouchers.totalConfirmedPayments')}</span>
-                  <span className="font-mono">{Number(vch?.confirmed_payments ?? 0).toLocaleString()}</span>
+                  <span className="font-mono whitespace-pre-line text-left">{totalsByCurrencyText(vch?.payments_by_currency)}</span>
                 </div>
               </div>
             </div>}
