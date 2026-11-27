@@ -861,8 +861,8 @@ ${lblBoxCss}
 .row-rtl .rv { flex: 0 1 auto; min-width: 0; text-align: right; unicode-bidi: plaintext; }
 .text-rtl { direction: rtl; unicode-bidi: plaintext; }
 .text-ltr { direction: ltr; unicode-bidi: plaintext; }
-.rk { font-size: ${compactLabel ? '2.5mm' : '2.6mm'}; font-weight: 500; color: #1f2937; }
-.rc { font-size: 2.5mm; font-weight: 500; color: #1f2937; text-align: center; }
+.rk { font-size: ${compactLabel ? '2.5mm' : '3mm'}; font-weight: 600; color: #000; }
+.rc { font-size: 2.5mm; font-weight: 500; color: #000; text-align: center; }
 .rv { font-size: ${compactLabel ? '3mm' : '3.4mm'}; font-weight: 800; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rv-em { font-size: 3.2mm; font-weight: 800; }
 .rv-cd { font-size: ${compactLabel ? '3.3mm' : '4.8mm'}; font-weight: 900; }
@@ -870,7 +870,7 @@ ${lblBoxCss}
 .rv-box { display: inline-block; border: 0.5mm solid #000; border-radius: 2mm; padding: 0.4mm 2.5mm; font-size: ${compactLabel ? '4mm' : '6.6mm'}; font-weight: 900; line-height: 1.1; overflow: visible; }
 
 .quality { text-align: center; margin-top: 0.35mm; }
-.quality .ql { font-size: 2.5mm; font-weight: 500; color: #1f2937; }
+.quality .ql { font-size: 2.5mm; font-weight: 500; color: #000; }
 .quality .qv { font-size: ${compactLabel ? '11pt' : '15pt'}; font-weight: 900; line-height: 1; }
 
 .lower {

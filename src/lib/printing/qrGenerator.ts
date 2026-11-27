@@ -24,7 +24,7 @@ export interface QrOptions {
  * Returns a complete <svg>...</svg> string suitable for embedding inline in HTML.
  */
 export async function generateQrSvg(text: string, opts: QrOptions = {}): Promise<string> {
-  const { size = 40, margin = 1, darkColor = '#000000', lightColor = '#ffffff' } = opts;
+  const { size = 40, margin = 3, darkColor = '#000000', lightColor = '#ffffff' } = opts;
   const QRCode = await import('qrcode');
   const svg = await QRCode.default.toString(text, {
     type: 'svg',
