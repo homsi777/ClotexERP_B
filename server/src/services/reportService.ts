@@ -18,7 +18,7 @@ function shortId(id: string): string {
 /** Extended dashboard counts + aggregates — merged into API `data` object */
 export async function fetchExtendedDashboardSummary(companyId: string): Promise<Record<string, unknown>> {
   const pool = getPool();
-  const [main, cashRows, weightRow] = await Promise.all([
+  const [main, cashRows, voucherRows, weightRow] = await Promise.all([
     pool.query(
       `SELECT
          (SELECT COUNT(*)::int FROM customers WHERE company_id = $1) AS customers_count,
@@ -52,6 +52,12 @@ export async function fetchExtendedDashboardSummary(companyId: string): Promise<
        GROUP BY currency_code ORDER BY currency_code`,
       [companyId],
     ),
+    pool.query<{ voucher_type: string; currency_code: string; total: string }>(
+      `SELECT voucher_type, currency_code, SUM(amount)::numeric AS total
+       FROM vouchers WHERE company_id = $1 AND status = 'CONFIRMED' AND voucher_type IN ('RECEIPT','PAYMENT')
+       GROUP BY voucher_type, currency_code ORDER BY currency_code`,
+      [companyId],
+    ),
     pool.query<{ n: string }>(
       `SELECT COUNT(*)::int AS n FROM inventory_movements WHERE company_id = $1`,
       [companyId],
@@ -60,6 +66,9 @@ export async function fetchExtendedDashboardSummary(companyId: string): Promise<
 
   const row = main.rows[0] as Record<string, unknown>;
   row.inventory_movements_count = parseInt(weightRow.rows[0].n, 10);
+  // مجاميع السندات لكل عملة على حدة (الجمع عبر العملات يعطي رقماً مضللاً).
+  row.receipt_by_currency = voucherRows.rows.filter((r) => r.voucher_type === 'RECEIPT').map((r) => ({ currency_code: r.currency_code, total: r.total }));
+  row.payment_by_currency = voucherRows.rows.filter((r) => r.voucher_type === 'PAYMENT').map((r) => ({ currency_code: r.currency_code, total: r.total }));
   row.total_cash_by_currency = cashRows.rows.map((r) => ({
     currency_code: r.currency_code,
     total: r.total,
