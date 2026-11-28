@@ -230,11 +230,11 @@ export const Login = () => {
 
       {/* ── Main split layout ─────────────────────────────────────────────── */}
       <main
-        className="relative z-10 mx-auto grid min-h-[calc(100vh-100px)] max-w-7xl grid-cols-1 items-center gap-12 px-8 pb-16 lg:grid-cols-[minmax(0,440px)_1fr]"
+        className="relative z-10 mx-auto grid min-h-[calc(100vh-100px)] max-w-7xl grid-cols-1 items-center gap-8 px-4 pb-12 sm:px-8 md:grid-cols-[minmax(0,380px)_1fr] md:gap-10 md:pb-16 lg:grid-cols-[minmax(0,440px)_1fr] lg:gap-12"
       >
         {/* ── Left: login card ────────────────────────────────────────────── */}
-        <section className="order-2 lg:order-1">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl shadow-indigo-950/40 backdrop-blur-2xl sm:p-10">
+        <section className="order-2 md:order-1">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-indigo-950/40 backdrop-blur-2xl sm:p-8 lg:p-10">
             <div className="mb-7 flex items-center gap-3">
               <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
                 <LogIn className="h-5 w-5 text-white" strokeWidth={2.4} />
@@ -317,7 +317,7 @@ export const Login = () => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={!canLogin}
-                  className={`block w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-[15px] text-white placeholder:text-slate-500 outline-none transition focus:border-indigo-400/60 focus:bg-white/[0.08] focus:ring-4 focus:ring-indigo-500/20 ${inputDisabledClass}`}
+                  className={`block w-full rounded-xl border border-white/20 bg-white/[0.10] px-4 py-3.5 text-base text-white placeholder:text-slate-500 outline-none transition focus:border-indigo-400/60 focus:bg-white/[0.08] focus:ring-4 focus:ring-indigo-500/20 ${inputDisabledClass}`}
                   placeholder="admin"
                   dir="ltr"
                   required={canLogin}
@@ -340,7 +340,7 @@ export const Login = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={!canLogin}
-                    className={`block w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 pl-12 text-[15px] text-white placeholder:text-slate-500 outline-none transition focus:border-indigo-400/60 focus:bg-white/[0.08] focus:ring-4 focus:ring-indigo-500/20 ${inputDisabledClass}`}
+                    className={`block w-full rounded-xl border border-white/20 bg-white/[0.10] px-4 py-3.5 pl-12 text-base text-white placeholder:text-slate-500 outline-none transition focus:border-indigo-400/60 focus:bg-white/[0.08] focus:ring-4 focus:ring-indigo-500/20 ${inputDisabledClass}`}
                     placeholder="••••••••"
                     dir="ltr"
                     required={canLogin}
@@ -397,19 +397,19 @@ export const Login = () => {
             </div>
           </div>
 
-          <p className="mt-5 text-center text-[12px] text-slate-400 lg:text-start">
+          <p className="mt-5 text-center text-[12px] text-slate-400 md:text-start">
             {t('helpText')}
           </p>
         </section>
 
         {/* ── Right: brand identity + feature highlights ──────────────────── */}
-        <section className="order-1 lg:order-2">
-          <div className="relative max-w-xl lg:ms-auto">
-            <div className="mb-7">
+        <section className="order-1 md:order-2">
+          <div className="relative max-w-xl md:ms-auto">
+            <div className="mb-5 sm:mb-7">
               <img
                 src={BRAND.logoWhiteInline}
                 alt={BRAND.name}
-                className="h-32 w-auto select-none sm:h-40"
+                className="h-24 w-auto select-none sm:h-32 lg:h-40"
                 draggable={false}
               />
             </div>
@@ -422,18 +422,18 @@ export const Login = () => {
               {BRAND.descriptionAr}
             </span>
 
-            <h2 className="mt-6 text-4xl font-black leading-[1.15] text-white sm:text-5xl">
+            <h2 className="mt-6 text-3xl font-black leading-[1.15] text-white sm:text-4xl lg:text-5xl">
               {t('heroTitle1')}
               <br />
               <span className="bg-gradient-to-l from-violet-300 via-violet-200 to-amber-300 bg-clip-text text-transparent">
                 {t('heroTitle2')}
               </span>
             </h2>
-            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-slate-300">
+            <p className="mt-4 hidden max-w-md text-[15px] leading-relaxed text-slate-300 sm:block">
               {t('heroDescription')}
             </p>
 
-            <div className="mt-10 grid gap-3 sm:grid-cols-2">
+            <div className="mt-10 hidden gap-3 md:grid md:grid-cols-1 lg:grid-cols-2">
               {features.map((feature) => {
                 const Icon = feature.icon;
                 return (
