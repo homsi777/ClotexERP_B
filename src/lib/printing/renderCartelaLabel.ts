@@ -94,7 +94,7 @@ function clampFontSizePt(value: number | undefined): number {
 /** تقدير حجم الخط (pt) ليتسع نص من عدد أحرف معيّن في عرض معيّن (mm) — أحرف كبيرة عريضة ≈ 0.68em. */
 function fitPt(text: string, availMm: number, maxPt: number, minPt: number, lines = 1): number {
   const len = Math.max(1, text.length);
-  const pt = (availMm * lines) / (len * 0.68 * 0.3528);
+  const pt = (availMm * lines) / (len * 0.78 * 0.3528);
   return Math.round(Math.min(maxPt, Math.max(minPt, pt)) * 10) / 10;
 }
 
@@ -124,20 +124,47 @@ function buildCartelaLabelSheetInner(data: CartelaLabelData): string {
   const topAvail = 34;
   const topMax = base + 1.4;
   const artOne = fitPt(art, topAvail, topMax, 5.4);
-  const artTwoLines = art.length * 0.68 * 0.3528 * artOne > topAvail * 1.02;
+  const artTwoLines = art.length * 0.78 * 0.3528 * artOne > topAvail * 1.02;
   const artPt = artTwoLines ? fitPt(art, topAvail, topMax - 1, 4.8, 2) : artOne;
   const designPt = fitPt(design, topAvail, topMax, 5.4);
 
-  // COMP.: من مكوّن إلى خمسة؛ يلتف على أسطر ويصغَّر قليلاً حسب العدد دون إفراط
-  const compPt = compParts.length <= 2 ? base - 0.2 : compParts.length === 3 ? base - 0.7 : base - 1.2;
-  const specPt = base + 0.4;
+  // ميزانية ارتفاع قسم المواصفات (mm): إطار 80×50 ← داخلي ≈46.6؛ أعلى 11.6 وأسفل 10 ثابتان.
+  // يُصغَّر خط التركيب ثم رموز العناية ثم المواصفات تدريجياً وبأقل قدر حتى يتسع كل شيء دون قص أو تداخل.
+  const colour = data.colour.trim();
+  const midH = CARTELA_HEIGHT_MM - 2.4 - 1.0 - 11.6 - 10;
+  const specAvailW = 34;
+  const wrapLines = (pt: number): number => {
+    let lines = 1;
+    let cur = 0;
+    for (const part of compParts) {
+      const w = part.length * pt * 0.3528 * 0.66 + 1.2;
+      if (cur + w > specAvailW && cur > 0) { lines += 1; cur = w; } else { cur += w; }
+    }
+    return compParts.length ? lines : 0;
+  };
+  const careIds = data.careSymbols;
+  const symMaxMm = 5.8;
+  let compPt = compParts.length <= 2 ? base - 0.2 : compParts.length === 3 ? base - 0.7 : base - 1.2;
+  let specPt = base + 0.4;
+  let symMm = careIds.length ? Math.max(3.4, Math.min(symMaxMm, (53 - (careIds.length - 1) * 0.8) / careIds.length)) : 0;
+  // COLOUR يصغَّر ليتسع في سطر؛ إن لم يكفِ يلتف على سطرين (بلا اقتطاع)
+  const colourOnePt = fitPt(colour, specAvailW, base + 0.4, 5.2);
+  const colourTwo = colour.length * 0.78 * 0.3528 * colourOnePt > specAvailW * 1.02;
+  const colourPt = colourTwo ? fitPt(colour, specAvailW, base - 0.2, 4.8, 2) : colourOnePt;
+  const specRows = (colour ? (colourTwo ? 1.8 : 1) : 0) + (width ? 1 : 0) + (weight ? 1 : 0);
+  const needMm = (): number =>
+    1.4 + specRows * (specPt * 0.3528 * 1.1 + 0.5) + wrapLines(compPt) * compPt * 0.3528 * 1.08
+    + (careIds.length ? symMm + 1.5 : 0);
+  for (let guard = 0; guard < 60 && needMm() > midH; guard++) {
+    if (compPt > 5.0) compPt = Math.round((compPt - 0.2) * 10) / 10;
+    else if (symMm > 3.6) symMm = Math.round((symMm - 0.2) * 10) / 10;
+    else if (specPt > 5.8) specPt = Math.round((specPt - 0.2) * 10) / 10;
+    else break;
+  }
   const lblPt = base - 0.4;
 
-  const careIds = data.careSymbols;
   const careInner = renderCareSymbolsHtml(careIds).replace('<div class="care" aria-hidden="true">', '').replace(/<\/div>$/, '');
-  const careHtml = careIds.length
-    ? `<div class="care" style="--s:${Math.max(3.4, Math.min(6.6, (53 - (careIds.length - 1) * 0.8) / careIds.length)).toFixed(2)}mm">${careInner}</div>`
-    : '';
+  const careHtml = careIds.length ? `<div class="care" style="--s:${symMm.toFixed(2)}mm">${careInner}</div>` : '';
 
   const field = (label: string, value: string, pt: number, extra = '') =>
     value.trim()
@@ -162,6 +189,7 @@ function buildCartelaLabelSheetInner(data: CartelaLabelData): string {
       <div class="mid">
         <div class="mid-l">
           <div class="specs">
+            ${field('COLOUR', colour, colourPt, colourTwo ? 'two' : '')}
             ${field('WIDTH', width, specPt)}
             ${field('WEIGHT', weight, specPt)}
             ${compHtml}
