@@ -82,7 +82,7 @@ export function renderCartelaDeliveryVoucherHtml(data: CartelaDeliveryVoucherDat
   .page { width: 100%; padding: 4mm 6mm; }
   .head { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
   .head td { vertical-align: top; }
-  .logo { height: 17mm; max-width: 52mm; object-fit: contain; }
+  .logo { height: 24mm; max-width: 73mm; object-fit: contain; }
   .title { font-size: 22pt; font-weight: 800; line-height: 1.1; margin: 0; }
   .vno { font-size: 17pt; font-weight: 800; margin: 1mm 0 3mm; direction: ltr; text-align: right; }
   .meta { font-size: 11pt; }

@@ -60,7 +60,7 @@ export function renderPayrollSignatureSheetA4Html(data: SignatureSheetData): str
   @page { size: A4 portrait; margin: 10mm; }
   body { font-family: ${FONT}; color:#111; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .header { display:flex; justify-content:space-between; align-items:center; border-bottom: 3px solid ${NAVY}; padding-bottom:8px; margin-bottom:10px; }
-  .logo { height:42px; }
+  .logo { height:59px; }
   .title { text-align:center; font-size:18px; font-weight:900; color:${NAVY}; }
   .subtitle { text-align:center; font-size:11px; color:#64748b; margin-top:2px; }
   table.grid { width:100%; border-collapse:collapse; font-size:10.5px; }

@@ -50,7 +50,7 @@ export function renderEmployeesListA4Html(rows: EmployeeListRow[], L: EmployeeLi
   .doc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .doc-title { font-size: 26px; font-weight: 900; color: ${NAVY}; margin-bottom: 4px; line-height: 1.2; }
   .doc-meta { font-size: 11.5px; color: #222; font-weight: 500; line-height: 1.5; }
-  .brand-logo { height: 62px; width: auto; object-fit: contain; }
+  .brand-logo { height: 87px; width: auto; object-fit: contain; }
   .gold-rule { height: 1.5px; background: ${GOLD}; margin: 4px 0 10px; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .data-table thead th { background: ${NAVY}; color: #fff; font-size: 10px; font-weight: 900; padding: 7px 4px; text-align: center; border-left: 1px solid rgba(255,255,255,.22); }

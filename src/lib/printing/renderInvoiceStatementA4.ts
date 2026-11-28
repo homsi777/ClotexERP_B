@@ -683,7 +683,7 @@ export function renderInvoiceStatementA4Html(opts: {
     .doc-head { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; direction: rtl; }
     .doc-head-text { text-align: right; }
     .doc-head-brand { display: flex; align-items: center; gap: 10px; direction: ltr; }
-    .brand-logo { height: 66px; width: auto; object-fit: contain; }
+    .brand-logo { height: 92px; width: auto; object-fit: contain; }
     .brand-tag { font-size: 11px; color: ${NAVY}; font-weight: 500; }
     .doc-title { text-align: right; font-size: 24px; font-weight: 900; color: ${NAVY}; margin: 0 0 6px; line-height: 1.2; }
     .doc-sub { display: flex; gap: 8px; justify-content: flex-start; font-size: 13px; color: #222; direction: ltr; font-weight: 500; }

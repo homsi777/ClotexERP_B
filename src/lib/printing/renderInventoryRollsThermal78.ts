@@ -70,15 +70,15 @@ export function renderInventoryRollsThermal78(o: ThermalStatementOptions): { htm
   const rowMm = 12.5 * s, ghMm = 7 * s, totMm = 7 * s;
   const footMm = o.footer ? 16 * s : 0;
   const heightMm = summary
-    ? Math.ceil(52 * s + 8 * s + groups.length * 10 * s + 16 * s + 8 + footMm)
-    : Math.ceil(52 * s + groups.reduce((a, g) => a + ghMm + Math.ceil(g.rows.length / 2) * rowMm + totMm + 2, 0) + 16 * s + 8 + footMm);
+    ? Math.ceil(59 * s + 8 * s + groups.length * 10 * s + 16 * s + 8 + footMm)
+    : Math.ceil(59 * s + groups.reduce((a, g) => a + ghMm + Math.ceil(g.rows.length / 2) * rowMm + totMm + 2, 0) + 16 * s + 8 + footMm);
   const title = o.title ?? (summary ? 'كشف جرد ملخص' : 'كشف جرد الأتواب');
   const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>
 @page { size: ${rollW}mm ${heightMm}mm; margin: 0; }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:${rollW}mm;background:#fff;color:#000;font-family:Tahoma,Arial,'Segoe UI',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .page{width:72mm;margin:0 auto;padding:${2 * s}mm 0 ${4 * s}mm}
-.logo{display:block;margin:0 auto ${1.5 * s}mm;height:${17 * s}mm;width:auto}
+.logo{display:block;margin:0 auto ${1.5 * s}mm;height:${24 * s}mm;width:auto}
 h1{text-align:center;font-size:${11 * s}pt;font-weight:900;margin-bottom:${1 * s}mm}
 .meta{font-size:${7 * s}pt;font-weight:700;line-height:1.5;border-top:.3mm solid #000;border-bottom:.3mm solid #000;padding:${1 * s}mm 0;margin-bottom:${2 * s}mm}
 .meta div{display:flex;justify-content:space-between;gap:2mm}

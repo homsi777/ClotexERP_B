@@ -16,7 +16,7 @@ const arLocale = () => (i18n.language === 'ar' ? 'ar' : 'tr');
 const renderBrandHeaderHtml = (): string => `
   <div dir="rtl" style="text-align:center;margin:0 0 4px;font-family:Arial,sans-serif;">
     <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
-      <img src="${BRAND.logoInline}" alt="${BRAND.name}" style="height:145px;width:auto;object-fit:contain;" />
+      <img src="${BRAND.logoInline}" alt="${BRAND.name}" style="height:203px;width:auto;object-fit:contain;" />
       <div style="display:none;line-height:1.05;">
         <div style="font-size:20px;font-weight:800;letter-spacing:0.5px;color:${BRAND.primaryColor};">${BRAND.name}</div>
         <div style="font-size:10px;letter-spacing:1.5px;color:${BRAND.primaryColorSoft};margin-top:4px;">${BRAND.tagline}</div>
@@ -618,7 +618,7 @@ function renderAccountStatementHtml(options: {
   .hdr-box-sub   { font-size: 11px; color: #475569; margin-top: 2px; }
 
   .hdr-center { text-align: center; padding: 0; }
-  .hdr-center .logo { height: 72px; width: auto; object-fit: contain; display: block; margin: 0 auto 2px; }
+  .hdr-center .logo { height: 101px; width: auto; object-fit: contain; display: block; margin: 0 auto 2px; }
   .hdr-center h1 { font-size: 20px; font-weight: 800; color: ${NAVY}; margin: 0; }
   .hdr-center .sub { font-size: 12px; color: #475569; margin-top: 2px; }
   .hdr-center .divider { width: 50px; height: 2px; background: ${NAVY}; margin: 4px auto; border-radius: 2px; }

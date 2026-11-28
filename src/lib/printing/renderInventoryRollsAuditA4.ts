@@ -242,7 +242,7 @@ export function renderInventoryRollsAuditA4Html(opts: {
     .doc-head { display: flex; justify-content: space-between; align-items: center; margin: 0 0 6px; direction: rtl; }
     .doc-head-text { text-align: right; }
     .doc-head-brand { display: flex; align-items: center; gap: 10px; direction: ltr; }
-    .brand-logo { height: 56px; width: auto; object-fit: contain; }
+    .brand-logo { height: 78px; width: auto; object-fit: contain; }
     .brand-tag { font-size: 9px; color: ${NAVY}; font-weight: 500; }
     .gold-rule { height: 1.5px; background: #B89854; margin: 0 0 8px; }
     .doc-title {

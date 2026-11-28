@@ -72,7 +72,7 @@ export function renderChecksSheetA4Html(opts: { checks: PrintableCheck[]; lang: 
       print-color-adjust: exact;
     }
     .brand { text-align: center; padding-bottom: 3mm; border-bottom: 0.4mm solid #333; margin-bottom: 4mm; }
-    .brand img { height: 14mm; object-fit: contain; }
+    .brand img { height: 20mm; object-fit: contain; }
     .doc-title { text-align: center; font-size: 13pt; font-weight: 700; margin: 2mm 0 5mm; }
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5mm; }
     .card { border: 0.3mm solid #ccc; border-radius: 2mm; padding: 3mm; break-inside: avoid; page-break-inside: avoid; }

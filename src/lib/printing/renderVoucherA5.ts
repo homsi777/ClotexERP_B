@@ -182,7 +182,7 @@ function voucherStyles(accent: string, accentSoft: string, bw: boolean): string 
     .header-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
     .header-table td { vertical-align: middle; }
     .brand-cell { display: flex; align-items: center; gap: 10px; direction: ltr; }
-    .logo { height: 62px; width: auto; object-fit: contain; }
+    .logo { height: 87px; width: auto; object-fit: contain; }
     .brand-tag { font-size: 11px; color: ${ink}; font-weight: 500; }
     .page-no { font-size: 9px; color: #444; text-align: right; direction: ltr; vertical-align: top; }
     .doc-title { text-align: center; font-size: 30px; font-weight: 900; color: ${ink}; margin: 0 0 4px; line-height: 1.2; }

@@ -54,7 +54,7 @@ function renderOrderDocumentHeader(title: string): string {
 <div dir="rtl" style="max-width:760px;margin:0 auto 18px;font-family:${PDF_FONT};">
   <div style="border:1px solid ${PDF_BORDER};border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
     <div style="padding:22px 24px 14px;text-align:center;background:#fff;">
-      <img src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" style="height:54px;width:auto;max-width:300px;object-fit:contain;display:inline-block;" />
+      <img src="${BRAND.logoInline}" alt="${escapeHtml(BRAND.name)}" style="height:76px;width:auto;max-width:420px;object-fit:contain;display:inline-block;" />
     </div>
     <div style="background:${PDF_HEADER_BG};color:${PDF_HEADER_TEXT};text-align:center;padding:11px 20px;font-size:15px;font-weight:800;">
       ${escapeHtml(title)}

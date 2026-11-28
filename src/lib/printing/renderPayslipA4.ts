@@ -73,7 +73,7 @@ export function renderPayslipA4Html(data: PayslipData): string {
   .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .title { font-size:26px; font-weight:900; color:${NAVY}; line-height:1.2; margin-bottom:4px; }
   .subtitle { font-size:12px; color:#222; font-weight:500; line-height:1.5; }
-  .logo { height:62px; width:auto; object-fit:contain; }
+  .logo { height:87px; width:auto; object-fit:contain; }
   .gold-rule { height:1.5px; background:${GOLD}; margin:4px 0 12px; }
   .section { background:${NAVY}; color:#fff; font-size:12px; font-weight:900; padding:6px 10px; text-align:right; margin-top:12px; }
   .info-table { width:100%; border-collapse:collapse; }

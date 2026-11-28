@@ -294,9 +294,9 @@ function reservationStyles(): string {
     .header-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
     .header-table td { vertical-align: middle; padding: 0; }
     .logo-center {
-      height: 96px;
+      height: 134px;
       width: auto;
-      max-width: 320px;
+      max-width: 448px;
       object-fit: contain;
       display: block;
       margin: 0 auto;

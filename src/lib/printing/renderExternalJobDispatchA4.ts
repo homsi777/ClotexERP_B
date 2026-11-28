@@ -74,7 +74,7 @@ export function renderExternalJobDispatchA4Html(opts: {
     }
     .page { width: 210mm; min-height: 297mm; padding: 10mm 10mm 8mm; }
     .brand { text-align: center; padding-bottom: 4mm; border-bottom: 0.4mm solid #333; margin-bottom: 4mm; }
-    .brand img { height: 16mm; object-fit: contain; }
+    .brand img { height: 22mm; object-fit: contain; }
     .doc-title { text-align: center; font-size: 14pt; font-weight: 700; margin: 2mm 0 5mm; }
     .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 6mm; margin-bottom: 5mm; font-size: 10pt; }
     .meta .row { display: flex; gap: 2mm; }
