@@ -26,6 +26,7 @@ export interface ReceivingFilters { search?: string; supplierId?: string; from?:
 const qs = (o: Record<string, string | undefined>) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v) p.set(k, v); return p.toString() ? `?${p}` : ''; };
 
 export const listReceivingInvoices = async (f: ReceivingFilters = {}) => (await apiFetch<{ ok: boolean; data: ReceivingInvoice[] }>(`/api/purchase-receiving/invoices${qs({ ...f })}`)).data;
+export const getReceivingSummary = async (ids: string[]) => (await apiFetch<{ ok: boolean; data: Record<string, { overall: LineStatus; receiptNos: string[] }> }>(`/api/purchase-receiving/invoices-summary?ids=${ids.join(',')}`)).data;
 export const getReceivingInvoice = async (id: string) => (await apiFetch<{ ok: boolean; data: { invoice: ReceivingInvoice; receipts: ReceiptView[] } }>(`/api/purchase-receiving/invoices/${id}`)).data;
 export const listReceipts = async (pending = false) => (await apiFetch<{ ok: boolean; data: ReceiptView[] }>(`/api/purchase-receiving/receipts${pending ? '?pending=1' : ''}`)).data;
 export const createReceipt = async (body: ReceiptInput) => (await apiFetch<{ ok: boolean; data: { id: string; receiptNo: string; status: string; duplicate?: boolean; rollIds?: string[] } }>('/api/purchase-receiving/receipts', { method: 'POST', body: JSON.stringify(body) })).data;

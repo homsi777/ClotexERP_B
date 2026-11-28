@@ -39,7 +39,7 @@ const kindOf = (unit: string, stored: string | null, hasYarn: boolean): 'FABRIC'
   (stored as 'FABRIC' | 'YARN' | 'OTHER' | null) ?? (unit === 'package' || unit === 'piece' ? 'OTHER' : unit === 'kg' ? (hasYarn ? 'YARN' : 'YARN') : 'FABRIC');
 
 export async function listReceivingInvoices(db: Db, companyId: string, f: {
-  search?: string; supplierId?: string; from?: string; to?: string; warehouseId?: string; materialKind?: string; status?: string; invoiceStatus?: string; id?: string; limit?: number;
+  search?: string; supplierId?: string; from?: string; to?: string; warehouseId?: string; materialKind?: string; status?: string; invoiceStatus?: string; id?: string; ids?: string[]; limit?: number;
 }): Promise<ReceivingInvoice[]> {
   const inv = (await db.query<Record<string, unknown>>(
     `SELECT i.id, i.invoice_no, i.supplier_invoice_no, i.invoice_date::text AS invoice_date, i.supplier_id, s.name AS supplier_name, i.document_status, i.receive_via_warehouse
@@ -47,9 +47,9 @@ export async function listReceivingInvoices(db: Db, companyId: string, f: {
       WHERE i.company_id=$1 AND i.document_status <> 'VOIDED' AND ($2::uuid IS NULL OR i.id=$2)
         AND ($3::text IS NULL OR i.invoice_no ILIKE $3 OR COALESCE(i.supplier_invoice_no,'') ILIKE $3 OR s.name ILIKE $3)
         AND ($4::uuid IS NULL OR i.supplier_id=$4) AND ($5::date IS NULL OR i.invoice_date >= $5::date) AND ($6::date IS NULL OR i.invoice_date <= $6::date)
-        AND ($7::text IS NULL OR i.document_status=$7)
+        AND ($7::text IS NULL OR i.document_status=$7) AND ($8::uuid[] IS NULL OR i.id = ANY($8::uuid[]))
       ORDER BY i.invoice_date DESC, i.created_at DESC LIMIT ${Math.min(Math.max(f.limit ?? 100, 1), 300)}`,
-    [companyId, f.id ?? null, f.search?.trim() ? `%${f.search.trim()}%` : null, f.supplierId ?? null, f.from ?? null, f.to ?? null, f.invoiceStatus ?? null])).rows;
+    [companyId, f.id ?? null, f.search?.trim() ? `%${f.search.trim()}%` : null, f.supplierId ?? null, f.from ?? null, f.to ?? null, f.invoiceStatus ?? null, f.ids?.length ? f.ids : null])).rows;
   if (!inv.length) return [];
   const ids = inv.map((r) => String(r.id));
   const lines = (await db.query<Record<string, unknown>>(

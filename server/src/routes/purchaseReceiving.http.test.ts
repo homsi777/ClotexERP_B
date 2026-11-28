@@ -102,6 +102,11 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     const ids = recs.flatMap((r) => r.lines.flatMap((l) => l.rollIds));
     assert.equal(ids.length, 2);
     assert.deepEqual([...ids].sort(), [...(r1.json().data.rollIds as string[])].sort());
+    // ملخص حالة الاستلام لقائمة فواتير الشراء
+    const sm = (await call('GET', `/api/purchase-receiving/invoices-summary?ids=${inv.id}`, tWk)).json().data as Record<string, { overall: string; receiptNos: string[] }>;
+    assert.ok(['PARTIAL', 'COMPLETE', 'OVER'].includes(sm[inv.id].overall), sm[inv.id].overall);
+    assert.equal(sm[inv.id].receiptNos.length, recs.length);
+    assert.equal((await call('GET', '/api/purchase-receiving/invoices-summary?ids=not-a-uuid', tWk)).statusCode, 400);
     let d = (await call('GET', `/api/purchase-receiving/invoices/${inv.id}`, tWk)).json().data.invoice.lines as typeof L;
     assert.deepEqual([d[0].status, d[0].remaining], ['PARTIAL', 10]);
     const rolls = await q("SELECT barcode, length_m::float AS len, unit_cost::float AS cost, purchase_invoice_no FROM fabric_rolls WHERE company_id=$1 ORDER BY barcode", [a]);

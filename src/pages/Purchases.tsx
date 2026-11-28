@@ -29,6 +29,7 @@ import { TelegramSendButton } from '../components/telegram/TelegramSendButton';
 import { sendTelegramPurchaseInvoiceById } from '../lib/telegramSendById';
 import { useTranslation } from 'react-i18next';
 import { fetchMe, type AuthUser } from '../lib/api/authApi';
+import { getReceivingSummary, type LineStatus } from '../lib/api/purchaseReceivingApi';
 import { canPriceUser } from '../lib/priceAccess';
 
 const SCAN_DEBOUNCE_MS = 300;
@@ -60,6 +61,8 @@ export const Purchases = () => {
   const [scanFeedback, setScanFeedback] = useState<ScanFeedback>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [telegramBusyId, setTelegramBusyId] = useState<string | null>(null);
+  /** حالة استلام المخزن لكل فاتورة (من إيصالات الاستلام) — يُترك فارغاً بصمت إن لم تتوفر الصلاحية. */
+  const [receivingMap, setReceivingMap] = useState<Record<string, { overall: LineStatus; receiptNos: string[] }>>({});
   
   const refreshPurchaseList = useCallback(async () => {
     setPiLoading(true);
@@ -70,7 +73,11 @@ export const Purchases = () => {
         pageSize: 200,
         documentStatus: documentStatus || undefined,
       });
-      setPurchaseInvoices(res.rows.map((row) => mapPurchaseListRowToInvoice(row as Record<string, unknown>)));
+      const mapped = res.rows.map((row) => mapPurchaseListRowToInvoice(row as Record<string, unknown>));
+      setPurchaseInvoices(mapped);
+      const ids = mapped.filter((i) => String(i.documentStatus ?? '').toUpperCase() === 'CONFIRMED').map((i) => String(i.id)).slice(0, 300);
+      if (ids.length) void getReceivingSummary(ids).then(setReceivingMap).catch(() => setReceivingMap({}));
+      else setReceivingMap({});
     } catch (e) {
       setPiError(e instanceof Error ? e.message : t('list.purchaseLoadFailed'));
       setPurchaseInvoices([]);
@@ -474,6 +481,7 @@ export const Purchases = () => {
                 {showMoney && <th className="px-6 py-4">{t('list.colPaid')}</th>}
                 {showMoney && <th className="px-6 py-4">{t('list.colRemaining')}</th>}
                 <th className="px-6 py-4">{t('list.colDocumentStatus')}</th>
+                <th className="px-4 py-4 whitespace-nowrap">{t('list.colReceiving')}</th>
                 {showMoney && <th className="px-4 py-4 whitespace-nowrap">{t('list.colPaymentStatus')}</th>}
                 <th className="px-6 py-4">{t('list.colActions')}</th>
               </tr>
@@ -511,6 +519,19 @@ export const Purchases = () => {
                         {invoice.needsPricing && (
                           <span className="mt-1 block text-[11px] font-bold text-orange-700">بحاجة إلى تسعير</span>
                         )}
+                    </td>
+                    <td className="px-4 py-4">
+                      {(() => {
+                        const rv = receivingMap[String(invoice.id)];
+                        if (!rv) return <span className="text-slate-400">—</span>;
+                        const tone = rv.overall === 'COMPLETE' ? 'bg-emerald-100 text-emerald-800' : rv.overall === 'PARTIAL' ? 'bg-amber-100 text-amber-800' : rv.overall === 'OVER' ? 'bg-violet-100 text-violet-800' : 'bg-slate-200 text-slate-700';
+                        return (
+                          <Link to="/purchases/receiving" className="block" title={rv.receiptNos.join(' · ')}>
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${tone}`}>{t(`list.receiving.${rv.overall}`)}</span>
+                            {rv.receiptNos.length > 0 && <span className="mt-1 block font-mono text-[11px] text-slate-500" dir="ltr">{rv.receiptNos.join(' · ')}</span>}
+                          </Link>
+                        );
+                      })()}
                     </td>
                     {showMoney && <td className="px-4 py-4">
                       <span
@@ -606,7 +627,7 @@ export const Purchases = () => {
               })}
               {purchaseInvoices.length === 0 && !piLoading && (
                  <tr>
-                 <td colSpan={showMoney ? 9 : 5} className="px-6 py-12 text-center text-slate-500">{t('list.emptyPurchases')}</td>
+                 <td colSpan={showMoney ? 10 : 6} className="px-6 py-12 text-center text-slate-500">{t('list.emptyPurchases')}</td>
                </tr>
               )}
             </tbody>

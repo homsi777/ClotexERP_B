@@ -45,6 +45,20 @@ export const purchaseReceivingRoutes: FastifyPluginAsync = async (app) => {
     if (!q.success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
     return { ok: true, data: await listReceivingInvoices(getPool(), req.user!.companyId, q.data) };
   });
+  /** حالة الاستلام + أرقام إيصالات الاستلام لمجموعة فواتير (لقائمة فواتير الشراء). */
+  app.get('/invoices-summary', async (req, reply) => {
+    const q = z.object({ ids: z.string().max(12000) }).safeParse(req.query);
+    const ids = q.success ? q.data.ids.split(',').map((x) => x.trim()).filter(Boolean) : [];
+    if (!q.success || ids.length === 0 || ids.length > 300 || !ids.every((x) => z.string().uuid().safeParse(x).success)) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
+    const db = getPool();
+    const list = await listReceivingInvoices(db, req.user!.companyId, { ids, limit: 300 });
+    const rc = (await db.query<{ invoice_id: string; receipt_no: string }>(
+      `SELECT invoice_id::text, receipt_no FROM purchase_receipts WHERE company_id=$1 AND invoice_id = ANY($2::uuid[]) AND status <> 'CANCELLED' ORDER BY created_at`, [req.user!.companyId, ids])).rows;
+    const out: Record<string, { overall: string; receiptNos: string[] }> = {};
+    for (const i of list) out[i.id] = { overall: i.overall, receiptNos: [] };
+    for (const r of rc) if (out[r.invoice_id]) out[r.invoice_id].receiptNos.push(r.receipt_no);
+    return { ok: true, data: out };
+  });
   app.get('/invoices/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!z.string().uuid().safeParse(id).success) return sendError(reply, 400, ArabicErrors.validation, 'VALIDATION');
