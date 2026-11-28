@@ -131,7 +131,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       companyId: user.company_id,
       username: user.username,
       role: user.role,
-      permissions,
+      // الحساب «المخصّص» تُقرأ صلاحياته من القاعدة بكل طلب (middleware/auth.ts) فلا تُدرج بالتوكن:
+      // 220 صلاحية تجعل التوكن ~9.7KB فتتجاوز ترويسة Authorization حدّ 8KB لـ nginx ويُرفض كل طلب بـ 400.
+      permissions: permMode === 'CUSTOM' ? [] : permissions,
       isPlatformAdmin: user.is_platform_admin,
     };
 
@@ -309,7 +311,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       companyId: companyRow.rows[0].id,
       username: user.username,
       role: user.role,
-      permissions,
+      // الحساب «المخصّص» تُقرأ صلاحياته من القاعدة بكل طلب (middleware/auth.ts) فلا تُدرج بالتوكن:
+      // 220 صلاحية تجعل التوكن ~9.7KB فتتجاوز ترويسة Authorization حدّ 8KB لـ nginx ويُرفض كل طلب بـ 400.
+      permissions: permMode === 'CUSTOM' ? [] : permissions,
       isPlatformAdmin: user.is_platform_admin,
     };
     const token = signAuthToken(payload);
