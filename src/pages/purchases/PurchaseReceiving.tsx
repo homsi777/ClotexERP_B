@@ -5,6 +5,7 @@ import * as api from '../../lib/api/purchaseReceivingApi';
 import type { LotInput, ReceiptLineInput, ReceiptView, ReceivingInvoice, ReceivingLine, RollInput } from '../../lib/api/purchaseReceivingApi';
 import { listWarehouses, type ApiWarehouse } from '../../lib/api/warehousesApi';
 import { listSuppliers, type ApiSupplier } from '../../lib/api/suppliersApi';
+import { ReceiptRollActions } from '../../components/purchases/ReceiptRollActions';
 import { listCatalog, listOperatingWarehouses, type CatalogItem, type OperatingWarehouse } from '../../lib/api/purchaseCatalogApi';
 
 const nf = (n: number, d = 3) => n.toLocaleString('en-US', { maximumFractionDigits: d });
@@ -71,7 +72,7 @@ export function PurchaseReceiving() {
               <td className={`p-2 font-mono ${l.diff !== 0 ? 'font-bold text-rose-700' : ''}`}>{l.diff > 0 ? '+' : ''}{nf(l.diff)}</td><td className="p-2"><Chip s={l.status} /></td>
               <td className="p-2">{(inv.receiveViaWarehouse || ['package', 'piece'].includes(l.unit)) && !l.autoReceived ? <button type="button" onClick={() => (l.materialKind === 'FABRIC' ? nav(`/purchases/receiving/receive?invoice=${inv.id}&line=${l.id}`) : setDraft({ invoice: inv, line: l }))} className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-bold text-white">استلام</button> : <span className="text-xs text-slate-400">{l.autoReceived ? 'تلقائي' : '—'}</span>}</td></tr>)}
           </tbody></table></div>
-          {detail.length > 0 && <div><b className="text-sm">سجل الاستلامات</b><ul className="mt-1 space-y-1 text-xs text-slate-600">{detail.map((r) => <li key={r.id} className="rounded bg-slate-50 p-2"><b>{r.receiptNo}</b> · {r.warehouseName} · {new Date(r.createdAt).toLocaleString('en-GB')} · {r.createdBy ?? ''} — {r.lines.map((x) => `${x.description} ${nf(x.quantity)} ${UNIT[x.unit] ?? x.unit}${x.conversionFactor && x.conversionFactor !== 1 ? ` (= ${nf(x.quantityInInvoiceUnit)} بوحدة الفاتورة)` : ''}`).join(' · ')}</li>)}</ul></div>}
+          {detail.length > 0 && <div><b className="text-sm">سجل الاستلامات</b><ul className="mt-1 space-y-1 text-xs text-slate-600">{detail.map((r) => <li key={r.id} className="rounded bg-slate-50 p-2"><div className="mb-1"><ReceiptRollActions receipt={r} /></div><b>{r.receiptNo}</b> · {r.warehouseName} · {new Date(r.createdAt).toLocaleString('en-GB')} · {r.createdBy ?? ''} — {r.lines.map((x) => `${x.description} ${nf(x.quantity)} ${UNIT[x.unit] ?? x.unit}${x.conversionFactor && x.conversionFactor !== 1 ? ` (= ${nf(x.quantityInInvoiceUnit)} بوحدة الفاتورة)` : ''}`).join(' · ')}</li>)}</ul></div>}
           <p className="text-xs text-slate-500">فروقات الكمية للمراجعة فقط: لا تتغير قيمة الفاتورة تلقائياً، ويتولى المحاسب معالجتها.</p>
         </div>}
       </section>)}
@@ -81,6 +82,7 @@ export function PurchaseReceiving() {
     {tab === 'pending' && <div className="space-y-2">
       {pending.map((r) => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-white p-3 text-sm">
         <div><b>{r.receiptNo}</b> · {r.supplierName ?? 'بلا مورد'} · {r.warehouseName} · {new Date(r.createdAt).toLocaleDateString('en-GB')}<div className="text-xs text-slate-500">{r.lines.map((x) => `${x.description || KIND[x.materialKind]} ${nf(x.quantity)} ${UNIT[x.unit] ?? x.unit}`).join(' · ')}</div></div>
+        <ReceiptRollActions receipt={r} />
         <button type="button" onClick={() => setLinking(r)} className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white"><Link2 className="h-3.5 w-3.5" />ربط بفاتورة</button></div>)}
       {!pending.length && <p className="rounded-xl border bg-white p-6 text-center text-slate-500">لا استلامات معلّقة.</p>}
       <p className="text-xs text-slate-500">الاستلام المعلّق يُسجَّل بلا قيد مالي ولا قيمة افتراضية، ويُربط بالفاتورة عند وصولها.</p>

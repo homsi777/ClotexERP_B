@@ -104,12 +104,12 @@ export async function listReceipts(db: Db, companyId: string, f: { invoiceId?: s
     [companyId, f.invoiceId ?? null, f.pending === true])).rows;
   if (!rs.length) return [];
   const ls = (await db.query<Record<string, unknown>>(
-    `SELECT id, receipt_id, invoice_line_id, description, material_kind, unit, quantity::float AS q, quantity_in_invoice_unit::float AS qi, conversion_factor::float AS cf, package_count::float AS pc, details, cardinality(roll_ids) AS rolls, cardinality(yarn_lot_ids) AS lots
+    `SELECT id, receipt_id, invoice_line_id, description, material_kind, unit, quantity::float AS q, quantity_in_invoice_unit::float AS qi, conversion_factor::float AS cf, package_count::float AS pc, details, cardinality(roll_ids) AS rolls, roll_ids::text[] AS roll_ids_list, cardinality(yarn_lot_ids) AS lots
        FROM purchase_receipt_lines WHERE company_id=$1 AND receipt_id = ANY($2::uuid[]) ORDER BY created_at`, [companyId, rs.map((r) => String(r.id))])).rows;
   return rs.map((r) => ({
     id: String(r.id), receiptNo: String(r.receipt_no), invoiceId: (r.invoice_id as string | null) ?? null, invoiceNo: (r.invoice_no as string | null) ?? null, supplierName: (r.supplier_name as string | null) ?? null, warehouseName: String(r.warehouse_name),
     status: String(r.status), notes: (r.notes as string | null) ?? null, createdAt: String(r.created_at), createdBy: (r.by as string | null) ?? null, linkedAt: r.linked_at ? String(r.linked_at) : null,
-    lines: ls.filter((l) => String(l.receipt_id) === String(r.id)).map((l) => ({ id: String(l.id), invoiceLineId: (l.invoice_line_id as string | null) ?? null, description: String(l.description), materialKind: String(l.material_kind), unit: String(l.unit), quantity: Number(l.q), quantityInInvoiceUnit: Number(l.qi), conversionFactor: l.cf == null ? null : Number(l.cf), packageCount: l.pc == null ? null : Number(l.pc), details: (l.details as Record<string, unknown>) ?? {}, rolls: Number(l.rolls), lots: Number(l.lots) })),
+    lines: ls.filter((l) => String(l.receipt_id) === String(r.id)).map((l) => ({ id: String(l.id), invoiceLineId: (l.invoice_line_id as string | null) ?? null, description: String(l.description), materialKind: String(l.material_kind), unit: String(l.unit), quantity: Number(l.q), quantityInInvoiceUnit: Number(l.qi), conversionFactor: l.cf == null ? null : Number(l.cf), packageCount: l.pc == null ? null : Number(l.pc), details: (l.details as Record<string, unknown>) ?? {}, rolls: Number(l.rolls), rollIds: ((l.roll_ids_list as string[] | null) ?? []).map(String), lots: Number(l.lots) })),
   }));
 }
 

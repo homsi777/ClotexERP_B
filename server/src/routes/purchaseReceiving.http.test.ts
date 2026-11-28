@@ -97,6 +97,11 @@ test('purchase receiving: invoice-first/partial/over receipts, kg weight entry, 
     const r1 = await call('POST', '/api/purchase-receiving/receipts', tWk, { invoiceId: inv.id, warehouseId: wh, lines: [{ invoiceLineId: lFab.id, unit: 'meter', rolls: [{ lengthM: 60, barcode: 'RC-A' }, { lengthM: 30 }] }] });
     assert.equal(r1.statusCode, 201, r1.body);
     assert.equal((r1.json().data.rollIds as string[]).length, 2, 'يُرجَع معرّفا التوبين لطباعة الستيكرات');
+    // سجل الاستلامات يعيد معرّفات أتواب كل إيصال (لأزرار الإرسالية/التصدير/الطباعة)
+    const recs = (await call('GET', `/api/purchase-receiving/invoices/${inv.id}`, tWk)).json().data.receipts as Array<{ lines: Array<{ rolls: number; rollIds: string[] }> }>;
+    const ids = recs.flatMap((r) => r.lines.flatMap((l) => l.rollIds));
+    assert.equal(ids.length, 2);
+    assert.deepEqual([...ids].sort(), [...(r1.json().data.rollIds as string[])].sort());
     let d = (await call('GET', `/api/purchase-receiving/invoices/${inv.id}`, tWk)).json().data.invoice.lines as typeof L;
     assert.deepEqual([d[0].status, d[0].remaining], ['PARTIAL', 10]);
     const rolls = await q("SELECT barcode, length_m::float AS len, unit_cost::float AS cost, purchase_invoice_no FROM fabric_rolls WHERE company_id=$1 ORDER BY barcode", [a]);

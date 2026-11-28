@@ -15,7 +15,7 @@ export interface ReceivingInvoice {
 }
 export interface ReceiptView {
   id: string; receiptNo: string; invoiceId: string | null; invoiceNo: string | null; supplierName: string | null; warehouseName: string; status: string; notes: string | null; createdAt: string; createdBy: string | null; linkedAt: string | null;
-  lines: Array<{ id: string; invoiceLineId: string | null; description: string; materialKind: string; unit: string; quantity: number; quantityInInvoiceUnit: number; conversionFactor: number | null; packageCount: number | null; rolls: number; lots: number }>;
+  lines: Array<{ id: string; invoiceLineId: string | null; description: string; materialKind: string; unit: string; quantity: number; quantityInInvoiceUnit: number; conversionFactor: number | null; packageCount: number | null; rolls: number; rollIds?: string[]; lots: number }>;
 }
 export interface RollInput { barcode?: string; lengthM?: number; weightKg?: number; widthCm?: number; gsm?: number; lotNo?: string; colorName?: string; colorCode?: string; designCode?: string; materialName?: string }
 export interface LotInput { weightKg: number; lotNo?: string; batchNo?: string; colorName?: string; colorCode?: string; designCode?: string; materialName?: string; packages?: number }
