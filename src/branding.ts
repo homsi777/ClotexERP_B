@@ -30,6 +30,8 @@ export const BRAND = {
   /** سطر الشعار في ترويسة المطبوعات. */
   taglineDocs: 'Textile Industry Solutions',
   /** Resolved asset URLs (Vite `?url` — works with Electron `file://` and `base: './'). */
+  /** الموقع الرسمي — هدف QR لصاقة الكارتيلة (عدّله هنا فقط). */
+  websiteUrl: 'https://www.clotexco.com',
   logoPng: brandMarkUrl,
   /** Inline data URI for print/PDF HTML contexts where file URLs may fail. */
   logoInline: brandMarkInline,

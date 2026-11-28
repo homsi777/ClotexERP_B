@@ -1,6 +1,7 @@
 import { BRAND } from '../../branding';
-import { code128Sequence } from './code128Width';
-import { formatCompositionForLabel, type CartelaCompositionLine } from '../cartela/careSymbols';
+import { code128Modules, code128Sequence } from './code128Width';
+import { formatCompositionLinesForLabel, type CartelaCompositionLine } from '../cartela/careSymbols';
+import markBlackSvg from '../../assets/brand/clotex-mark-black.svg?raw';
 import { renderCareSymbolsHtml } from '../cartela/careSymbolSvg';
 import type { CartelaCareSymbolId } from '../cartela/careSymbols';
 
@@ -74,39 +75,14 @@ function formatWidth(data: CartelaLabelData): string {
   const base = `${data.widthValue.trim()} ${data.widthUnit.trim()}`.trim();
   if (!data.widthValue.trim()) return '';
   if (!data.widthToleranceEnabled) return base;
-  return `${base} (-/+ %${Math.round(data.widthTolerancePercent)})`;
+  return `${base} (±${Math.round(data.widthTolerancePercent)}%)`;
 }
 
 function formatWeight(data: CartelaLabelData): string {
   const base = `${data.weightValue.trim()} ${data.weightUnit.trim()}`.trim();
   if (!data.weightValue.trim()) return '';
   if (!data.weightToleranceEnabled) return base;
-  return `${base} (-/+ %${Math.round(data.weightTolerancePercent)})`;
-}
-
-function row(label: string, value: string): string {
-  if (!value.trim()) return '';
-  return `
-    <div class="row">
-      <span class="lbl">${esc(label)}</span>
-      <span class="sep">:</span>
-      <span class="val">${esc(value)}</span>
-    </div>`;
-}
-
-function compositionRow(lines: CartelaCompositionLine[]): string {
-  const text = formatCompositionForLabel(lines);
-  if (!text.trim()) return '';
-  return `
-    <div class="row row-comp">
-      <span class="lbl">COMP.</span>
-      <span class="sep">:</span>
-      <span class="val val-comp">${esc(text)}</span>
-    </div>`;
-}
-
-function careSymbolsHtml(selected: CartelaCareSymbolId[]): string {
-  return renderCareSymbolsHtml(selected);
+  return `${base} (±${Math.round(data.weightTolerancePercent)}%)`;
 }
 
 function clampFontSizePt(value: number | undefined): number {
@@ -115,60 +91,94 @@ function clampFontSizePt(value: number | undefined): number {
   return Math.min(CARTELA_MAX_FONT_SIZE_PT, Math.max(CARTELA_MIN_FONT_SIZE_PT, Math.round(n * 10) / 10));
 }
 
-function cartelaFontCss(fontSizePt: number) {
-  const pt = (n: number) => `${Math.round(n * 10) / 10}pt`;
-  return {
-    lbl: pt(fontSizePt - 0.6),
-    val: pt(fontSizePt),
-    comp: pt(fontSizePt - 0.6),
-    bcNum: pt(fontSizePt - 0.8),
-    brand: pt(fontSizePt + 4.2),
-  };
+/** تقدير حجم الخط (pt) ليتسع نص من عدد أحرف معيّن في عرض معيّن (mm) — أحرف كبيرة عريضة ≈ 0.68em. */
+function fitPt(text: string, availMm: number, maxPt: number, minPt: number, lines = 1): number {
+  const len = Math.max(1, text.length);
+  const pt = (availMm * lines) / (len * 0.68 * 0.3528);
+  return Math.round(Math.min(maxPt, Math.max(minPt, pt)) * 10) / 10;
 }
+
+/** حجم رقم الكارتيلة الكبير (أسفل اليمين) حسب عدد الخانات — يبقى أعرض ما يمكن مع الأصفار البادئة. */
+function serialPt(serial: string): number {
+  const n = serial.length;
+  return n <= 4 ? 25 : n === 5 ? 21 : n === 6 ? 18 : n === 7 ? 15.5 : n === 8 ? 13.5 : 11.5;
+}
+
+const LOGO_BLACK_SVG = markBlackSvg.replace(/<svg /, '<svg class="logo-svg" preserveAspectRatio="xMidYMid meet" ');
 
 function buildCartelaLabelSheetInner(data: CartelaLabelData): string {
   const serial = data.serialNo.trim();
-  const fontSizePt = clampFontSizePt(data.fontSizePt);
-  const fonts = cartelaFontCss(fontSizePt);
-  const barcodeSvg = serial ? buildCode128Svg(serial, 22) : '';
-  const qrBlock = data.qrSvg
-    ? `<div class="qr">${data.qrSvg.replace('<svg ', '<svg class="qr-svg" ')}</div>`
-    : '';
-  const brandStripe = data.showLogo
-    ? `<aside class="brand-stripe"><span>CLOTEX</span></aside>`
-    : '';
-  const frameClass = data.showLogo ? 'frame frame-logo' : 'frame frame-plain';
-  const footerClass = data.qrSvg ? 'footer footer-qr' : 'footer footer-no-qr';
+  const base = clampFontSizePt(data.fontSizePt);
+  // باركود مضغوط (مجموعة C للأرقام) بعرض يترك هوامش صمت كافية على الجانبين ليُقرأ بالسكانر
+  const bcModules = serial ? code128Modules(serial, true) : 0;
+  const bcUnitMm = bcModules ? Math.min(0.5, 39 / bcModules) : 0.5;
+  const bcWidthMm = Math.round(bcModules * bcUnitMm * 100) / 100;
+  const barcodeSvg = serial ? buildCode128Svg(serial, 22, true) : '';
+  const art = data.artCode.trim();
+  const design = data.designNo.trim();
+  const width = formatWidth(data);
+  const weight = formatWeight(data);
+  const compParts = formatCompositionLinesForLabel(data.compositionLines);
 
-  const rows = [
-    row('ART CODE', data.artCode),
-    row('DESIGN NO', data.designNo),
-    row('COLOUR', data.colour),
-    row('WIDTH', formatWidth(data)),
-    row('WEIGHT', formatWeight(data)),
-    compositionRow(data.compositionLines),
-  ].join('');
+  // ART CODE: سطر واحد يصغَّر ليتسع؛ الاسم الطويل جداً يلتف على سطرين بخط أصغر
+  const topAvail = 34;
+  const topMax = base + 1.4;
+  const artOne = fitPt(art, topAvail, topMax, 5.4);
+  const artTwoLines = art.length * 0.68 * 0.3528 * artOne > topAvail * 1.02;
+  const artPt = artTwoLines ? fitPt(art, topAvail, topMax - 1, 4.8, 2) : artOne;
+  const designPt = fitPt(design, topAvail, topMax, 5.4);
+
+  // COMP.: من مكوّن إلى خمسة؛ يلتف على أسطر ويصغَّر قليلاً حسب العدد دون إفراط
+  const compPt = compParts.length <= 2 ? base - 0.2 : compParts.length === 3 ? base - 0.7 : base - 1.2;
+  const specPt = base + 0.4;
+  const lblPt = base - 0.4;
+
+  const careIds = data.careSymbols;
+  const careInner = renderCareSymbolsHtml(careIds).replace('<div class="care" aria-hidden="true">', '').replace(/<\/div>$/, '');
+  const careHtml = careIds.length
+    ? `<div class="care" style="--s:${Math.max(3.4, Math.min(6.6, (53 - (careIds.length - 1) * 0.8) / careIds.length)).toFixed(2)}mm">${careInner}</div>`
+    : '';
+
+  const field = (label: string, value: string, pt: number, extra = '') =>
+    value.trim()
+      ? `<div class="f ${extra}"><span class="fl" style="font-size:${lblPt}pt">${esc(label)}</span><span class="fs">:</span><span class="fv" style="font-size:${pt}pt">${esc(value)}</span></div>`
+      : '';
+
+  const logoBlock = data.showLogo ? `<div class="logo-box">${LOGO_BLACK_SVG}<span class="tm">™</span></div>` : '';
+  const qrBlock = data.qrSvg ? `<div class="qr">${data.qrSvg.replace('<svg ', '<svg class="qr-svg" ')}</div>` : '';
+  const compHtml = compParts.length
+    ? `<div class="f comp"><span class="fl" style="font-size:${lblPt}pt">COMP.</span><span class="fs">:</span><span class="fv fc" style="font-size:${compPt}pt">${compParts.map((c) => `<span class="cp">${esc(c)}</span>`).join(' ')}</span></div>`
+    : '';
 
   return `<main class="sheet">
-    <section class="${frameClass}">
-      <div class="content">
-        <div class="rows">${rows}</div>
-        <div class="${footerClass}">
-          ${qrBlock}
-          ${careSymbolsHtml(data.careSymbols)}
-          <div class="bc-wrap">
-            ${barcodeSvg ? `<div class="bc-svg">${barcodeSvg}</div>` : ''}
-            ${serial ? `<div class="bc-num">${esc(serial)}</div>` : ''}
-          </div>
+    <section class="frame">
+      <div class="top">
+        <div class="top-l">
+          ${field('ART CODE', art, artPt, artTwoLines ? 'two' : '')}
+          ${field('DESIGN NO', design, designPt)}
         </div>
+        <div class="top-r">${logoBlock}</div>
       </div>
-      ${brandStripe}
+      <div class="mid">
+        <div class="mid-l">
+          <div class="specs">
+            ${field('WIDTH', width, specPt)}
+            ${field('WEIGHT', weight, specPt)}
+            ${compHtml}
+          </div>
+          ${careHtml}
+        </div>
+        <div class="mid-r">${qrBlock}</div>
+      </div>
+      <div class="bot">
+        <div class="bot-l">${barcodeSvg ? `<div class="bc" style="--bw:${bcWidthMm}mm">${barcodeSvg}</div>` : ''}</div>
+        <div class="bot-r"><span class="serial" style="font-size:${serialPt(serial)}pt">${esc(serial)}</span></div>
+      </div>
     </section>
   </main>`;
 }
 
-function buildCartelaLabelDocumentCss(fontSizePt = CARTELA_DEFAULT_FONT_SIZE_PT): string {
-  const fonts = cartelaFontCss(clampFontSizePt(fontSizePt));
+function buildCartelaLabelDocumentCss(_fontSizePt = CARTELA_DEFAULT_FONT_SIZE_PT): string {
   return `
     @page { size: ${CARTELA_WIDTH_MM}mm ${CARTELA_HEIGHT_MM}mm; margin: 0; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -177,7 +187,7 @@ function buildCartelaLabelDocumentCss(fontSizePt = CARTELA_DEFAULT_FONT_SIZE_PT)
     .sheet {
       width: ${CARTELA_WIDTH_MM}mm;
       height: ${CARTELA_HEIGHT_MM}mm;
-      padding: 1.5mm;
+      padding: 1.2mm;
       overflow: hidden;
       page-break-after: always;
       break-after: page;
@@ -186,94 +196,44 @@ function buildCartelaLabelDocumentCss(fontSizePt = CARTELA_DEFAULT_FONT_SIZE_PT)
     .frame {
       width: 100%;
       height: 100%;
-      border: 0.35mm solid #000;
+      border: 0.5mm solid #000;
+      border-radius: 2.4mm;
       display: grid;
-      grid-template-rows: 1fr;
+      grid-template-rows: 11.6mm 1fr 10mm;
       overflow: hidden;
-    }
-    .frame-logo { grid-template-columns: 1fr 9mm; }
-    .frame-plain { grid-template-columns: 1fr; }
-    .content {
-      padding: 1.2mm 1.5mm 1mm;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      min-height: 0;
-    }
-    .rows { flex: 1; min-height: 0; overflow: hidden; }
-    .row {
-      display: grid;
-      grid-template-columns: 17mm 2mm 1fr;
-      gap: 0.5mm;
-      align-items: baseline;
-      line-height: 1.15;
-      margin-bottom: 0.35mm;
-    }
-    .lbl { font-size: ${fonts.lbl}; font-weight: 700; letter-spacing: 0.2px; white-space: nowrap; color: #000; }
-    .sep { font-size: ${fonts.lbl}; font-weight: 700; text-align: center; color: #000; }
-    .val { font-size: ${fonts.val}; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000; }
-    .row-comp { align-items: start; }
-    .val-comp {
-      white-space: normal;
-      overflow: hidden;
-      overflow-wrap: break-word;
-      word-break: normal;
-      line-height: 1.1;
-      font-size: ${fonts.comp};
-      min-width: 0;
-      color: #000;
-    }
-    .footer {
-      display: grid;
-      align-items: end;
-      gap: 1mm;
-      margin-top: 0.5mm;
-      min-height: 14mm;
-    }
-    .footer-qr { grid-template-columns: 13mm 1fr 1fr; }
-    .footer-no-qr { grid-template-columns: 1fr 1fr; }
-    .qr {
-      width: 12mm;
-      height: 12mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       background: #fff;
     }
-    .qr svg, .qr-svg {
-      width: 12mm !important;
-      height: 12mm !important;
-      display: block;
-    }
-    .care {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6mm;
-      flex-wrap: nowrap;
-    }
-    .sym { width: 5mm; height: 5mm; flex-shrink: 0; display: block; overflow: visible; }
-    .bc-wrap { text-align: center; min-width: 0; }
-    .bc-svg svg { width: 100%; max-width: 28mm; height: 5.5mm; display: block; margin: 0 auto; }
-    .bc-num { font-size: ${fonts.bcNum}; font-weight: 700; letter-spacing: 0.8px; margin-top: 0.3mm; color: #000; }
-    .brand-stripe {
-      border-left: 0.25mm solid #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-      transform: rotate(180deg);
-      font-size: ${fonts.brand};
-      font-weight: 900;
-      letter-spacing: 1.5px;
-      padding: 1mm 0;
-      color: #000;
-    }
-    .brand-stripe span { display: block; }
-    @media screen {
-      body { background: #fff; }
-    }`;
+    .top, .mid, .bot { display: grid; min-height: 0; min-width: 0; }
+    .top { grid-template-columns: 1fr 22.5mm; border-bottom: 0.35mm solid #000; }
+    .mid { grid-template-columns: 1fr 22.5mm; border-bottom: 0.35mm solid #000; }
+    .bot { grid-template-columns: 1fr 27mm; }
+    .top-r, .mid-r, .bot-r { border-left: 0.3mm solid #000; }
+    .top-l { padding: 1mm 1.4mm 0.6mm 1.8mm; display: flex; flex-direction: column; justify-content: center; gap: 0.6mm; min-width: 0; }
+    .top-r { display: flex; align-items: center; justify-content: center; padding: 0.6mm; }
+    .logo-box { position: relative; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .logo-svg { height: 10.2mm; width: auto; display: block; }
+    .tm { position: absolute; top: 46%; right: -2.3mm; font-size: 3.4pt; font-weight: 700; line-height: 1; }
+    .f { display: grid; grid-template-columns: 15.8mm 1.6mm 1fr; align-items: baseline; line-height: 1.1; min-width: 0; }
+    .fl { font-weight: 800; white-space: nowrap; letter-spacing: 0.1pt; }
+    .fs { font-size: 6.4pt; font-weight: 900; line-height: 1; text-align: center; }
+    .fv { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .f.two .fv { white-space: normal; line-height: 1.02; overflow: hidden; }
+    .mid-l { display: grid; grid-template-rows: 1fr auto; min-width: 0; min-height: 0; }
+    .specs { padding: 1mm 1.4mm 0.4mm 1.8mm; display: flex; flex-direction: column; gap: 0.5mm; min-height: 0; overflow: hidden; }
+    .f.comp { align-items: start; }
+    .fv.fc { white-space: normal; line-height: 1.08; overflow: hidden; font-weight: 800; }
+    .cp { display: inline-block; white-space: nowrap; margin-right: 1.2mm; }
+    .care { border-top: 0.3mm solid #000; margin: 0 1.2mm; padding: 0.7mm 0 0.5mm; display: flex; align-items: center; justify-content: space-around; gap: 0.8mm; }
+    .sym { width: var(--s, 5.5mm); height: var(--s, 5.5mm); flex-shrink: 0; display: block; overflow: visible; }
+    .mid-r { display: flex; align-items: center; justify-content: center; padding: 0.8mm; }
+    .qr { width: 18mm; height: 18mm; background: #fff; display: flex; align-items: center; justify-content: center; }
+    .qr svg, .qr-svg { width: 18mm !important; height: 18mm !important; display: block; shape-rendering: crispEdges; }
+    .bot-l { display: flex; align-items: center; justify-content: center; padding: 0.8mm 1mm; min-width: 0; }
+    .bc { display: flex; align-items: center; }
+    .bc svg { width: var(--bw); height: 7.6mm; display: block; }
+    .bot-r { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .serial { font-weight: 900; line-height: 1; letter-spacing: -0.3pt; font-family: Arial, Helvetica, sans-serif; white-space: nowrap; }
+    @media screen { body { background: #fff; } }`;
 }
 
 export function buildCartelaLabelHtml(data: CartelaLabelData): string {
@@ -362,9 +322,9 @@ export function buildCartelaLabelPreviewHtml(data: CartelaLabelData): string {
   return injectCartelaPreviewFitCss(buildCartelaLabelHtml(data));
 }
 
-export function cartelaQrPayload(data: Pick<CartelaLabelData, 'artCode' | 'designNo' | 'serialNo'>): string {
-  const parts = [data.artCode.trim(), data.designNo.trim(), data.serialNo.trim()].filter(Boolean);
-  return parts.length ? `CLOTEX|${parts.join('|')}` : 'CLOTEX|CARTELA';
+/** QR الكارتيلة يوجّه إلى الموقع الرسمي (مُعرَّف مركزياً في BRAND.websiteUrl) — لا يتطلب تسجيل دخول. */
+export function cartelaQrPayload(_data?: Pick<CartelaLabelData, 'artCode' | 'designNo' | 'serialNo'>): string {
+  return BRAND.websiteUrl;
 }
 
 /** Optional small logo for screen preview only — thermal uses text stripe. */

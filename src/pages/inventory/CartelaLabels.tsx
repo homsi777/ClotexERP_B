@@ -263,7 +263,7 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
 
   useEffect(() => {
     let cancelled = false;
-    void generateQrSvg(cartelaQrPayload(form), { size: 96, margin: 1 }).then((svg) => {
+    void generateQrSvg(cartelaQrPayload(form), { size: 96, margin: 2 }).then((svg) => {
       if (!cancelled) setQrSvg(svg);
     });
     return () => {
@@ -504,7 +504,7 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
       showToast({ type: 'warning', message: validationError });
       return;
     }
-    const qr = await generateQrSvg(cartelaQrPayload(payload), { size: 96, margin: 1 });
+    const qr = await generateQrSvg(cartelaQrPayload(payload), { size: 96, margin: 2 });
     const html = buildCartelaLabelHtml(payloadToLabelData(payload, qr));
     await printHtml(html, mode, `cartela-${payload.serialNo || 'label'}`);
   };
@@ -754,7 +754,7 @@ export const CartelaLabels: React.FC<{ mode?: 'generate' | 'library' }> = ({ mod
     if (active.length > 0 && validationError) {
       throw new Error(`${cartelaListLabel(row)}: ${validationError}`);
     }
-    const qr = await generateQrSvg(cartelaQrPayload(payload), { size: 96, margin: 1 });
+    const qr = await generateQrSvg(cartelaQrPayload(payload), { size: 96, margin: 2 });
     return payloadToLabelData({ ...payload, compositionLines: active }, qr);
   };
 
