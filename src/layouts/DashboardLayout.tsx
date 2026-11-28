@@ -559,16 +559,17 @@ const Topbar = () => {
             to="/login"
             className="hidden md:inline text-xs font-bold text-[var(--ui-accent)] hover:underline px-1"
           >
-            {t('apiLogin')}
+            {t('apiLogin', { ns: 'common' })}
           </Link>
           <BackendConnectionBadge />
           <CompanySwitcher />
           <div className="hidden sm:flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[var(--ui-accent-soft-bg)] flex items-center justify-center text-[var(--ui-accent)] font-bold border border-[var(--ui-accent-border)]">
-              M
+            <div className="w-8 h-8 rounded-full bg-[var(--ui-accent-soft-bg)] flex items-center justify-center text-[var(--ui-accent)] font-bold border border-[var(--ui-accent-border)] uppercase">
+              {(navUser?.fullName?.trim() || navUser?.username || 'M').charAt(0)}
             </div>
-            <div className="text-sm">
-              <p className="font-medium text-[var(--text-heading)]">{t('systemAdmin')}</p>
+            <div className="text-sm leading-tight" title={navUser?.username ?? ''}>
+              <p className="font-medium text-[var(--text-heading)]">{navUser ? (navUser.fullName?.trim() || navUser.username) : t('systemAdmin', { ns: 'common' })}</p>
+              {navUser && navUser.fullName?.trim() && navUser.fullName.trim() !== navUser.username ? <p className="text-[11px] text-slate-500" dir="ltr">@{navUser.username}</p> : null}
             </div>
           </div>
         </div>
