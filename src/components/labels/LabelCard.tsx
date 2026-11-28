@@ -31,11 +31,11 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { QRCodeSVG } from 'qrcode.react';
+import { generateQrSvgMap } from '../../lib/printing/qrGenerator';
 import type { RollLabelPreviewDto } from '../../lib/api/labelsApi';
 import { BRAND } from '../../branding';
 import { displayLabelMaterialCode } from '../../lib/importDisplay';
-import { thermalBrandLogoHtml, thermalLogoImgReactStyle } from '../../lib/printing/thermalBrandLogo';
+import { thermalBrandLogoHtml } from '../../lib/printing/thermalBrandLogo';
 import { labelT } from '../../lib/labelCardI18n';
 
 // ─── Code128 SVG generator ───────────────────────────────────────────────────
@@ -249,184 +249,27 @@ export const LabelCard: React.FC<LabelCardProps> = ({
   config: configProp,
   widthMm = 100,
   heightMm = 80,
-  mode = 'preview',
+  printDate,
 }) => {
-  const { t } = useTranslation('labelCard');
-  const cfg: Required<LabelConfig> = { ...DEFAULT_CONFIG, ...(configProp ?? {}) };
-  cfg.disclaimer = configProp?.disclaimer !== undefined ? configProp.disclaimer : t('labelCard.defaultDisclaimer');
-  const textDir = cfg.textDirection;
-  const printableBarcode = pickPrintableBarcode(roll);
-  const barcodeSvg = printableBarcode ? buildCode128Svg(printableBarcode, 38) : '';
-
-  const meters = pickMeters(roll);
-  const weight = pickWeight(roll);
-  const lot    = pickLot(roll);
-  const color  = pickColorName(roll);
-
-  const safe = `${LABEL_SAFE_MARGIN_MM}mm`;
-
+  // المعاينة = مستند الطباعة نفسه (buildPrintDocument) داخل iframe: مصدر واحد للتصميم
+  // فلا تختلف معاينة اللصاقة عن المطبوع.
+  const [qrSvgs, setQrSvgs] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    let alive = true;
+    void generateQrSvgMap([roll]).then((m) => { if (alive) setQrSvgs(m); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [roll]);
+  const html = React.useMemo(
+    () => buildPrintDocument([roll], { config: configProp, widthMm, heightMm, pageSize: 'label', printDate, qrSvgs, rollLayout: 'normal' }),
+    [roll, configProp, widthMm, heightMm, printDate, qrSvgs],
+  );
   return (
-    <div
-      className={`label-page ${mode === 'preview' ? 'label-page--preview' : ''}`}
-      style={{
-        width:  `${widthMm}mm`,
-        height: `${heightMm}mm`,
-        boxSizing: 'border-box',
-        padding: safe,
-        background: '#fff',
-        color: '#000',
-        fontFamily: "'Segoe UI', 'Noto Sans Arabic', Arial, sans-serif",
-        fontSize: '7pt',
-        direction: 'ltr',
-        display: 'flex',
-        flexDirection: 'column',
-        pageBreakInside: 'avoid',
-        breakInside: 'avoid',
-        overflow: 'hidden',
-        boxShadow: mode === 'preview' ? '0 2px 12px rgba(0,0,0,0.12)' : undefined,
-      }}
-    >
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          boxSizing: 'border-box',
-          border: '0.35mm solid #000',
-          borderRadius: mode === 'preview' ? '0.6mm' : 0,
-          overflow: 'hidden',
-          background: '#fff',
-        }}
-      >
-      {/* ── Brand header (≈70% bigger logo + extra bottom padding) ── */}
-      <div style={{ textAlign: 'center', paddingBottom: '1.2mm', borderBottom: '0.25mm solid #000', flexShrink: 0 }}>
-        {cfg.showBrandLogo ? (
-          <img
-            src={BRAND.logoThermalInline}
-            alt={BRAND.name}
-            style={thermalLogoImgReactStyle(13, 72)}
-          />
-        ) : (
-          <div style={{ height: '13mm' }} aria-hidden="true" />
-        )}
-      </div>
-
-      {/* ── Article / Colour section (slight top padding nudges data down) ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1.55fr 1fr',
-        padding: '0.8mm 0 0.45mm 0',
-        borderBottom: '0.25mm solid #000',
-        gap: '0.5mm',
-        flexShrink: 0,
-      }}>
-        <div>
-          {cfg.showItemName && <FieldRow label={t('labelCard.itemNameLabel')} value={roll.itemName} textDirection={textDir} />}
-          {cfg.showInternalCode && (
-            <FieldRow label={t('labelCard.materialCodeLabel')} value={pickMaterialCode(roll)} textDirection={textDir} />
-          )}
-          {(cfg.showColorName || cfg.showSupplierCode) && (
-            <FieldRow label={t('labelCard.colorNameLabel')} value={color} textDirection={textDir} />
-          )}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingLeft: '2mm', borderLeft: '0.2mm dashed #999' }}>
-          {cfg.showColorCode && (
-            <FieldRow label={t('labelCard.colorCodeLabel')} value={roll.colorCode ?? ''} textDirection={textDir} compact emphasize />
-          )}
-          <div style={{ textAlign: 'center', marginTop: '0.35mm', direction: textDir, unicodeBidi: 'plaintext' }}>
-            <div style={{ fontSize: '6.5pt', color: '#1f2937', fontWeight: 500 }}>{t('labelCard.qualityLabel')}</div>
-            <div style={{ fontSize: '11pt', fontWeight: 800, lineHeight: 1 }}>{cfg.quality}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Lower section: fields | QR ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 22mm',
-        gap: '1mm',
-        flex: 1,
-        paddingTop: '0.45mm',
-        minHeight: 0,
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-          <div>
-            <FieldRow label={t('labelCard.noteLabel')} value="" textDirection={textDir} />
-            <FieldRow label={t('labelCard.batchNumberLabel')} value={lot} textDirection={textDir} />
-            {cfg.showLength       && <FieldRow label={t('labelCard.metersLabel')} value={meters} emphasize textDirection={textDir} />}
-            {cfg.showActualWeight && <FieldRow label={t('labelCard.netWeightLabel')} value={weight} emphasize textDirection={textDir} />}
-          </div>
-        </div>
-
-        {/* ── QR code ── */}
-        {cfg.showQr && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#fff',
-          }}>
-            <QRCodeSVG
-              value={roll.qrPayload}
-              size={94}
-              level="M"
-              marginSize={0}
-              style={{ width: '22mm', height: '22mm' }}
-            />
-          </div>
-        )}
-      </div>
-
-      {cfg.showBarcode && printableBarcode && (
-        <div style={{ flexShrink: 0, textAlign: 'center', padding: '0.35mm 0 0.55mm' }}>
-          <div
-            dangerouslySetInnerHTML={{ __html: barcodeSvg }}
-            style={{
-              width: '100%',
-              maxWidth: '60mm',
-              margin: '0 auto',
-              height: '12.5mm',
-              overflow: 'hidden',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          />
-          <div style={{
-            fontSize: '7pt',
-            fontFamily: 'Consolas, monospace',
-            fontWeight: 700,
-            letterSpacing: '1pt',
-            lineHeight: 1.15,
-            marginTop: '0.25mm',
-            paddingBottom: '0.15mm',
-          }}>
-            {printableBarcode}
-          </div>
-        </div>
-      )}
-
-      {/* ── Footer disclaimer ── */}
-      {cfg.disclaimer && (
-        <div style={{
-          borderTop: '0.25mm solid #000',
-          padding: '0.45mm 1.5mm 0.3mm',
-          textAlign: 'center',
-          fontSize: '5.2pt',
-          fontWeight: 700,
-          letterSpacing: '0.15pt',
-          color: '#000',
-          flexShrink: 0,
-          lineHeight: 1.2,
-          direction: textDir,
-          unicodeBidi: 'plaintext',
-        }}>
-          {cfg.disclaimer}
-        </div>
-      )}
-      </div>
-    </div>
+    <iframe
+      title={`label-${roll.barcode}`}
+      srcDoc={html}
+      scrolling="no"
+      style={{ width: `${widthMm}mm`, height: `${heightMm}mm`, border: 0, background: '#fff', display: 'block', boxShadow: '0 1px 4px rgba(0,0,0,.25)' }}
+    />
   );
 };
 

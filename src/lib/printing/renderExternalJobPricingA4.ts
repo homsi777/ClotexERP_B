@@ -37,7 +37,7 @@ export function renderExternalJobPricingA4Html(opts: { data: ManufacturingOvervi
 <style>
 @page{size:A4 portrait;margin:0}*{box-sizing:border-box;margin:0;padding:0}
 html,body{width:210mm;font-family:Tahoma,Arial,sans-serif;color:#111;background:#fff;direction:${dir};-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.page{width:210mm;min-height:297mm;padding:10mm}
+.page{width:210mm;min-height: 295mm;padding:10mm}
 .brand{text-align:center;padding-bottom:4mm;border-bottom:.4mm solid #333;margin-bottom:4mm}.brand img{height:22mm;object-fit:contain}
 h1{text-align:center;font-size:15pt;margin:2mm 0 5mm}h2{font-size:11pt;margin:5mm 0 2mm;color:#4C3890}
 .meta{display:grid;grid-template-columns:1fr 1fr;gap:2mm 6mm;font-size:10pt;margin-bottom:3mm}.meta b{color:#555}

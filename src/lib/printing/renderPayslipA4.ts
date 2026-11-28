@@ -68,7 +68,7 @@ export function renderPayslipA4Html(data: PayslipData): string {
   * { margin:0; padding:0; box-sizing:border-box; }
   @page { size: A4 portrait; margin: 0; }
   html, body { width: 210mm; font-family: ${FONT}; color:#1f1f1f; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .page { width: 210mm; min-height: 297mm; display:flex; flex-direction:column; padding: 8mm 10mm 6mm; }
+  .page { width: 210mm; min-height: 295mm; display:flex; flex-direction:column; padding: 8mm 10mm 6mm; }
   .page-body { flex: 1 1 auto; }
   .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .title { font-size:26px; font-weight:900; color:${NAVY}; line-height:1.2; margin-bottom:4px; }

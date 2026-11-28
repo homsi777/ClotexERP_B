@@ -72,7 +72,7 @@ export function renderExternalJobDispatchA4Html(opts: {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .page { width: 210mm; min-height: 297mm; padding: 10mm 10mm 8mm; }
+    .page { width: 210mm; min-height: 295mm; padding: 10mm 10mm 8mm; }
     .brand { text-align: center; padding-bottom: 4mm; border-bottom: 0.4mm solid #333; margin-bottom: 4mm; }
     .brand img { height: 22mm; object-fit: contain; }
     .doc-title { text-align: center; font-size: 14pt; font-weight: 700; margin: 2mm 0 5mm; }

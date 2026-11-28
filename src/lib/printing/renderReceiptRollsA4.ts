@@ -38,7 +38,7 @@ export function renderReceiptRollsA4Html(d: ReceiptRollsSlipData): string {
 *{margin:0;padding:0;box-sizing:border-box}
 @page{size:A4 portrait;margin:0}
 html,body{width:210mm;font-family:'Segoe UI','Noto Sans Arabic',Arial,sans-serif;color:#1f1f1f;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.page{width:210mm;min-height:297mm;display:flex;flex-direction:column;padding:8mm 10mm 6mm}
+.page{width:210mm;min-height: 295mm;display:flex;flex-direction:column;padding:8mm 10mm 6mm}
 .body{flex:1 1 auto}
 .head{display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid ${BRAND.accentColor ?? '#B89854'};padding-bottom:6px;margin-bottom:8px}
 .title{font-size:24px;font-weight:900;color:${color}}

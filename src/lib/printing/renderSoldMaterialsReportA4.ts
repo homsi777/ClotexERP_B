@@ -71,7 +71,7 @@ export function renderSoldMaterialsReportA4Html(opts: {
     @page { size: A4 landscape; margin: 0; }
     * { box-sizing: border-box; }
     html, body { width: 297mm; margin: 0 auto; background: #fff; color: #111; direction: rtl; font-family: ${FONT}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page { width: 297mm; min-height: 210mm; padding: 7mm 8mm 5mm; display: flex; flex-direction: column; }
+    .page { width: 297mm; min-height: 208mm; padding: 7mm 8mm 5mm; display: flex; flex-direction: column; }
     .page-body { flex: 1; }
     .brand { text-align: center; margin-bottom: 4px; }
     .brand img { height: 78px; max-width: 252px; object-fit: contain; }

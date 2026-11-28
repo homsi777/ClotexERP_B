@@ -170,14 +170,14 @@ function voucherStyles(accent: string, accentSoft: string, bw: boolean): string 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 210mm;
-      min-height: 297mm;
+      min-height: 295mm;
       font-family: ${FONT};
       color: #1f1f1f;
       background: #fff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .page { width: 210mm; min-height: 297mm; display: flex; flex-direction: column; padding: 8mm 10mm 6mm; }
+    .page { width: 210mm; min-height: 295mm; display: flex; flex-direction: column; padding: 8mm 10mm 6mm; }
     .page-content { flex: 1 1 auto; }
     .header-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
     .header-table td { vertical-align: middle; }
@@ -247,7 +247,7 @@ export const VOUCHER_A5_PDF_EXPORT_CSS = `
   }
   .page {
     width: 210mm !important;
-    min-height: 297mm !important;
+    min-height: 295mm !important;
     display: flex !important;
     flex-direction: column !important;
     padding: 8mm 10mm 6mm !important;

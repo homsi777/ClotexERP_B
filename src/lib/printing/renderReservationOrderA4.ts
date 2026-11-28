@@ -262,11 +262,11 @@ function reservationStyles(): string {
       font-family: ${FONT};
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
-      min-height: 297mm;
+      min-height: 295mm;
     }
     .page {
       width: 210mm;
-      min-height: 297mm;
+      min-height: 295mm;
       max-width: 100%;
       margin: 0 auto;
       padding: 7mm 8mm 0;

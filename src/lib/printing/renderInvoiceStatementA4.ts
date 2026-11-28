@@ -657,8 +657,8 @@ export function renderInvoiceStatementA4Html(opts: {
     }
     .page {
       width: 210mm;
-      min-height: 297mm;
-      height: 297mm;
+      min-height: 295mm;
+      height: 295mm;
       display: flex;
       flex-direction: column;
       padding: 7mm 10mm 5mm;
