@@ -706,6 +706,14 @@ ${lblBoxCss}
 .text-ltr { direction: ltr; unicode-bidi: plaintext; }
 .rk { font-size: ${compactLabel ? '2.5mm' : '3mm'}; font-weight: 600; color: #000; }
 .rc { font-size: 2.5mm; font-weight: 500; color: #000; text-align: center; }
+${compactLabel ? '' : `/* أسماء حقول الصنف/الخامة/اللون ×1.5 (طلب بشير) */
+.block .rk { font-size: 4.5mm; }
+.block .rc { font-size: 3.6mm; }
+.block .row-ltr { grid-template-columns: 26mm 2.5mm 1fr; }
+.block .row-ltr.right-row { grid-template-columns: 17mm 2.5mm 1fr; }
+.block .row { line-height: 1.06; }
+.block { padding-top: 0.4mm; padding-bottom: 0.3mm; }
+.block .rv:not(.rv-cd) { font-size: 4mm; }`}
 .rv { font-size: ${compactLabel ? '3mm' : '3.4mm'}; font-weight: 800; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rv-em { font-size: 3.2mm; font-weight: 800; }
 .rv-cd { font-size: ${compactLabel ? '3.3mm' : '4.8mm'}; font-weight: 900; }
@@ -737,7 +745,7 @@ ${lblBoxCss}
      ضغط الأرقام الطويلة (كالباركود التسلسلي 7 خانات) أفقياً لتظهر مزدحمة. */
   width: ${ultraCompactLabel ? '50mm' : compactLabel ? '55mm' : '60mm'};
   max-width: 100%;
-  height: ${ultraCompactLabel ? '10mm' : compactLabel ? '11mm' : '11mm'};
+  height: ${ultraCompactLabel ? '10mm' : compactLabel ? '11mm' : '9.6mm'};
   margin: 0 auto;
   padding: 0 1mm;
   display: flex;
@@ -771,9 +779,9 @@ ${lblBoxCss}
 
 .qr { display: flex; align-items: center; justify-content: center; }
 .qr svg {
-  width: ${compactLabel ? '18mm' : '22mm'} !important;
-  height: ${compactLabel ? '18mm' : '22mm'} !important;
-  max-width: ${compactLabel ? '18mm' : '22mm'} !important;
+  width: ${compactLabel ? '18mm' : '20mm'} !important;
+  height: ${compactLabel ? '18mm' : '20mm'} !important;
+  max-width: ${compactLabel ? '18mm' : '20mm'} !important;
   opacity: 1 !important;
   shape-rendering: crispEdges;
 }
