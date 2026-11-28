@@ -393,6 +393,28 @@ export const fabricRollRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ ok: true, data: sanitizeRollDtoRows(rows.rows), total: countRow.rows[0].total, page, pageSize });
   });
 
+  /**
+   * بحث جماعي بالباركود (إدخال الباركودات بالجملة في فاتورة البيع والمصنعية الخارجية): طلب واحد لكل الدفعة
+   * بدل طلب لكل باركود. يعيد نفس بنية صفوف GET / (ROLL_COLUMNS) لكل توب مطابق **تماماً** لعمود barcode
+   * (نص كامل: الأصفار البادئة محفوظة)، بنفس نطاق مستودعات المستخدم. الحكم على الصلاحية للبيع/الإرسال يتم
+   * بالواجهة بنفس دوال الإدخال الفردي، ويُعاد فحصه بالخادم عند الحفظ/التأكيد كالمعتاد (لا يغيّر المخزون هنا).
+   */
+  app.post('/bulk-lookup', { preHandler: authenticateRequest }, async (req, reply) => {
+    const { companyId } = req.user!;
+    const parsed = z.object({ barcodes: z.array(z.string().max(80)).min(1).max(2000) }).safeParse(req.body);
+    if (!parsed.success) return sendError(reply, 400, 'قائمة الباركودات غير صالحة (1–2000 باركود)', 'VALIDATION');
+    const list = [...new Set(parsed.data.barcodes.map((b) => b.trim()).filter(Boolean))];
+    if (!list.length) return sendError(reply, 400, 'لا باركودات للبحث', 'VALIDATION');
+    const params: unknown[] = [companyId, list];
+    let scope = '';
+    if (req.user!.warehouseIds) { scope = ' AND fr.warehouse_id = ANY($3::uuid[])'; params.push(req.user!.warehouseIds); }
+    const rows = await getPool().query(
+      `SELECT ${ROLL_COLUMNS} ${ROLL_JOINS} WHERE fr.company_id = $1 AND fr.barcode = ANY($2::text[])${scope}`,
+      params,
+    );
+    return reply.send({ ok: true, data: sanitizeRollDtoRows(rows.rows) });
+  });
+
   /** بنود خامات مباعة بالفعل: فواتير بيع مؤكدة فقط، دون المسودات أو الفواتير الملغاة. */
   app.get('/sold-material-report', { preHandler: authenticateRequest }, async (req, reply) => {
     const { companyId } = req.user!;

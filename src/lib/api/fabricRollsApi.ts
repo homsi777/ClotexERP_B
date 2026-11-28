@@ -221,6 +221,19 @@ export interface FabricRollUpdatePayload {
 
 // ─── API calls ───────────────────────────────────────────────────────────────
 
+/** بحث جماعي بالباركود (مطابقة تامة، الأصفار البادئة محفوظة) — طلب واحد لكل دفعة (حتى 1500 باركود). */
+export async function bulkLookupRolls(barcodes: string[]): Promise<FabricRollDto[]> {
+  const out: FabricRollDto[] = [];
+  for (let i = 0; i < barcodes.length; i += 1500) {
+    const res = await apiFetch<{ ok: boolean; data: FabricRollDto[] }>('/api/inventory/rolls/bulk-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ barcodes: barcodes.slice(i, i + 1500) }),
+    });
+    out.push(...res.data);
+  }
+  return out;
+}
+
 export async function listFabricRolls(filters: FabricRollListFilters = {}): Promise<FabricRollListResult> {
   const q = new URLSearchParams();
   if (filters.search)      q.set('search',      filters.search);
