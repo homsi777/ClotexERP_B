@@ -19,6 +19,8 @@ import {
   completeMissingRollFields,
   type FabricRollDto,
 } from '../../lib/api/fabricRollsApi';
+import { BulkBarcodeModal } from '../../components/inventory/BulkBarcodeModal';
+import { ROLL_STATUS_REASON, type BulkRules } from '../../lib/bulkBarcode';
 import { getRollLengthMeters, isFabricRollStockRow, isRollApplicableToSalesInvoice, isRollAvailableForSale, rollNeedsLengthCompletionFromInvoice } from '../../lib/inventory/rollAvailability';
 import { listFabricItems, type ApiFabricItem } from '../../lib/api/fabricItemsApi';
 import { listYarnLots, getYarnLot, type YarnLotDto } from '../../lib/api/yarnLotsApi';
@@ -313,6 +315,30 @@ function stockPrintBarcodeValue(stock: any, fallbackContext: Array<unknown> = []
   return '';
 }
 
+/** تعبئة سطر فاتورة من توب المخزون — مشتركة بين الإدخال الفردي (applyStockToLine) والجماعي (باركودات بالجملة). */
+function mergeStockIntoLine(line: InvoiceFormItem, stock: any): InvoiceFormItem {
+  const lengthM = stock.length_m ?? stock.meters ?? stock.length ?? '';
+  const updated = {
+    ...line,
+    materialName: stock.item_name || stock.name || line.materialName,
+    dsamNumber: stockDisplayMaterialCode(stock as Record<string, unknown>) || line.dsamNumber,
+    rollNo: stock.roll_no || stock.rollNumber || stock.internalRollId || line.rollNo,
+    colorCode: stock.color_code || stock.colorCode || line.colorCode,
+    colorName: stock.color_name_ar || stock.colorName || line.colorName,
+    length: lengthM !== '' ? String(Number(lengthM).toFixed ? Number(lengthM).toFixed(2) : lengthM) : line.length,
+    widthCm: stock.width_cm ? String(Number(stock.width_cm)) : stock.rollWidth ? String(stock.rollWidth) : line.widthCm,
+    gsm: stock.gsm ? String(Number(stock.gsm)) : line.gsm,
+    weight: stock.actual_weight_kg || stock.calculated_weight_kg || stock.weight || line.weight,
+    price: stock.sellingPrice ? String(stock.sellingPrice) : line.price,
+    supplierBarcode:
+      line.supplierBarcode.trim() ||
+      stockBarcodeValue(stock, [line.materialName, line.dsamNumber, line.colorName, line.colorCode]),
+    printBarcode: stockPrintBarcodeValue(stock, [line.supplierBarcode, line.rawBarcodePayload]) || line.printBarcode,
+    internalRollId: stock.id || stock.internalRollId || line.internalRollId,
+  };
+  return sanitizeInvoiceFormItemBarcode(updated);
+}
+
 function sanitizeInvoiceFormItemBarcode(item: InvoiceFormItem): InvoiceFormItem {
   const supplierBarcode = meaningfulBarcode(item.supplierBarcode, [
     item.materialName,
@@ -598,6 +624,7 @@ export const InvoiceForm = () => {
     return Number.isInteger(saved) && saved >= 1 && saved <= 5 ? saved : 1;
   });
   const [scanInput, setScanInput] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
   const [latestScannedLineId, setLatestScannedLineId] = useState<number | null>(null);
   const [stagedRoll, setStagedRoll] = useState<{ item: StagedRollItemPayload; action: 'found' | 'created' | 'staged' } | null>(null);
@@ -1535,34 +1562,7 @@ export const InvoiceForm = () => {
       }
       return prev.map((line) => {
         if (line.id !== lineId) return sanitizeInvoiceFormItemBarcode(line);
-        const updated = {
-              ...line,
-              materialName: stock.item_name || stock.name || line.materialName,
-              dsamNumber: stockDisplayMaterialCode(stock as Record<string, unknown>) || line.dsamNumber,
-              rollNo: stock.roll_no || stock.rollNumber || stock.internalRollId || line.rollNo,
-              colorCode: stock.color_code || stock.colorCode || line.colorCode,
-              colorName: stock.color_name_ar || stock.colorName || line.colorName,
-              length: lengthM !== '' ? String(Number(lengthM).toFixed ? Number(lengthM).toFixed(2) : lengthM) : line.length,
-              widthCm: stock.width_cm ? String(Number(stock.width_cm)) : stock.rollWidth ? String(stock.rollWidth) : line.widthCm,
-              gsm: stock.gsm ? String(Number(stock.gsm)) : line.gsm,
-              weight: stock.actual_weight_kg || stock.calculated_weight_kg || stock.weight || line.weight,
-              price: stock.sellingPrice ? String(stock.sellingPrice) : line.price,
-              supplierBarcode:
-                line.supplierBarcode.trim() ||
-                stockBarcodeValue(stock, [
-                  line.materialName,
-                  line.dsamNumber,
-                  line.colorName,
-                  line.colorCode,
-                ]),
-              printBarcode:
-                stockPrintBarcodeValue(stock, [
-                  line.supplierBarcode,
-                  line.rawBarcodePayload,
-                ]) || line.printBarcode,
-              internalRollId: stock.id || stock.internalRollId || line.internalRollId,
-            };
-        return sanitizeInvoiceFormItemBarcode(updated);
+        return mergeStockIntoLine(line, stock);
       });
     });
     if (needsLengthCompletion) {
@@ -2033,6 +2033,45 @@ export const InvoiceForm = () => {
     if (isSales) {
       notifySalesBarcodeLookupMiss(raw);
     }
+  };
+
+  /** قواعد الإدخال الجماعي = نفس قواعد الإدخال الفردي (isRollApplicableToSalesInvoice وغيرها) + منع حجز مسودة أخرى. */
+  const bulkRules: BulkRules = {
+    reject: (roll) => {
+      if (!isRollApplicableToSalesInvoice(roll)) return ROLL_STATUS_REASON[String(roll.status)] ?? `غير متاح (${roll.status})`;
+      if (roll.entry_basis === 'WEIGHT' && (invoiceUnitMode !== 'kg' || isYarnMode)) return 'توب مُدخل بالكيلو: غيّر وحدة الفاتورة إلى «كيلو — قماش»';
+      const draftId = String(roll.draft_sales_invoice_id ?? '').trim();
+      if (draftId && draftId !== String(routeInvoiceId ?? '')) return `محجوز في مسودة فاتورة ${roll.draft_sales_invoice_no ?? ''}`.trim();
+      return null;
+    },
+    note: (roll) => (roll.status === 'RESERVED' ? 'محجوز (طلبية)' : rollNeedsLengthCompletionFromInvoice(roll) ? 'الطول يُستكمل في الفاتورة' : ''),
+    alreadyInDocument: (roll) => items.some((line) => incomingStockConflictsWithLine(line, -1, roll as unknown as Record<string, unknown>)),
+  };
+
+  /** يضيف الأتواب الصالحة كسطور مستقلة بنفس منطق الإدخال الفردي — بلا تأكيد ولا قيد مالي (تبقى مسودة). */
+  const addBulkRolls = (rolls: FabricRollDto[]) => {
+    if (!rolls.length) return;
+    const stamp = Date.now() + 5000;
+    let added = 0;
+    setItems((prev) => {
+      const kept = prev.filter((line) => !isEmptyInvoiceItem(line)).map(sanitizeInvoiceFormItemBarcode);
+      const next = [...kept];
+      rolls.forEach((roll, i) => {
+        if (next.some((line) => incomingStockConflictsWithLine(line, -1, roll as unknown as Record<string, unknown>))) return;
+        const base: InvoiceFormItem = { ...emptyItem(), id: stamp + i, unit: invoiceUnitMode, supplierBarcode: roll.barcode, rawBarcodePayload: roll.barcode };
+        next.push(mergeStockIntoLine(base, roll));
+        added += 1;
+      });
+      return [...next, { ...emptyItem(), unit: invoiceUnitMode }];
+    });
+    setApiRolls((prev) => {
+      const have = new Set(prev.map((r) => r.id));
+      return [...rolls.filter((r) => !have.has(r.id)), ...prev];
+    });
+    setLatestScannedLineId(stamp + rolls.length - 1);
+    setScanMessage(`أُضيف ${rolls.length} توب بالإدخال الجماعي.`);
+    showToast({ type: 'success', message: `أُضيف ${rolls.length} توب إلى الفاتورة (مسودة — راجعها قبل الحفظ).` });
+    void added;
   };
 
   const handleDedicatedScanSubmit = async (value = scanInput) => {
@@ -3522,8 +3561,18 @@ export const InvoiceForm = () => {
             >
               {t('scanBox.analyzeButton')}
             </button>
+            {isSales && !isYarnMode && (
+              <button
+                type="button"
+                onClick={() => setBulkOpen(true)}
+                className="px-4 py-2 rounded-lg border border-cyan-700 bg-white text-cyan-800 hover:bg-cyan-50 font-bold"
+              >
+                إدخال باركودات بالجملة
+              </button>
+            )}
           </div>
           {scanMessage && <div className="text-xs font-bold text-cyan-800">{scanMessage}</div>}
+          <BulkBarcodeModal open={bulkOpen} onClose={() => setBulkOpen(false)} title="إدخال باركودات بالجملة — فاتورة البيع" rules={bulkRules} onAdd={addBulkRolls} />
         </section>
 
         <hr className="border-slate-100" />

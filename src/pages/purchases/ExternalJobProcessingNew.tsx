@@ -17,6 +17,8 @@ import { listFabricRolls, type FabricRollDto } from '../../lib/api/fabricRollsAp
 import { useToast } from '../../components/NonBlockingToast';
 import { ApiRequestError } from '../../lib/api/client';
 import { PreparationTypesModal } from '../../components/purchases/PreparationTypesModal';
+import { BulkBarcodeModal } from '../../components/inventory/BulkBarcodeModal';
+import { ROLL_STATUS_REASON, type BulkRules } from '../../lib/bulkBarcode';
 
 type SelectedRoll = FabricRollDto;
 
@@ -47,6 +49,7 @@ export const ExternalJobProcessingNew = () => {
   const [notes, setNotes] = useState('');
 
   const [rollQuery, setRollQuery] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [rollResults, setRollResults] = useState<FabricRollDto[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedRolls, setSelectedRolls] = useState<SelectedRoll[]>([]);
@@ -129,6 +132,27 @@ export const ExternalJobProcessingNew = () => {
     setSelectedRolls((prev) => [...prev, roll]);
     setRollQuery('');
     setRollResults([]);
+  };
+
+  /** قواعد الإدخال الجماعي = نفس شروط addRoll الفردية (المستودع، الحالة، الطول) + منع توب الوزن (كما يرفضه الخادم). */
+  const bulkRules: BulkRules = {
+    reject: (roll) => {
+      if (roll.warehouse_id !== sourceWarehouseId) return `من مستودع مختلف (${roll.warehouse_name ?? ''}) عن مستودع الإرسال`;
+      if (roll.entry_basis === 'WEIGHT') return 'توب مُدخل بالكيلو — المصنعية الخارجية تعمل بالأمتار';
+      if (roll.status !== 'AVAILABLE' && !(previousJobId && roll.status === 'DAMAGED')) return ROLL_STATUS_REASON[String(roll.status)] ?? `غير متاح (${roll.status})`;
+      if (Number.parseFloat(roll.length_m || '0') <= 0) return 'طول التوب صفر';
+      return null;
+    },
+    alreadyInDocument: (roll) => selectedRolls.some((r) => r.id === roll.id),
+  };
+
+  /** يضيف الأتواب الصالحة كسجلات مستقلة (بلا دمج) — لا يُنشئ إرسالاً ولا يغيّر المخزون قبل الحفظ والتأكيد. */
+  const addBulkRolls = (rolls: FabricRollDto[]) => {
+    setSelectedRolls((prev) => {
+      const have = new Set(prev.map((r) => r.id));
+      return [...prev, ...rolls.filter((r) => !have.has(r.id))];
+    });
+    showToast({ type: 'success', message: `أُضيف ${rolls.length} توب إلى الإرسال (مسودة — راجعها قبل الحفظ).` });
   };
 
   const removeRoll = (rollId: string) => {
@@ -411,6 +435,22 @@ export const ExternalJobProcessingNew = () => {
                 dir="ltr"
               />
             </div>
+            <button
+              type="button"
+              disabled={!sourceWarehouseId}
+              onClick={() => setBulkOpen(true)}
+              className="rounded-lg border border-emerald-600 bg-white px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            >
+              إدخال باركودات بالجملة
+            </button>
+            <BulkBarcodeModal
+              open={bulkOpen}
+              onClose={() => setBulkOpen(false)}
+              title="إدخال باركودات بالجملة — إرسال للمصنعية الخارجية"
+              rules={bulkRules}
+              onAdd={addBulkRolls}
+              precondition={{ ok: Boolean(sourceWarehouseId), message: 'اختر مستودع الإرسال أولاً.' }}
+            />
             {searching && <p className="text-xs text-slate-400">{t('processingNew.searching')}</p>}
             {rollResults.length > 0 && (
               <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-40 overflow-y-auto">
